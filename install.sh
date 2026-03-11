@@ -702,8 +702,7 @@ main() {
     echo ""
   fi
 
-  # Download files to temp dir
-  local tmp_dir
+  # Download files to temp dir (not local — the EXIT trap must access it after main returns)
   tmp_dir=$(mktemp -d)
   trap 'rm -rf "$tmp_dir"' EXIT
 
