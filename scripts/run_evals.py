@@ -44,8 +44,9 @@ from pathlib import Path
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 JUDGE_MODEL = "claude-sonnet-4-20250514"
-SKILL_DIR = Path(__file__).resolve().parent.parent
-EVAL_DIR = SKILL_DIR / "evaluations"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SKILL_DIR = PROJECT_ROOT / "skills" / "conductor"
+EVAL_DIR = PROJECT_ROOT / "evaluations"
 
 PROVIDER_URLS = {
     "anthropic": "https://api.anthropic.com/v1/messages",

@@ -22,13 +22,14 @@ $SCRIPT_VERSION = "1.0.0"
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
 $SKILL_FILES = @(
-    "SKILL.md"
-    "references/workflow-definition.md"
-    "references/workers.md"
-    "references/api-reference.md"
-    "examples/create-and-run-workflow.md"
-    "examples/monitor-and-retry.md"
-    "examples/signal-wait-task.md"
+    "skills/conductor/SKILL.md"
+    "skills/conductor/references/workflow-definition.md"
+    "skills/conductor/references/workers.md"
+    "skills/conductor/references/api-reference.md"
+    "skills/conductor/examples/create-and-run-workflow.md"
+    "skills/conductor/examples/monitor-and-retry.md"
+    "skills/conductor/examples/signal-wait-task.md"
+    "skills/conductor/scripts/conductor_api.py"
 )
 
 $VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp")
@@ -185,15 +186,15 @@ function Assemble-Content {
     param([string]$TmpDir, [string]$Output)
 
     $content = @()
-    $content += Get-Content (Join-Path $TmpDir "SKILL.md") -Raw
+    $content += Get-Content (Join-Path $TmpDir "skills/conductor/SKILL.md") -Raw
     $content += "`n---`n"
     $content += "# References`n"
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "references") -Filter "*.md") {
+    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/references") -Filter "*.md") {
         $content += Get-Content $f.FullName -Raw
         $content += "`n---`n"
     }
     $content += "# Examples`n"
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "examples") -Filter "*.md") {
+    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/examples") -Filter "*.md") {
         $content += Get-Content $f.FullName -Raw
         $content += "`n---`n"
     }
@@ -301,14 +302,21 @@ function Install-AiderToDir {
 
     New-Item -ItemType Directory -Path (Join-Path $SkillDir "references") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $SkillDir "examples") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $SkillDir "scripts") -Force | Out-Null
 
     Write-Info "Copying skill files to $SkillDir ..."
-    Copy-Item (Join-Path $TmpDir "SKILL.md") $SkillDir -Force
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "references") -Filter "*.md") {
+    Copy-Item (Join-Path $TmpDir "skills/conductor/SKILL.md") $SkillDir -Force
+    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/references") -Filter "*.md") {
         Copy-Item $f.FullName (Join-Path $SkillDir "references") -Force
     }
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "examples") -Filter "*.md") {
+    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/examples") -Filter "*.md") {
         Copy-Item $f.FullName (Join-Path $SkillDir "examples") -Force
+    }
+    $scriptsDir = Join-Path $TmpDir "skills/conductor/scripts"
+    if (Test-Path $scriptsDir) {
+        foreach ($f in Get-ChildItem $scriptsDir -Filter "*.py") {
+            Copy-Item $f.FullName (Join-Path $SkillDir "scripts") -Force
+        }
     }
     Write-Ok "Files copied to $SkillDir"
 
@@ -318,7 +326,8 @@ function Install-AiderToDir {
         Write-Info "Adding read entries to $Config ..."
         $entries = @("", "# Conductor Skills", "read:")
         foreach ($file in $SKILL_FILES) {
-            $entries += "  - ${ReadPrefix}${file}"
+            $relative = $file -replace "^skills/conductor/", ""
+            $entries += "  - ${ReadPrefix}${relative}"
         }
         $entries -join "`n" | Add-Content -Path $Config
         Write-Ok "Updated: $Config"

@@ -1,0 +1,20 @@
+{
+  "name": "conductor-skills",
+  "owner": {
+    "name": "Conductor OSS",
+    "email": "conductor-oss@users.noreply.github.com"
+  },
+  "metadata": {
+    "description": "Skills for orchestrating workflows with Conductor"
+  },
+  "plugins": [
+    {
+      "name": "conductor",
+      "source": "./",
+      "description": "Create, run, monitor, and manage Conductor workflows and tasks",
+      "version": "1.0.0",
+      "category": "devops",
+      "tags": ["conductor", "workflow", "orchestration", "microservices"]
+    }
+  ]
+}

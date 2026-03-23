@@ -42,6 +42,21 @@ Once installed, your AI agent can:
 
 ## Quick Install
 
+### Claude Code Plugin (recommended for Claude users)
+
+Install as a Claude Code plugin from the marketplace:
+
+```shell
+/plugin marketplace add conductor-oss/conductor-skills
+/plugin install conductor@conductor-skills
+```
+
+Or test locally during development:
+
+```bash
+claude --plugin-dir ./conductor-skills
+```
+
 ### Install for all detected agents
 
 One command to auto-detect every supported agent on your system and install globally where possible. Re-run anytime — it only installs for newly detected agents.
@@ -138,17 +153,17 @@ After installing, try these prompts with your agent:
 
 | Example | Description |
 |---------|-------------|
-| [Create and Run a Workflow](examples/create-and-run-workflow.md) | Define a workflow, register it, and execute it end-to-end |
-| [Monitor and Retry](examples/monitor-and-retry.md) | Search executions, diagnose failures, and batch-retry |
-| [Signal a Wait Task](examples/signal-wait-task.md) | Human-in-the-loop with WAIT tasks and external signals |
+| [Create and Run a Workflow](skills/conductor/examples/create-and-run-workflow.md) | Define a workflow, register it, and execute it end-to-end |
+| [Monitor and Retry](skills/conductor/examples/monitor-and-retry.md) | Search executions, diagnose failures, and batch-retry |
+| [Signal a Wait Task](skills/conductor/examples/signal-wait-task.md) | Human-in-the-loop with WAIT tasks and external signals |
 
 ## References
 
 | Reference | Description |
 |-----------|-------------|
-| [Workflow Definition Schema](references/workflow-definition.md) | Full JSON schema, all task types, input expressions |
-| [Writing Workers](references/workers.md) | SDK examples in Python, JavaScript, Java, Go, and more |
-| [API Reference](references/api-reference.md) | REST endpoints for direct API access |
+| [Workflow Definition Schema](skills/conductor/references/workflow-definition.md) | Full JSON schema, all task types, input expressions |
+| [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, and more |
+| [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
 
 ## Evaluations
 

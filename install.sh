@@ -12,13 +12,14 @@ REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main
 
 # Files to download
 SKILL_FILES=(
-  "SKILL.md"
-  "references/workflow-definition.md"
-  "references/workers.md"
-  "references/api-reference.md"
-  "examples/create-and-run-workflow.md"
-  "examples/monitor-and-retry.md"
-  "examples/signal-wait-task.md"
+  "skills/conductor/SKILL.md"
+  "skills/conductor/references/workflow-definition.md"
+  "skills/conductor/references/workers.md"
+  "skills/conductor/references/api-reference.md"
+  "skills/conductor/examples/create-and-run-workflow.md"
+  "skills/conductor/examples/monitor-and-retry.md"
+  "skills/conductor/examples/signal-wait-task.md"
+  "skills/conductor/scripts/conductor_api.py"
 )
 
 # Colors (if terminal supports them)
@@ -259,13 +260,13 @@ assemble_content() {
   local output="$2"
 
   {
-    cat "$tmp_dir/SKILL.md"
+    cat "$tmp_dir/skills/conductor/SKILL.md"
     echo ""
     echo "---"
     echo ""
     echo "# References"
     echo ""
-    for f in "$tmp_dir"/references/*.md; do
+    for f in "$tmp_dir"/skills/conductor/references/*.md; do
       cat "$f"
       echo ""
       echo "---"
@@ -273,7 +274,7 @@ assemble_content() {
     done
     echo "# Examples"
     echo ""
-    for f in "$tmp_dir"/examples/*.md; do
+    for f in "$tmp_dir"/skills/conductor/examples/*.md; do
       cat "$f"
       echo ""
       echo "---"
@@ -396,15 +397,18 @@ install_aider_to_dir() {
   local config="$3"
   local read_prefix="$4"
 
-  mkdir -p "$skill_dir/references" "$skill_dir/examples"
+  mkdir -p "$skill_dir/references" "$skill_dir/examples" "$skill_dir/scripts"
 
   info "Copying skill files to $skill_dir ..."
-  cp "$tmp_dir/SKILL.md" "$skill_dir/"
-  for f in "$tmp_dir"/references/*.md; do
+  cp "$tmp_dir/skills/conductor/SKILL.md" "$skill_dir/"
+  for f in "$tmp_dir"/skills/conductor/references/*.md; do
     cp "$f" "$skill_dir/references/"
   done
-  for f in "$tmp_dir"/examples/*.md; do
+  for f in "$tmp_dir"/skills/conductor/examples/*.md; do
     cp "$f" "$skill_dir/examples/"
+  done
+  for f in "$tmp_dir"/skills/conductor/scripts/*.py; do
+    [ -f "$f" ] && cp "$f" "$skill_dir/scripts/"
   done
   ok "Files copied to $skill_dir"
 
@@ -417,7 +421,7 @@ install_aider_to_dir() {
       echo "# Conductor Skills"
       echo "read:"
       for file in "${SKILL_FILES[@]}"; do
-        echo "  - ${read_prefix}${file}"
+        echo "  - ${read_prefix}${file#skills/conductor/}"
       done
     } >> "$config"
     ok "Updated: $config"
