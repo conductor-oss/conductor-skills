@@ -50,20 +50,20 @@ function Write-Err   { param([string]$Msg) Write-Host "[error] $Msg" -Foreground
 
 function Detect-Agents {
     $detected = @()
-    $home = $env:USERPROFILE
+    $installDir = $env:USERPROFILE
 
     if (Get-Command claude -ErrorAction SilentlyContinue) { $detected += "claude" }
-    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $home ".codex"))) { $detected += "codex" }
-    if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $home ".gemini"))) { $detected += "gemini" }
-    if (Test-Path (Join-Path $home ".cursor")) { $detected += "cursor" }
-    if (Test-Path (Join-Path $home ".codeium")) { $detected += "windsurf" }
-    if (Test-Path (Join-Path $home ".cline")) { $detected += "cline" }
+    if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".codex"))) { $detected += "codex" }
+    if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".gemini"))) { $detected += "gemini" }
+    if (Test-Path (Join-Path $installDir ".cursor")) { $detected += "cursor" }
+    if (Test-Path (Join-Path $installDir ".codeium")) { $detected += "windsurf" }
+    if (Test-Path (Join-Path $installDir ".cline")) { $detected += "cline" }
     if (Get-Command aider -ErrorAction SilentlyContinue) { $detected += "aider" }
-    if (Test-Path (Join-Path $home ".config\github-copilot")) { $detected += "copilot" }
-    if ((Get-Command q -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $home ".amazonq"))) { $detected += "amazonq" }
+    if (Test-Path (Join-Path $installDir ".config\github-copilot")) { $detected += "copilot" }
+    if ((Get-Command q -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".amazonq"))) { $detected += "amazonq" }
     if (Get-Command opencode -ErrorAction SilentlyContinue) { $detected += "opencode" }
-    if (Test-Path (Join-Path $home ".roo")) { $detected += "roo" }
-    if ((Get-Command amp -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $home ".config\amp"))) { $detected += "amp" }
+    if (Test-Path (Join-Path $installDir ".roo")) { $detected += "roo" }
+    if ((Get-Command amp -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".config\amp"))) { $detected += "amp" }
 
     return $detected
 }
@@ -237,17 +237,17 @@ function Supports-Global {
 
 function Get-GlobalPath {
     param([string]$AgentName)
-    $home = $env:USERPROFILE
+    $installDir = $env:USERPROFILE
     switch ($AgentName) {
         "claude"   { return "__claude__" }
-        "codex"    { $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $home ".codex" }; return Join-Path $codexHome "AGENTS.md" }
-        "cursor"   { return Join-Path $home ".cursor\skills\conductor\SKILL.md" }
-        "gemini"   { return Join-Path $home ".gemini\GEMINI.md" }
-        "windsurf" { return Join-Path $home ".codeium\windsurf\memories\global_rules.md" }
-        "roo"      { return Join-Path $home ".roo\rules\conductor.md" }
-        "amp"      { return Join-Path $home ".config\AGENTS.md" }
-        "aider"    { return Join-Path $home ".aider.conf.yml" }
-        "opencode" { return Join-Path $home ".config\opencode\skills\conductor\SKILL.md" }
+        "codex"    { $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $installDir ".codex" }; return Join-Path $codexHome "AGENTS.md" }
+        "cursor"   { return Join-Path $installDir ".cursor\skills\conductor\SKILL.md" }
+        "gemini"   { return Join-Path $installDir ".gemini\GEMINI.md" }
+        "windsurf" { return Join-Path $installDir ".codeium\windsurf\memories\global_rules.md" }
+        "roo"      { return Join-Path $installDir ".roo\rules\conductor.md" }
+        "amp"      { return Join-Path $installDir ".config\AGENTS.md" }
+        "aider"    { return Join-Path $installDir ".aider.conf.yml" }
+        "opencode" { return Join-Path $installDir ".config\opencode\skills\conductor\SKILL.md" }
     }
 }
 
@@ -342,9 +342,9 @@ function Install-ForAgent {
     }
 
     if ($IsGlobal) {
-        $home = $env:USERPROFILE
+        $installDir = $env:USERPROFILE
         if ($AgentName -eq "aider") {
-            Install-AiderToDir -SkillDir (Join-Path $home ".conductor-skills") -TmpDir $TmpDir -Config (Join-Path $home ".aider.conf.yml") -ReadPrefix "$home/.conductor-skills/"
+            Install-AiderToDir -SkillDir (Join-Path $installDir ".conductor-skills") -TmpDir $TmpDir -Config (Join-Path $installDir ".aider.conf.yml") -ReadPrefix "$installDir/.conductor-skills/"
         } else {
             $targetPath = Get-GlobalPath -AgentName $AgentName
             Install-ToFile -Target $targetPath -Assembled $Assembled -ForceWrite $ForceWrite
