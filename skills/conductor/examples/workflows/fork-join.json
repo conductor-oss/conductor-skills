@@ -1,0 +1,61 @@
+{
+  "name": "parallel_fetch",
+  "description": "Fetch inventory and pricing in parallel, then merge",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["inventoryUrl", "pricingUrl"],
+  "tasks": [
+    {
+      "name": "fork",
+      "taskReferenceName": "fork",
+      "type": "FORK_JOIN",
+      "forkTasks": [
+        [
+          {
+            "name": "fetch_inventory",
+            "taskReferenceName": "inventory",
+            "type": "HTTP",
+            "inputParameters": {
+              "http_request": {
+                "uri": "${workflow.input.inventoryUrl}",
+                "method": "GET"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "name": "fetch_pricing",
+            "taskReferenceName": "pricing",
+            "type": "HTTP",
+            "inputParameters": {
+              "http_request": {
+                "uri": "${workflow.input.pricingUrl}",
+                "method": "GET"
+              }
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "name": "join",
+      "taskReferenceName": "join",
+      "type": "JOIN",
+      "joinOn": ["inventory", "pricing"]
+    },
+    {
+      "name": "merge",
+      "taskReferenceName": "merge",
+      "type": "JSON_JQ_TRANSFORM",
+      "inputParameters": {
+        "inventory": "${inventory.output.response.body}",
+        "pricing": "${pricing.output.response.body}",
+        "queryExpression": "{items: .inventory.items, prices: .pricing.prices}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "merged": "${merge.output.result}"
+  }
+}

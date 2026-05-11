@@ -1,0 +1,35 @@
+{
+  "name": "parent_pipeline",
+  "description": "Composes child_normalize then forwards the result",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["raw"],
+  "tasks": [
+    {
+      "name": "normalize",
+      "taskReferenceName": "normalize",
+      "type": "SUB_WORKFLOW",
+      "subWorkflowParam": {
+        "name": "child_normalize",
+        "version": 1
+      },
+      "inputParameters": {
+        "payload": "${workflow.input.raw}"
+      }
+    },
+    {
+      "name": "log_result",
+      "taskReferenceName": "log_result",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { return { message: 'Normalized: ' + JSON.stringify($.normalized) }; } e();",
+        "normalized": "${normalize.output.normalized}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "normalized": "${normalize.output.normalized}",
+    "log": "${log_result.output.result.message}"
+  }
+}

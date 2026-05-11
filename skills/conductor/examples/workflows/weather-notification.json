@@ -1,0 +1,42 @@
+{
+  "name": "weather_notification",
+  "description": "Fetch weather and send a notification",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["city", "notifyEmail"],
+  "tasks": [
+    {
+      "name": "fetch_weather",
+      "taskReferenceName": "fetch_weather",
+      "type": "HTTP",
+      "inputParameters": {
+        "http_request": {
+          "uri": "https://api.weather.example.com/current?city=${workflow.input.city}",
+          "method": "GET",
+          "headers": { "Accept": "application/json" }
+        }
+      }
+    },
+    {
+      "name": "send_notification",
+      "taskReferenceName": "send_notification",
+      "type": "HTTP",
+      "inputParameters": {
+        "http_request": {
+          "uri": "https://api.notify.example.com/send",
+          "method": "POST",
+          "headers": { "Content-Type": "application/json" },
+          "body": {
+            "to": "${workflow.input.notifyEmail}",
+            "subject": "Weather Update",
+            "message": "Current weather in ${workflow.input.city}: ${fetch_weather.output.response.body.temperature}°F, ${fetch_weather.output.response.body.condition}"
+          }
+        }
+      }
+    }
+  ],
+  "outputParameters": {
+    "weather": "${fetch_weather.output.response.body}",
+    "notificationStatus": "${send_notification.output.response.statusCode}"
+  }
+}

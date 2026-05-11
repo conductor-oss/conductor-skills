@@ -51,11 +51,40 @@ Install as a Claude Code plugin from the marketplace:
 /plugin install conductor@conductor-skills
 ```
 
+Once installed, four slash commands become available:
+
+| Command | Purpose |
+|---------|---------|
+| `/conductor` | Menu — lists subcommands and natural-language examples |
+| `/conductor-setup` | First-time setup (CLI, server, auth) |
+| `/conductor-optimize` | Review a workflow against the optimization checklist |
+| `/conductor-scaffold-worker` | Generate a worker stub in your language |
+
+Everything else (run, status, schedule, retry, signal, visualize, create) works through plain English.
+
 Or test locally during development:
 
 ```bash
 claude --plugin-dir ./conductor-skills
 ```
+
+### Install via npm
+
+If you have Node.js, you can install through npm — useful in CI and dev containers:
+
+```bash
+# One-off, no global install
+npx @conductor-oss/conductor-skills --agent claude
+npx @conductor-oss/conductor-skills --all
+
+# Or globally
+npm install -g @conductor-oss/conductor-skills
+conductor-skills --agent cursor
+conductor-skills --all --upgrade
+conductor-skills --agent cline --uninstall
+```
+
+The npm package bundles all skill content, so it works offline once installed.
 
 ### Install for all detected agents
 
@@ -116,7 +145,7 @@ That's it — ask your agent to connect to your server (see [Try It](#try-it) be
 After installing, try these prompts with your agent:
 
 **Configure**
-- *"Connect to my Conductor server at https://play.orkes.io/api"*
+- *"Connect to my Conductor server at https://developer.orkescloud.com/api"*
 - *"Save my Conductor server config as a profile called production"*
 - *"Switch to my staging Conductor profile"*
 

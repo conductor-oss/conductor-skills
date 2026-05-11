@@ -1,0 +1,30 @@
+# Source-control and editor noise
+.git/
+.gitignore
+.github/
+.idea/
+.DS_Store
+*.swp
+
+# Site config (GitHub Pages only)
+_config.yml
+
+# Repo-only docs (consumers don't need these — README.md is enough)
+TESTING.md
+PUBLISHING.md
+
+# Validation tooling — internal to this repo
+scripts/validate_plugin.py
+scripts/run_evals.py
+
+# Test fixtures and assets
+evaluations/
+assets/
+agents/
+
+# Local dev
+node_modules/
+*.log
+
+# Don't ship the npm metadata file itself within the package
+package-lock.json

@@ -1,154 +1,54 @@
 # Example: Monitor and Retry Failed Workflows
 
-## User Request
+> "Show me failed workflows from today and retry the timeout failures."
 
-> "Show me all failed workflows from today and retry the ones that failed due to timeouts"
-
-## Workflow Execution
-
-### Step 1: Search for Failed Workflows
+## Steps
 
 ```bash
+# 1. Find failed workflows in the time range
 conductor workflow search -s FAILED --start-time-after "2024-01-15" -c 20
+
+# 2. Inspect each one to identify the failed task and reason
+conductor workflow get-execution {workflowId} -c
 ```
 
-**Response:**
-```
-WORKFLOW ID                              NAME                   STATUS   START TIME
-f1a2b3c4-d5e6-7890-abcd-111111111111    order_processing       FAILED   2024-01-15 08:12:33
-f1a2b3c4-d5e6-7890-abcd-222222222222    data_pipeline          FAILED   2024-01-15 09:45:12
-f1a2b3c4-d5e6-7890-abcd-333333333333    email_campaign         FAILED   2024-01-15 10:30:05
-f1a2b3c4-d5e6-7890-abcd-444444444444    order_processing       FAILED   2024-01-15 11:15:44
-```
+Look at the failed task's `status` and `reasonForIncompletion`:
 
-### Step 2: Get Details for Each Failed Workflow
+| Status | Action |
+|--------|--------|
+| `TIMED_OUT` | Retryable — `conductor workflow retry {id}` |
+| `FAILED` (transient) | Retryable — `conductor workflow retry {id}` |
+| `FAILED_WITH_TERMINAL_ERROR` | **Not** retryable. Surface root cause to the user before retrying. |
+
+## Retry batch
 
 ```bash
-conductor workflow get-execution f1a2b3c4-d5e6-7890-abcd-111111111111 -c
+conductor workflow retry {id1}
+conductor workflow retry {id2}
+conductor workflow retry {id3}
+# verify
+conductor workflow status {id1}   # → RUNNING
 ```
 
-**Response (order_processing #1):**
-```json
-{
-  "workflowId": "f1a2b3c4-d5e6-7890-abcd-111111111111",
-  "status": "FAILED",
-  "reasonForIncompletion": "Task timed out",
-  "tasks": [
-    {"taskReferenceName": "validate_order", "status": "COMPLETED"},
-    {"taskReferenceName": "call_inventory_api", "status": "TIMED_OUT", "retryCount": 3}
-  ]
-}
-```
+## Reporting back
 
-```bash
-conductor workflow get-execution f1a2b3c4-d5e6-7890-abcd-222222222222 -c
-```
-
-**Response (data_pipeline):**
-```json
-{
-  "workflowId": "f1a2b3c4-d5e6-7890-abcd-222222222222",
-  "status": "FAILED",
-  "reasonForIncompletion": "Task timed out",
-  "tasks": [
-    {"taskReferenceName": "extract_data", "status": "COMPLETED"},
-    {"taskReferenceName": "transform_data", "status": "TIMED_OUT", "retryCount": 2}
-  ]
-}
-```
-
-```bash
-conductor workflow get-execution f1a2b3c4-d5e6-7890-abcd-333333333333 -c
-```
-
-**Response (email_campaign):**
-```json
-{
-  "workflowId": "f1a2b3c4-d5e6-7890-abcd-333333333333",
-  "status": "FAILED",
-  "reasonForIncompletion": "Invalid email template",
-  "tasks": [
-    {"taskReferenceName": "render_template", "status": "FAILED_WITH_TERMINAL_ERROR"}
-  ]
-}
-```
-
-```bash
-conductor workflow get-execution f1a2b3c4-d5e6-7890-abcd-444444444444 -c
-```
-
-**Response (order_processing #2):**
-```json
-{
-  "workflowId": "f1a2b3c4-d5e6-7890-abcd-444444444444",
-  "status": "FAILED",
-  "reasonForIncompletion": "Task timed out",
-  "tasks": [
-    {"taskReferenceName": "call_inventory_api", "status": "TIMED_OUT", "retryCount": 3}
-  ]
-}
-```
-
-### Step 3: Present Findings
+Group results in your reply to the user:
 
 ```
-Found 4 failed workflows from today:
+Found 4 failed workflows.
 
-WORKFLOW ID       NAME              FAILED TASK          REASON              RETRIES
-...111111111111   order_processing  call_inventory_api   Task timed out      3
-...222222222222   data_pipeline     transform_data       Task timed out      2
-...333333333333   email_campaign    render_template      Invalid template    0 (terminal)
-...444444444444   order_processing  call_inventory_api   Task timed out      3
+Retried (3):
+  - order_processing  ...111  → RUNNING
+  - data_pipeline     ...222  → RUNNING
+  - order_processing  ...444  → RUNNING
 
-Timeout failures (retryable): 3 workflows
-Terminal failures (not retryable): 1 workflow (email_campaign — needs template fix)
+Skipped — terminal failure (1):
+  - email_campaign    ...333  "Invalid email template" — needs template fix
 ```
 
-### Step 4: Retry Timeout Failures
+## Patterns demonstrated
 
-```bash
-conductor workflow retry f1a2b3c4-d5e6-7890-abcd-111111111111
-conductor workflow retry f1a2b3c4-d5e6-7890-abcd-222222222222
-conductor workflow retry f1a2b3c4-d5e6-7890-abcd-444444444444
-```
-
-### Step 5: Verify Retries
-
-```bash
-conductor workflow status f1a2b3c4-d5e6-7890-abcd-111111111111
-# RUNNING
-conductor workflow status f1a2b3c4-d5e6-7890-abcd-222222222222
-# RUNNING
-conductor workflow status f1a2b3c4-d5e6-7890-abcd-444444444444
-# RUNNING
-```
-
-## Summary Provided to User
-
-```
-Failed workflow analysis and retry complete.
-
-Found: 4 failed workflows from today
-
-Retried (timeout failures): 3
-  - order_processing (...111) → now RUNNING
-  - data_pipeline (...222) → now RUNNING
-  - order_processing (...444) → now RUNNING
-
-Skipped (terminal failures): 1
-  - email_campaign (...333) — "Invalid email template"
-    This failed with FAILED_WITH_TERMINAL_ERROR on render_template.
-    The template needs to be fixed before this workflow can succeed.
-
-Recommendation: If the inventory API timeouts persist, consider
-increasing the task timeout in the order_processing workflow definition.
-```
-
-## Key Features Demonstrated
-
-- Search with status and time filters to narrow results
-- Detailed execution inspection to diagnose root causes
-- Distinguishing retryable failures (timeouts) from terminal failures (bad data)
-- Batch retry of selected workflows
-- Post-retry verification
-- Actionable recommendations based on failure patterns
+- Time-range search with `--start-time-after` / `--start-time-before`.
+- Distinguishing retryable from terminal failures.
+- Batch retry with post-retry verification.
+- Recommending root-cause fixes when timeouts persist (raise `responseTimeoutSeconds` on the task definition).

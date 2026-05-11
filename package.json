@@ -1,0 +1,51 @@
+{
+  "name": "@conductor-oss/conductor-skills",
+  "version": "1.4.0",
+  "description": "Conductor workflow orchestration skill for AI coding agents — Claude Code, Cursor, Codex, Gemini, Cline, Copilot, and more.",
+  "bin": {
+    "conductor-skills": "bin/conductor-skills.js"
+  },
+  "files": [
+    "bin/",
+    "skills/",
+    "commands/",
+    ".claude-plugin/",
+    "scripts/conductor_api.py",
+    "install.sh",
+    "install.ps1",
+    "VERSION",
+    "README.md",
+    "LICENSE.txt"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "validate": "python3 scripts/validate_plugin.py",
+    "test": "python3 scripts/validate_plugin.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/conductor-oss/conductor-skills.git"
+  },
+  "homepage": "https://github.com/conductor-oss/conductor-skills",
+  "bugs": {
+    "url": "https://github.com/conductor-oss/conductor-skills/issues"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-agent",
+    "ai-skill",
+    "conductor",
+    "conductor-oss",
+    "orkes",
+    "workflow",
+    "orchestration",
+    "microservices"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

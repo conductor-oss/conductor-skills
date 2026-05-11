@@ -7,18 +7,39 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.0.0"
+VERSION="1.4.0"
 REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
-# Files to download
+# When set, skip the network fetch and copy from this directory instead.
+# The npm package sets this so the bundled files are used.
+LOCAL_DIR="${CONDUCTOR_SKILLS_LOCAL_DIR:-}"
+
+# Files to ship to non-Claude agents (Claude uses the marketplace flow).
 SKILL_FILES=(
   "skills/conductor/SKILL.md"
+  "skills/conductor/references/setup.md"
+  "skills/conductor/references/cli-index.md"
+  "skills/conductor/references/fallback-cli.md"
   "skills/conductor/references/workflow-definition.md"
   "skills/conductor/references/workers.md"
   "skills/conductor/references/api-reference.md"
+  "skills/conductor/references/visualization.md"
+  "skills/conductor/references/schedules.md"
+  "skills/conductor/references/orkes.md"
+  "skills/conductor/references/optimization.md"
+  "skills/conductor/references/troubleshooting.md"
   "skills/conductor/examples/create-and-run-workflow.md"
   "skills/conductor/examples/monitor-and-retry.md"
   "skills/conductor/examples/signal-wait-task.md"
+  "skills/conductor/examples/fork-join.md"
+  "skills/conductor/examples/do-while-loop.md"
+  "skills/conductor/examples/sub-workflow.md"
+  "skills/conductor/examples/review-workflow.md"
+  "skills/conductor/examples/workflows/weather-notification.json"
+  "skills/conductor/examples/workflows/fork-join.json"
+  "skills/conductor/examples/workflows/do-while-loop.json"
+  "skills/conductor/examples/workflows/child-normalize.json"
+  "skills/conductor/examples/workflows/parent-pipeline.json"
   "skills/conductor/scripts/conductor_api.py"
 )
 
@@ -228,6 +249,10 @@ except: pass
 # ─────────────────────────────────────────────────────────────────────────────
 
 fetch_remote_version() {
+  if [ -n "$LOCAL_DIR" ] && [ -f "$LOCAL_DIR/VERSION" ]; then
+    cat "$LOCAL_DIR/VERSION" | tr -d '[:space:]'
+    return
+  fi
   local remote_ver
   remote_ver=$(curl -sSfL "$REPO_BASE/VERSION" 2>/dev/null | tr -d '[:space:]') || true
   echo "$remote_ver"
@@ -239,6 +264,27 @@ fetch_remote_version() {
 
 download_files() {
   local tmp_dir="$1"
+
+  if [ -n "$LOCAL_DIR" ]; then
+    if [ ! -d "$LOCAL_DIR" ]; then
+      error "CONDUCTOR_SKILLS_LOCAL_DIR=$LOCAL_DIR is not a directory"
+      exit 1
+    fi
+    info "Copying skill files from $LOCAL_DIR..."
+    for file in "${SKILL_FILES[@]}"; do
+      local src="$LOCAL_DIR/$file"
+      local dest="$tmp_dir/$file"
+      if [ ! -f "$src" ]; then
+        error "Missing file in local source: $file"
+        rm -rf "$tmp_dir"
+        exit 1
+      fi
+      mkdir -p "$(dirname "$dest")"
+      cp "$src" "$dest"
+    done
+    ok "Copied ${#SKILL_FILES[@]} files"
+    return
+  fi
 
   info "Downloading skill files..."
   for file in "${SKILL_FILES[@]}"; do

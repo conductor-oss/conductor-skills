@@ -18,17 +18,38 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.0.0"
+$SCRIPT_VERSION = "1.4.0"
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
+
+# When set, skip the network fetch and copy from this directory instead.
+# The npm package sets this so the bundled files are used.
+$LOCAL_DIR = $env:CONDUCTOR_SKILLS_LOCAL_DIR
 
 $SKILL_FILES = @(
     "skills/conductor/SKILL.md"
+    "skills/conductor/references/setup.md"
+    "skills/conductor/references/cli-index.md"
+    "skills/conductor/references/fallback-cli.md"
     "skills/conductor/references/workflow-definition.md"
     "skills/conductor/references/workers.md"
     "skills/conductor/references/api-reference.md"
+    "skills/conductor/references/visualization.md"
+    "skills/conductor/references/schedules.md"
+    "skills/conductor/references/orkes.md"
+    "skills/conductor/references/optimization.md"
+    "skills/conductor/references/troubleshooting.md"
     "skills/conductor/examples/create-and-run-workflow.md"
     "skills/conductor/examples/monitor-and-retry.md"
     "skills/conductor/examples/signal-wait-task.md"
+    "skills/conductor/examples/fork-join.md"
+    "skills/conductor/examples/do-while-loop.md"
+    "skills/conductor/examples/sub-workflow.md"
+    "skills/conductor/examples/review-workflow.md"
+    "skills/conductor/examples/workflows/weather-notification.json"
+    "skills/conductor/examples/workflows/fork-join.json"
+    "skills/conductor/examples/workflows/do-while-loop.json"
+    "skills/conductor/examples/workflows/child-normalize.json"
+    "skills/conductor/examples/workflows/parent-pipeline.json"
     "skills/conductor/scripts/conductor_api.py"
 )
 
@@ -149,6 +170,9 @@ function Get-ManifestAgents {
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Fetch-RemoteVersion {
+    if ($LOCAL_DIR -and (Test-Path (Join-Path $LOCAL_DIR "VERSION"))) {
+        return (Get-Content (Join-Path $LOCAL_DIR "VERSION") -Raw).Trim()
+    }
     try {
         $ver = (Invoke-WebRequest -Uri "$REPO_BASE/VERSION" -UseBasicParsing -ErrorAction Stop).Content.Trim()
         return $ver
@@ -161,6 +185,30 @@ function Fetch-RemoteVersion {
 
 function Download-Files {
     param([string]$TmpDir)
+
+    if ($LOCAL_DIR) {
+        if (-not (Test-Path -PathType Container $LOCAL_DIR)) {
+            Write-Err "CONDUCTOR_SKILLS_LOCAL_DIR=$LOCAL_DIR is not a directory"
+            exit 1
+        }
+        Write-Info "Copying skill files from $LOCAL_DIR..."
+        foreach ($file in $SKILL_FILES) {
+            $src = Join-Path $LOCAL_DIR $file
+            $dest = Join-Path $TmpDir $file
+            if (-not (Test-Path $src)) {
+                Write-Err "Missing file in local source: $file"
+                Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
+                exit 1
+            }
+            $dir = Split-Path -Parent $dest
+            if ($dir -and !(Test-Path $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            }
+            Copy-Item $src $dest
+        }
+        Write-Ok "Copied $($SKILL_FILES.Count) files"
+        return
+    }
 
     Write-Info "Downloading skill files..."
     foreach ($file in $SKILL_FILES) {
