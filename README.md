@@ -29,14 +29,27 @@
 
 Once installed, your AI agent can:
 
-- **Create** workflow definitions with any task type (HTTP, SWITCH, FORK, WAIT, etc.)
+- **Create** workflow definitions with any task type (HTTP, SWITCH, FORK, WAIT, AI/LLM, MCP, etc.)
 - **Run** workflows synchronously or asynchronously
 - **Monitor** executions and search by status, time, or correlation ID
-- **Manage** workflows — pause, resume, terminate, retry, restart
+- **Manage** workflows — pause, resume, terminate, retry, restart, rerun, skip-task, jump
 - **Signal** WAIT and HUMAN tasks for human-in-the-loop patterns
+- **Schedule** workflows on cron — schedules are part of OSS
 - **Write workers** in Python, JavaScript, Java, Go, C#, Ruby, or Rust
 - **Visualize** workflows as Mermaid diagrams
-- **Manage** schedules, secrets, and webhooks (Orkes enterprise)
+- **Review & optimize** existing workflows against a checklist of 19 reliability / performance / security / structure rules
+- **Manage** secrets and webhooks (Orkes)
+
+On Claude Code, four slash commands give you direct entry points:
+
+| Command | Purpose |
+|---------|---------|
+| `/conductor` | Menu — lists subcommands and natural-language examples |
+| `/conductor-setup` | First-time setup (CLI, server, auth) |
+| `/conductor-optimize` | Review a workflow against the optimization checklist |
+| `/conductor-scaffold-worker` | Generate a worker stub in your language |
+
+Everything else (run, status, schedule, retry, signal, visualize, create) works through plain English — no command needed.
 
 ---
 
@@ -51,21 +64,11 @@ Install as a Claude Code plugin from the marketplace:
 /plugin install conductor@conductor-skills
 ```
 
-Once installed, four slash commands become available:
+Or test against a local checkout during development:
 
-| Command | Purpose |
-|---------|---------|
-| `/conductor` | Menu — lists subcommands and natural-language examples |
-| `/conductor-setup` | First-time setup (CLI, server, auth) |
-| `/conductor-optimize` | Review a workflow against the optimization checklist |
-| `/conductor-scaffold-worker` | Generate a worker stub in your language |
-
-Everything else (run, status, schedule, retry, signal, visualize, create) works through plain English.
-
-Or test locally during development:
-
-```bash
-claude --plugin-dir ./conductor-skills
+```shell
+/plugin marketplace add /path/to/conductor-skills
+/plugin install conductor@conductor-skills
 ```
 
 ### Install via npm
@@ -142,57 +145,113 @@ That's it — ask your agent to connect to your server (see [Try It](#try-it) be
 
 ## Try It
 
-After installing, try these prompts with your agent:
+After installing, try these prompts with your agent. Or run the slash command shown in brackets where one exists.
 
-**Configure**
+**Setup & configure** *(or `/conductor-setup`)*
+- *"Set up Conductor — I want to start a local server"*
 - *"Connect to my Conductor server at https://developer.orkescloud.com/api"*
 - *"Save my Conductor server config as a profile called production"*
 - *"Switch to my staging Conductor profile"*
+- *"How many workflows in dev vs prod?"*
 
-**Create & Run**
+**Create & run**
 - *"Create a workflow that calls the GitHub API to get open issues and sends a Slack notification"*
+- *"Create a FORK_JOIN workflow that fetches inventory and pricing in parallel"*
 - *"Run the my-workflow workflow with input {\"userId\": 123}"*
+- *"Run order-processing synchronously and wait until the approval step"*
+- *"Run cleanup-workflow with correlation id daily-2026-05-11"*
 
-**Monitor**
+**Monitor & diagnose**
 - *"Show me all failed workflow executions from the last hour"*
 - *"What's the status of execution abc-123?"*
+- *"Why did wf-789 fail?"*
+- *"Show me the running executions of order-processing"*
 
 **Manage**
-- *"Retry all failed executions of my-workflow"*
+- *"Retry all failed executions of my-workflow from today"*
 - *"Pause the running execution xyz-456"*
+- *"Terminate wf-123, customer cancelled"*
+- *"Restart wf-456 on the latest workflow version"*
+- *"Skip the email step in wf-789"*
+- *"Jump wf-789 to fulfill_order"*
 
-**Human-in-the-Loop**
+**Human-in-the-loop**
 - *"Signal the wait task in execution abc-123 with approval: true"*
+- *"Reject the wait task in wf-456 — don't retry"*
+- *"What's blocking wf-789?"*
+
+**Schedule** *(part of OSS)*
+- *"Schedule cleanup-workflow to run daily at 2am"*
+- *"Schedule order-report every Monday at 9:30 weekdays only"*
+- *"Pause the cleanup schedule"*
+- *"Show the last 50 scheduled cleanup runs"*
 
 **Modify**
 - *"Add an error-handling branch to the order-processing workflow"*
 - *"Add a WAIT task before the payment step in my checkout workflow"*
+- *"Convert the inline JS in compute_pricing to a worker"*
+- *"Extract the fulfillment chunk into a sub-workflow"*
 
-**Workers**
+**Review & optimize** *(or `/conductor-optimize`)*
+- *"Review the order-processing workflow"*
+- *"Optimize this workflow JSON — what should I fix?"* *(attach a file)*
+- *"Audit weather-notification for missing timeouts and retries"*
+- *"Make this workflow simpler"*
+- *"Are there any secrets being passed through workflow input that shouldn't be?"*
+
+**Workers** *(or `/conductor-scaffold-worker`)*
 - *"Write a Python worker that processes image thumbnails"*
-- *"Write a JavaScript worker that validates email addresses"*
+- *"Write a TypeScript worker that validates email addresses"*
 - *"Generate a Go worker that fetches data from a REST API and transforms the response"*
+- *"Scaffold a Java worker for the charge_card task"*
 
 **Visualize**
 - *"Show me a diagram of the order-processing workflow"*
+- *"Render the FORK_JOIN flow as a Mermaid chart"*
+
+**Orkes only** — secrets, webhooks (Orkes Conductor required)
+- *"Save STRIPE_KEY as a secret"*
+- *"Create a GitHub webhook that triggers github_pr_handler"*
+- *"List my webhooks"*
 
 ---
 
 ## Examples
+
+Operational:
 
 | Example | Description |
 |---------|-------------|
 | [Create and Run a Workflow](skills/conductor/examples/create-and-run-workflow.md) | Define a workflow, register it, and execute it end-to-end |
 | [Monitor and Retry](skills/conductor/examples/monitor-and-retry.md) | Search executions, diagnose failures, and batch-retry |
 | [Signal a Wait Task](skills/conductor/examples/signal-wait-task.md) | Human-in-the-loop with WAIT tasks and external signals |
+| [Review and Optimize](skills/conductor/examples/review-workflow.md) | Apply the optimization checklist to an existing workflow |
+
+Design patterns:
+
+| Example | Description |
+|---------|-------------|
+| [FORK_JOIN Parallel Branches](skills/conductor/examples/fork-join.md) | Run independent tasks in parallel and converge with JOIN |
+| [DO_WHILE Loop](skills/conductor/examples/do-while-loop.md) | Iteration counter via the self-reference pattern |
+| [SUB_WORKFLOW Composition](skills/conductor/examples/sub-workflow.md) | Compose reusable child workflows under a parent |
+
+Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](skills/conductor/examples/workflows/) — pass any directly to `conductor workflow create`.
 
 ## References
 
 | Reference | Description |
 |-----------|-------------|
-| [Workflow Definition Schema](skills/conductor/references/workflow-definition.md) | Full JSON schema, all task types, input expressions |
-| [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, and more |
+| [Setup](skills/conductor/references/setup.md) | Install the CLI, choose a server, configure auth, named profiles |
+| [CLI Index](skills/conductor/references/cli-index.md) | Verb → CLI command lookup, grouped by lifecycle / intervention / tasks |
+| [Workflow Definition Schema](skills/conductor/references/workflow-definition.md) | Full JSON schema, every task type, expression syntax |
+| [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, C#, Ruby, Rust |
 | [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
+| [Visualization](skills/conductor/references/visualization.md) | Mermaid mappings for every Conductor construct + UI link |
+| [Schedules](skills/conductor/references/schedules.md) | Cron schedules (OSS) — schema, format, idempotency patterns |
+| [Optimization Checklist](skills/conductor/references/optimization.md) | 19 review rules across structure, reliability, performance, security |
+| [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
+| [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
+| [Fallback CLI](skills/conductor/references/fallback-cli.md) | Python REST script equivalents when the CLI isn't available |
 
 ## Evaluations
 
@@ -226,7 +285,7 @@ Or upgrade a single agent: `--agent <name> --upgrade`
 
 | Agent | Flag | Global install | Project install |
 |-------|------|---------------|-----------------|
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | Native skill (via `claude skill add`) | — |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `claude` | Plugin (via `/plugin marketplace add` + `/plugin install`) — also adds `/conductor*` slash commands | — |
 | [Codex CLI](https://github.com/openai/codex) | `codex` | `~/.codex/AGENTS.md` | `AGENTS.md` |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini` | `~/.gemini/GEMINI.md` | `GEMINI.md` |
 | [Cursor](https://cursor.com) | `cursor` | `~/.cursor/skills/conductor/SKILL.md` | `.cursor/rules/conductor.mdc` |
