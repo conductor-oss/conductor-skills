@@ -32,18 +32,21 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
   - Severity: WARN if `len(tasks) > 100`.
 - **A5. Descriptive `taskReferenceName`.** Each ref name is unique workflow-wide and shows up in the UI/logs. Prefer `validate_order` over `task1`.
   - Severity: INFO/WARN.
-- **A6. Understand the three timeouts.** On task definitions, all three matter and they catch different failure modes:
+- **A6. Understand the three timeouts.** Reference (no severity — purely educational). Each task definition has three timeout knobs and they catch different failure modes:
   - `pollTimeoutSeconds` — task sits in the queue this long without a worker picking it up → abandoned. Catches "no worker is polling for this type."
   - `responseTimeoutSeconds` — once a worker checks out the task, how long without a heartbeat before redelivery. Catches "worker crashed mid-execution."
   - `timeoutSeconds` — total wall clock from pickup to terminal status. Catches "worker is alive but the task takes too long."
-  - Severity: WARN if a task definition has only one of the three set.
+
+  The severity ladder for missing/zero timeouts is **B1** below.
 - **A7. Workflow versioning hygiene.** Don't in-place update workflows that have running production executions — bump `version`, deploy callers pointing at the new version, deprecate the old when no executions remain. In-place updates can affect running executions in ways that vary by task type (especially around input expressions). New versions are free; the registry holds many.
   - Severity: WARN if a workflow with executions in the last 30 days has been edited in place.
 
 ### B. Reliability
 
-- **B1. Task timeouts on every SIMPLE task.** Each task definition needs `responseTimeoutSeconds` (worker must respond), `pollTimeoutSeconds` (worker must poll), and `timeoutSeconds` (overall). Without these, a hung worker hangs the workflow indefinitely.
-  - Severity: CRITICAL if any are zero/missing.
+- **B1. Task timeouts on every SIMPLE task.** Each task definition needs `responseTimeoutSeconds`, `pollTimeoutSeconds`, and `timeoutSeconds`. See A6 for what each catches. Single severity ladder:
+  - **CRITICAL** if any of the three is `0` or unset on a task def for a SIMPLE task in production use.
+  - **WARN** if all three are set but one or more are clearly too low (e.g. `responseTimeoutSeconds: 1`).
+  - **INFO** if all three are set with reasonable values.
 - **B2. Workflow-level timeout.** `timeoutSeconds` + `timeoutPolicy` (`TIME_OUT_WF` or `ALERT_ONLY`). Without one, a stuck workflow can run forever.
   - Severity: WARN by default; only INFO if the workflow legitimately has no upper bound (long-lived state machines, event-driven loops). Confirm with the user.
 - **B3. Retry policy on SIMPLE tasks.** `retryCount`, `retryLogic` (`FIXED` or `EXPONENTIAL_BACKOFF`), `retryDelaySeconds`. Transient errors are common — `retryCount: 0` exposes every blip.

@@ -126,11 +126,27 @@ def main() -> int:
             fail(f"plugin {name!r}: source {source!r} does not resolve to a directory")
             continue
 
-        # Find the matching SKILL.md (skills/<name>/SKILL.md by convention).
+        # Find the matching SKILL.md. Try the conventional location first
+        # (`skills/<name>/SKILL.md`); if not present, walk the source dir for
+        # any SKILL.md whose frontmatter `name:` matches. This keeps the
+        # validator working when future plugins use a different layout.
         skill_md = source_dir / "skills" / name / "SKILL.md"
         if not skill_md.exists():
-            fail(f"plugin {name!r}: no SKILL.md at {skill_md.relative_to(ROOT)}")
-            continue
+            skill_md = None
+            # Skip noisy / unrelated subtrees.
+            for candidate in source_dir.rglob("SKILL.md"):
+                rel = candidate.relative_to(source_dir).parts
+                if rel and rel[0] in {".git", "node_modules", ".github", "evaluations"}:
+                    continue
+                if read_skill_name(candidate) == name:
+                    skill_md = candidate
+                    break
+            if skill_md is None:
+                fail(
+                    f"plugin {name!r}: no SKILL.md found under {source_dir.relative_to(ROOT)} "
+                    f"with frontmatter name={name!r}"
+                )
+                continue
 
         skill_name = read_skill_name(skill_md)
         if skill_name is None:
@@ -156,6 +172,13 @@ def main() -> int:
             fm = text[3:end]
             if not any(line.strip().startswith("description:") for line in fm.splitlines()):
                 fail(f"command {rel}: frontmatter missing 'description:'")
+
+    # Workflow JSON examples — every file under skills/*/examples/workflows/ must parse.
+    for wf_file in sorted(ROOT.glob("skills/*/examples/workflows/*.json")):
+        try:
+            json.loads(wf_file.read_text())
+        except json.JSONDecodeError as e:
+            fail(f"workflow example {wf_file.relative_to(ROOT)}: invalid JSON: {e}")
 
     if errors:
         print("Plugin validation failed:", file=sys.stderr)

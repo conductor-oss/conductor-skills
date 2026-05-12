@@ -18,8 +18,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.4.0"
-$REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
+$SCRIPT_VERSION = "1.4.1"
+# Per-file fetches are pinned to this version's tag (see install.sh notes).
+# main is only used for the "is there a newer release?" check.
+$REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/v$SCRIPT_VERSION"
+$REPO_MAIN = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
 # When set, skip the network fetch and copy from this directory instead.
 # The npm package sets this so the bundled files are used.
@@ -174,7 +177,7 @@ function Fetch-RemoteVersion {
         return (Get-Content (Join-Path $LOCAL_DIR "VERSION") -Raw).Trim()
     }
     try {
-        $ver = (Invoke-WebRequest -Uri "$REPO_BASE/VERSION" -UseBasicParsing -ErrorAction Stop).Content.Trim()
+        $ver = (Invoke-WebRequest -Uri "$REPO_MAIN/VERSION" -UseBasicParsing -ErrorAction Stop).Content.Trim()
         return $ver
     } catch { return "" }
 }
@@ -322,13 +325,19 @@ function Get-TargetPath {
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Install-Claude {
+    # Claude Code installs plugins via in-session /plugin commands, not a
+    # shell subcommand. Print clear instructions.
     if (!(Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Err "'claude' CLI not found. Install it first: npm install -g @anthropic-ai/claude-code"
-        return $false
+        Write-Warn "'claude' CLI not found, but the Claude install is in-session anyway."
     }
-    Write-Info "Installing skill via Claude Code CLI..."
-    claude skill add --from "https://github.com/conductor-oss/conductor-skills"
-    Write-Ok "Conductor skill added to Claude Code"
+    Write-Info "Conductor Skills is a Claude Code plugin. Run these in your Claude Code session:"
+    Write-Host ""
+    Write-Host "  /plugin marketplace add conductor-oss/conductor-skills"
+    Write-Host "  /plugin install conductor@conductor-skills"
+    Write-Host ""
+    Write-Info "Once installed, slash commands like /conductor, /conductor-setup,"
+    Write-Info "/conductor-optimize, and /conductor-scaffold-worker become available."
+    Write-Ok "Claude Code install instructions printed above."
     return $true
 }
 
@@ -427,7 +436,7 @@ function Uninstall-Agent {
 
     if ($AgentName -eq "claude") {
         Write-Info "To remove the Conductor skill from Claude Code, run:"
-        Write-Host "  claude skill remove conductor"
+        Write-Host "  /plugin uninstall conductor@conductor-skills   (in your Claude Code session)"
         return
     }
 

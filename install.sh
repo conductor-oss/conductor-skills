@@ -7,8 +7,14 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.4.0"
-REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
+VERSION="1.4.1"
+# Per-file fetches are pinned to this version's tag so the installer and the
+# files it pulls always come from the same release. Pages can serve a cached
+# install.sh older than `main`; pinning prevents schema drift.
+# `main` is only used for fetch_remote_version (the "is there a newer release?"
+# check), never for file content.
+REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/v${VERSION}"
+REPO_MAIN="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
 # When set, skip the network fetch and copy from this directory instead.
 # The npm package sets this so the bundled files are used.
@@ -254,7 +260,7 @@ fetch_remote_version() {
     return
   fi
   local remote_ver
-  remote_ver=$(curl -sSfL "$REPO_BASE/VERSION" 2>/dev/null | tr -d '[:space:]') || true
+  remote_ver=$(curl -sSfL "$REPO_MAIN/VERSION" 2>/dev/null | tr -d '[:space:]') || true
   echo "$remote_ver"
 }
 
@@ -276,7 +282,7 @@ download_files() {
       local dest="$tmp_dir/$file"
       if [ ! -f "$src" ]; then
         error "Missing file in local source: $file"
-        rm -rf "$tmp_dir"
+        # tmp_dir cleanup handled by EXIT trap
         exit 1
       fi
       mkdir -p "$(dirname "$dest")"
@@ -294,7 +300,7 @@ download_files() {
     if ! curl -sSfL "$REPO_BASE/$file" -o "$tmp_dir/$file" 2>/dev/null; then
       error "Failed to download $file"
       error "Check your internet connection and try again."
-      rm -rf "$tmp_dir"
+      # tmp_dir cleanup handled by EXIT trap
       exit 1
     fi
   done
@@ -407,14 +413,21 @@ get_target_path() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 install_claude() {
+  # Claude Code installs plugins via the in-session `/plugin` commands, not a
+  # shell subcommand. Print clear instructions; do not try to invoke a CLI
+  # subcommand that does not exist.
   if ! command -v claude &>/dev/null; then
-    error "'claude' CLI not found. Install it first: npm install -g @anthropic-ai/claude-code"
-    return 1
+    warn "'claude' CLI not found, but the Claude install is in-session anyway."
   fi
 
-  info "Installing skill via Claude Code CLI..."
-  claude skill add --from "https://github.com/conductor-oss/conductor-skills"
-  ok "Conductor skill added to Claude Code"
+  info "Conductor Skills is a Claude Code plugin. Run these in your Claude Code session:"
+  echo ""
+  echo "  /plugin marketplace add conductor-oss/conductor-skills"
+  echo "  /plugin install conductor@conductor-skills"
+  echo ""
+  info "Once installed, slash commands like /conductor, /conductor-setup,"
+  info "/conductor-optimize, and /conductor-scaffold-worker become available."
+  ok "Claude Code install instructions printed above."
 }
 
 install_to_file() {
@@ -558,7 +571,7 @@ uninstall_agent() {
 
   if [ "$agent" = "claude" ]; then
     info "To remove the Conductor skill from Claude Code, run:"
-    echo "  claude skill remove conductor"
+    echo "  /plugin uninstall conductor@conductor-skills   (in your Claude Code session)"
     return
   fi
 

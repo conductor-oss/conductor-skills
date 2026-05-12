@@ -47,7 +47,7 @@ A user installs via:
    - **Minor (1.1.0 → 1.2.0)** — new task-type docs, new examples, new reference files, additive command coverage.
    - **Major (1.1.0 → 2.0.0)** — restructured file paths users may have linked to, removed commands, breaking schema changes.
 
-2. **Bump the version in five places** (they must agree, and CI enforces it):
+2. **Bump the version in six places** (they must agree, and CI enforces it):
    - `VERSION`
    - `.claude-plugin/plugin.json` → `version`
    - `.claude-plugin/marketplace.json` → `plugins[0].version`

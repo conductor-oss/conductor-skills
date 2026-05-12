@@ -75,14 +75,33 @@ function runWindows() {
     process.exit(1);
   }
   // Translate POSIX-style flags ("--agent claude") into PowerShell
-  // parameters ("-Agent claude"). Booleans like "--upgrade" become "-Upgrade".
+  // parameters ("-Agent claude"). The PowerShell script declares each
+  // parameter in PascalCase, so explicit kebab-case → PascalCase mapping
+  // is required — naive capitalize-first-letter breaks multi-word flags
+  // like --project-dir (which must become -ProjectDir, not -Project-dir).
+  const POSIX_TO_PS = {
+    'agent': 'Agent',
+    'all': 'All',
+    'global': 'Global',
+    'project-dir': 'ProjectDir',
+    'upgrade': 'Upgrade',
+    'check': 'Check',
+    'force': 'Force',
+    'uninstall': 'Uninstall',
+    'version': 'Version',
+    'help': 'Help',
+  };
   const psArgs = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const psName = '-' + name.charAt(0).toUpperCase() + name.slice(1);
-      psArgs.push(psName);
+      const psName = POSIX_TO_PS[name];
+      if (!psName) {
+        console.error(`error: unknown flag --${name}. Run with --help for usage.`);
+        process.exit(2);
+      }
+      psArgs.push('-' + psName);
     } else {
       psArgs.push(a);
     }

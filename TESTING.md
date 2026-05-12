@@ -65,12 +65,19 @@ These run on the repo before involving any AI agent.
 
 | ID | Description | Steps | Expected |
 |----|-------------|-------|----------|
-| TC-PRE-01 | Plugin manifest valid | `python3 scripts/validate_plugin.py` | `Plugin validation OK (version X.Y.Z)`; exit 0 |
-| TC-PRE-02 | All workflow JSON examples parse | `for f in skills/conductor/examples/workflows/*.json; do python3 -m json.tool "$f" > /dev/null; done` | No errors |
-| TC-PRE-03 | All intra-repo markdown links resolve | Run the link checker (see Appendix A) | `0 broken links` |
-| TC-PRE-04 | CI workflow lints | Push a branch, open a PR | GitHub Actions `validate-plugin` run passes |
-| TC-PRE-05 | VERSION coherence | `grep -E '"version":' .claude-plugin/*.json && cat VERSION` | Same version in all three places |
-| TC-PRE-06 | License + headers present | Inspect `LICENSE.txt`, `README.md` top | Apache 2.0 license intact, attribution present |
+| TC-PRE-01 | Plugin manifest valid | `python3 scripts/validate_plugin.py` | `Plugin validation OK (version X.Y.Z)`; exit 0. Also covers workflow-JSON parsing (was a separate case). |
+| TC-PRE-02 | All intra-repo markdown links resolve | Run the link checker (see Appendix A) | `0 broken links` |
+| TC-PRE-03 | VERSION coherence | `grep -E '"version":' .claude-plugin/*.json package.json && cat VERSION` | Same version in all six places (covered by TC-PRE-01 too) |
+| TC-PRE-04 | License + headers present | Inspect `LICENSE.txt`, `README.md` top | Apache 2.0 license intact, attribution present |
+
+### 2.1 CI smoke (post-push)
+
+The GitHub Actions `validate-plugin` workflow runs on push to `main` and on any PR touching plugin paths. This isn't pre-flight — by the time it runs, your work is already on origin.
+
+| ID | Description | Steps | Expected |
+|----|-------------|-------|----------|
+| TC-CI-01 | CI runs and passes on PR | Push a branch and open a PR | GitHub Actions `validate-plugin` run is green |
+| TC-CI-02 | CI catches a deliberate break | Push a commit with `version` mismatch | CI fails with a clear error from `validate_plugin.py` |
 
 ---
 
@@ -81,7 +88,7 @@ These run on the repo before involving any AI agent.
 | TC-PLG-01 | Install from local path | E2 | `/plugin marketplace add /path/to/conductor-skills` then `/plugin install conductor@conductor-skills` | Plugin shows in `/plugin` list at the new version |
 | TC-PLG-02 | Install from GitHub marketplace | E2 | `/plugin marketplace add conductor-oss/conductor-skills` then `/plugin install conductor@conductor-skills` | Plugin installed; version matches `VERSION` |
 | TC-PLG-03 | `/conductor` discoverable | E2 | After install, type `/` in chat input | `/conductor` appears in command picker with description |
-| TC-PLG-04 | All four slash commands listed | E2 | Type `/conductor-` | Autocomplete shows `setup`, `optimize`, `scaffold-worker` |
+| TC-PLG-04 | Three subcommands listed | E2 | Type `/conductor-` | Autocomplete shows `setup`, `optimize`, `scaffold-worker` (the bare `/conductor` is separately tested in TC-PLG-03) |
 | TC-PLG-05 | Skill activates from natural language | E2 | Ask: *"What can the conductor skill do?"* | Skill activates, lists capabilities consistent with SKILL.md |
 | TC-PLG-06 | Upgrade preserves config | E2 | Install vN-1, modify `~/.conductor-cli/config.yaml`, upgrade to vN | Config untouched; new version reported |
 | TC-PLG-07 | Uninstall is clean | E2 | `/plugin uninstall conductor@conductor-skills` | Slash commands gone; skill no longer activates |
@@ -141,11 +148,9 @@ These run on the repo before involving any AI agent.
 | TC-CMD-42 | JavaScript/TypeScript worker | E2 | Choose JS, task `process_order` | Uses `TaskManager` from `@io-orkes/conductor-javascript`; idempotency note |
 | TC-CMD-43 | Java worker (Worker iface) | E2 | Choose Java, task `process_order` | Implements `Worker` interface OR uses `@WorkerTask` |
 | TC-CMD-44 | Go worker | E2 | Choose Go, task `process_order` | Uses `worker.NewTaskRunnerWithApiClient` |
-| TC-CMD-45 | C# worker | E2 | Choose C#, task `process_order` | Uses Conductor C# SDK |
-| TC-CMD-46 | Ruby worker | E2 | Choose Ruby, task `process_order` | Uses Conductor Ruby SDK |
-| TC-CMD-47 | Rust worker | E2 | Choose Rust, task `process_order` | Uses Conductor Rust SDK |
-| TC-CMD-48 | Worker name matches task type | E2 | Any language | Worker registers for task type matching the user-supplied name exactly |
-| TC-CMD-49 | Reminds about worker gate | E2 | Any | Output mentions registering the task definition / workflow |
+| TC-CMD-45 | C# / Ruby / Rust worker — referral path | E2 | Choose C#, Ruby, or Rust; task `process_order` | `references/workers.md` does not ship inline scaffolds for these languages. Expected: agent points the user to the upstream SDK repo (e.g. github.com/conductor-oss/csharp-sdk) and asks them to follow that SDK's README. **Do NOT** verify against an inline pattern — none exists by design. |
+| TC-CMD-46 | Worker name matches task type | E2 | Any language with an inline scaffold (Python/JS/Java/Go) | Worker registers for task type matching the user-supplied name exactly |
+| TC-CMD-47 | Reminds about worker gate | E2 | Any | Output mentions registering the task definition / workflow |
 
 ---
 
@@ -364,7 +369,7 @@ For each item in `references/optimization.md`, prepare a workflow that violates 
 | TC-OPT-A3 | A3 schemaVersion: 2 | `schemaVersion: 1` | WARN |
 | TC-OPT-A4 | A4 Task count | 105 tasks | WARN |
 | TC-OPT-A5 | A5 Descriptive task ref | `taskReferenceName: "task1"` | INFO/WARN |
-| TC-OPT-A6 | A6 Three timeouts | Only `timeoutSeconds` set | WARN |
+| TC-OPT-A6 | A6 Three timeouts (educational) | Task def missing pollTimeoutSeconds | Agent explains the three timeouts and points to B1 for severity |
 | TC-OPT-A7 | A7 Versioning hygiene | Workflow edited in place with executions in last 30d | WARN (manually verify against execution history) |
 
 ### B. Reliability
@@ -639,7 +644,10 @@ For TC-CMD-24 and the TC-OPT-* series, use this deliberately-bad workflow (save 
       "loopCondition": "if ($.done) { false } else { true }",
       "loopOver": [
         {"name": "noop", "taskReferenceName": "noop_ref", "type": "NOOP"}
-      ]
+      ],
+      "inputParameters": {
+        "done": false
+      }
     },
     {
       "name": "compute",

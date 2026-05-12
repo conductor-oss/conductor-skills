@@ -1,6 +1,6 @@
 {
   "name": "@conductor-oss/conductor-skills",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Conductor workflow orchestration skill for AI coding agents — Claude Code, Cursor, Codex, Gemini, Cline, Copilot, and more.",
   "bin": {
     "conductor-skills": "bin/conductor-skills.js"
@@ -10,7 +10,6 @@
     "skills/",
     "commands/",
     ".claude-plugin/",
-    "scripts/conductor_api.py",
     "install.sh",
     "install.ps1",
     "VERSION",
