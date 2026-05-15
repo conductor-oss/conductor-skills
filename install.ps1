@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.4.1"
+$SCRIPT_VERSION = "1.4.2"
 # Per-file fetches are pinned to this version's tag (see install.sh notes).
 # main is only used for the "is there a newer release?" check.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/v$SCRIPT_VERSION"
@@ -48,11 +48,19 @@ $SKILL_FILES = @(
     "skills/conductor/examples/do-while-loop.md"
     "skills/conductor/examples/sub-workflow.md"
     "skills/conductor/examples/review-workflow.md"
+    "skills/conductor/examples/llm-chat.md"
+    "skills/conductor/examples/ai-agent-mcp.md"
+    "skills/conductor/examples/ai-agent-loop.md"
+    "skills/conductor/examples/llm-rag.md"
     "skills/conductor/examples/workflows/weather-notification.json"
     "skills/conductor/examples/workflows/fork-join.json"
     "skills/conductor/examples/workflows/do-while-loop.json"
     "skills/conductor/examples/workflows/child-normalize.json"
     "skills/conductor/examples/workflows/parent-pipeline.json"
+    "skills/conductor/examples/workflows/llm-chat.json"
+    "skills/conductor/examples/workflows/ai-agent-mcp.json"
+    "skills/conductor/examples/workflows/ai-agent-loop.json"
+    "skills/conductor/examples/workflows/llm-rag.json"
     "skills/conductor/scripts/conductor_api.py"
 )
 

@@ -63,6 +63,13 @@ Design patterns:
 - [DO_WHILE loop with iteration counter](examples/do-while-loop.md)
 - [SUB_WORKFLOW composition](examples/sub-workflow.md)
 
+AI / LLM patterns:
+
+- [Minimum LLM workflow](examples/llm-chat.md) — single `LLM_CHAT_COMPLETE` task.
+- [AI agent with MCP tools](examples/ai-agent-mcp.md) — `LIST_MCP_TOOLS` → plan → `CALL_MCP_TOOL` → summarize.
+- [Autonomous agent loop (ReAct)](examples/ai-agent-loop.md) — `DO_WHILE` think/act/observe until done.
+- [RAG — retrieval-augmented Q&A](examples/llm-rag.md) — `LLM_SEARCH_INDEX` then grounded `LLM_CHAT_COMPLETE`.
+
 Raw definitions in [examples/workflows/](examples/workflows/) — pass any directly to `conductor workflow create`:
 
 | File | Pattern |
@@ -72,6 +79,10 @@ Raw definitions in [examples/workflows/](examples/workflows/) — pass any direc
 | `do-while-loop.json` | DO_WHILE with iteration counter (self-reference pattern) |
 | `child-normalize.json` | Reusable child workflow (JQ transform) |
 | `parent-pipeline.json` | SUB_WORKFLOW composing the child above |
+| `llm-chat.json` | Single LLM_CHAT_COMPLETE — summarize text |
+| `ai-agent-mcp.json` | 4-task AI agent: list tools → plan → call → summarize |
+| `ai-agent-loop.json` | DO_WHILE agent loop, ReAct pattern |
+| `llm-rag.json` | RAG: vector search + grounded LLM answer |
 
 ## Reviewing workflows
 

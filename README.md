@@ -235,6 +235,15 @@ Design patterns:
 | [DO_WHILE Loop](skills/conductor/examples/do-while-loop.md) | Iteration counter via the self-reference pattern |
 | [SUB_WORKFLOW Composition](skills/conductor/examples/sub-workflow.md) | Compose reusable child workflows under a parent |
 
+AI / LLM patterns:
+
+| Example | Description |
+|---------|-------------|
+| [Minimum LLM Workflow](skills/conductor/examples/llm-chat.md) | Single `LLM_CHAT_COMPLETE` — building block |
+| [AI Agent with MCP Tools](skills/conductor/examples/ai-agent-mcp.md) | List tools → plan → call → summarize (the canonical first-AI-agent tutorial) |
+| [Autonomous Agent Loop](skills/conductor/examples/ai-agent-loop.md) | ReAct-pattern `DO_WHILE` loop until the LLM decides it's done |
+| [RAG — Retrieval Augmented Generation](skills/conductor/examples/llm-rag.md) | Vector search + grounded LLM answer with sources |
+
 Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](skills/conductor/examples/workflows/) — pass any directly to `conductor workflow create`.
 
 ## References

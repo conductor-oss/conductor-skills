@@ -1,0 +1,69 @@
+{
+  "name": "my_first_agent",
+  "description": "AI agent that discovers MCP tools, plans, executes, and summarizes",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["task"],
+  "tasks": [
+    {
+      "name": "discover_tools",
+      "taskReferenceName": "discover",
+      "type": "LIST_MCP_TOOLS",
+      "inputParameters": {
+        "mcpServer": "http://localhost:3001/mcp"
+      }
+    },
+    {
+      "name": "plan_action",
+      "taskReferenceName": "plan",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "message": "You are an AI agent. Available tools: ${discover.output.tools}. Pick exactly one tool and respond as JSON with fields `method` and `arguments`."
+          },
+          {
+            "role": "user",
+            "message": "${workflow.input.task}"
+          }
+        ],
+        "temperature": 0.1,
+        "maxTokens": 500
+      }
+    },
+    {
+      "name": "execute_tool",
+      "taskReferenceName": "execute",
+      "type": "CALL_MCP_TOOL",
+      "inputParameters": {
+        "mcpServer": "http://localhost:3001/mcp",
+        "method": "${plan.output.result.method}",
+        "arguments": "${plan.output.result.arguments}"
+      }
+    },
+    {
+      "name": "summarize_result",
+      "taskReferenceName": "summarize",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "user",
+            "message": "The user asked: \"${workflow.input.task}\". Tool returned: ${execute.output.content}. Reply in one short paragraph."
+          }
+        ],
+        "maxTokens": 500
+      }
+    }
+  ],
+  "outputParameters": {
+    "plan": "${plan.output.result}",
+    "toolResult": "${execute.output.content}",
+    "summary": "${summarize.output.result}"
+  }
+}

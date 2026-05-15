@@ -1,0 +1,88 @@
+{
+  "name": "autonomous_agent",
+  "description": "ReAct-pattern agent loop: think → act → observe until done",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["task", "mcpServer", "tools"],
+  "tasks": [
+    {
+      "name": "agent_loop",
+      "taskReferenceName": "loop",
+      "type": "DO_WHILE",
+      "loopCondition": "if ($.loop['iteration'] < 10 && $.loop[$.loop['iteration']].think.output.result.done != true) { true; } else { false; }",
+      "loopOver": [
+        {
+          "name": "think",
+          "taskReferenceName": "think",
+          "type": "LLM_CHAT_COMPLETE",
+          "inputParameters": {
+            "llmProvider": "openai",
+            "model": "gpt-4o-mini",
+            "messages": [
+              {
+                "role": "system",
+                "message": "You are an agent. Tools: ${workflow.input.tools}. Previous results: ${loop.output}. Decide next step. Respond as JSON: { done: bool, method?: string, arguments?: object, answer?: string }."
+              },
+              {
+                "role": "user",
+                "message": "${workflow.input.task}"
+              }
+            ],
+            "temperature": 0.1,
+            "maxTokens": 500
+          }
+        },
+        {
+          "name": "act",
+          "taskReferenceName": "act",
+          "type": "SWITCH",
+          "evaluatorType": "javascript",
+          "expression": "$.done ? 'finish' : 'call_tool'",
+          "inputParameters": {
+            "done": "${think.output.result.done}"
+          },
+          "decisionCases": {
+            "call_tool": [
+              {
+                "name": "execute",
+                "taskReferenceName": "execute",
+                "type": "CALL_MCP_TOOL",
+                "inputParameters": {
+                  "mcpServer": "${workflow.input.mcpServer}",
+                  "method": "${think.output.result.method}",
+                  "arguments": "${think.output.result.arguments}"
+                }
+              }
+            ],
+            "finish": [
+              {
+                "name": "done",
+                "taskReferenceName": "done",
+                "type": "NOOP"
+              }
+            ]
+          }
+        }
+      ],
+      "inputParameters": {
+        "loop": "${loop.output}"
+      }
+    },
+    {
+      "name": "final_answer",
+      "taskReferenceName": "final",
+      "type": "INLINE",
+      "inputParameters": {
+        "evaluatorType": "graaljs",
+        "expression": "function e() { var i = $.loop_output['iteration']; return { answer: $.loop_output[i].think.output.result.answer }; } e();",
+        "loop_output": "${loop.output}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "iterations": "${loop.output.iteration}",
+    "answer": "${final.output.result.answer}"
+  },
+  "timeoutSeconds": 600,
+  "timeoutPolicy": "TIME_OUT_WF"
+}

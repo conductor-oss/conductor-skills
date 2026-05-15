@@ -7,7 +7,7 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.4.1"
+VERSION="1.4.2"
 # Per-file fetches are pinned to this version's tag so the installer and the
 # files it pulls always come from the same release. Pages can serve a cached
 # install.sh older than `main`; pinning prevents schema drift.
@@ -41,11 +41,19 @@ SKILL_FILES=(
   "skills/conductor/examples/do-while-loop.md"
   "skills/conductor/examples/sub-workflow.md"
   "skills/conductor/examples/review-workflow.md"
+  "skills/conductor/examples/llm-chat.md"
+  "skills/conductor/examples/ai-agent-mcp.md"
+  "skills/conductor/examples/ai-agent-loop.md"
+  "skills/conductor/examples/llm-rag.md"
   "skills/conductor/examples/workflows/weather-notification.json"
   "skills/conductor/examples/workflows/fork-join.json"
   "skills/conductor/examples/workflows/do-while-loop.json"
   "skills/conductor/examples/workflows/child-normalize.json"
   "skills/conductor/examples/workflows/parent-pipeline.json"
+  "skills/conductor/examples/workflows/llm-chat.json"
+  "skills/conductor/examples/workflows/ai-agent-mcp.json"
+  "skills/conductor/examples/workflows/ai-agent-loop.json"
+  "skills/conductor/examples/workflows/llm-rag.json"
   "skills/conductor/scripts/conductor_api.py"
 )
 
