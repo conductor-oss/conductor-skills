@@ -1,0 +1,26 @@
+{
+  "name": "Build a RAG Workflow",
+  "skills": ["conductor"],
+  "query": "Create a RAG workflow that searches my Pinecone knowledge base and answers questions with sources",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (LLM_SEARCH_INDEX, LLM_CHAT_COMPLETE) and examples/llm-rag.md for the RAG pattern",
+    "Step 2: Construct a 2-task workflow: LLM_SEARCH_INDEX (auto-embeds query + searches) → LLM_CHAT_COMPLETE (grounded answer)",
+    "Step 3: Configure LLM_SEARCH_INDEX with `vectorDB` (e.g. pinecone-prod), `namespace`, `index`, `embeddingModelProvider`, `embeddingModel`, `query: ${workflow.input.question}`, and `llmMaxResults` (3–5)",
+    "Step 4: Configure LLM_CHAT_COMPLETE with a system prompt that instructs the model to answer only from the provided context and say \"I don't know\" otherwise",
+    "Step 5: Wire the search results into the chat context via `${search.output.result}` in the system message",
+    "Step 6: Use a low temperature (0.1–0.3) for grounded QA",
+    "Step 7: Define outputParameters exposing both `answer` (from chat) and `sources` (from search) so the caller can cite",
+    "Step 8: Mention that documents must be indexed first via a separate LLM_INDEX_TEXT workflow, and that the embedding model used at index time MUST match the one at query time",
+    "Step 9: Write the workflow JSON to a file (not inline)"
+  ],
+  "success_criteria": [
+    "Workflow has two tasks: LLM_SEARCH_INDEX then LLM_CHAT_COMPLETE (in that order)",
+    "Search task includes both `embeddingModelProvider` AND `embeddingModel` (required fields)",
+    "Chat task's system prompt explicitly instructs grounding — words like 'only from the context' or 'say I don't know' or equivalent",
+    "Search results are referenced via `${search.output.result}` (the canonical LLM_SEARCH_INDEX output field) in the chat task's messages",
+    "Temperature on the chat task is ≤0.3 (grounded, not creative)",
+    "`outputParameters` returns BOTH the answer and the sources (not just the answer)",
+    "Agent mentions the index-time/query-time embedding-model-match requirement",
+    "Agent does not invent a `RAG_TASK` or any task type that doesn't exist"
+  ]
+}

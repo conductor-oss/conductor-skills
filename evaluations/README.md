@@ -12,6 +12,13 @@ These evaluations ensure the Conductor skill:
 - Switches between environments using CLI profiles
 - Generates Mermaid visualizations of workflow definitions
 - Falls back to the Python script when the CLI cannot be installed
+- Reviews existing workflows against the optimization checklist and grades findings CRITICAL / WARN / INFO
+- Activates from natural language (no slash command needed) to discover its own capabilities
+- Walks first-time setup safely (asks before `npm install -g`, never echoes secrets)
+- Scaffolds workers in the language the user names
+- Builds AI / LLM workflows (single-shot LLM, MCP agent, RAG, autonomous agent loop)
+- Schedules workflows on Quartz cron (an OSS feature)
+- Handles Orkes-only features (secrets, webhooks) without echoing secret values
 
 ## Evaluation Files
 
@@ -44,6 +51,33 @@ Tests scaffolding a worker for a SIMPLE task using the appropriate SDK.
 
 ### fallback-no-cli.json
 Tests the fallback path when Node.js/npm cannot be installed, using the bundled `conductor_api.py` script.
+
+### optimize-workflow.json
+Tests review/optimization of an existing workflow — loading the workflow + each SIMPLE task's task def, walking the 19-rule checklist in `references/optimization.md`, grouping findings by CRITICAL/WARN/INFO, and offering fixes one at a time without applying silently.
+
+### discover-capabilities.json
+Tests natural-language activation — when a user asks "what can you help me do with Conductor?" the agent should activate from the skill description (no slash command needed) and summarize the major capability areas, including that schedules are OSS.
+
+### setup-flow.json
+Tests first-time setup — checking for the CLI, preferring `npx`, asking before `npm install -g`, presenting local-vs-remote options, never echoing auth secrets, and verifying with `conductor workflow list`.
+
+### scaffold-worker.json
+Tests worker scaffolding in the user's language — using the correct SDK pattern from `references/workers.md`, matching the `task_definition_name` to the workflow's SIMPLE task name, and including the idempotency note.
+
+### schedule-workflow.json
+Tests scheduling a workflow on cron — recognizing that schedules are OSS (not Orkes), writing the JSON to a file, using correct Quartz cron syntax (including the day-of-month vs day-of-week `?` quirk), and registering via `conductor schedule create`.
+
+### ai-agent-mcp.json
+Tests building the canonical first-AI-agent workflow — 4 tasks (LIST_MCP_TOOLS → LLM_CHAT_COMPLETE plan → CALL_MCP_TOOL → LLM_CHAT_COMPLETE summarize), low-temperature planning that emits JSON, and correct wiring of `${plan.output.result.method}` into the tool call.
+
+### llm-rag.json
+Tests building a RAG workflow — `LLM_SEARCH_INDEX` followed by a grounded `LLM_CHAT_COMPLETE`, including a system prompt that instructs the model to answer only from context, low temperature, and returning sources alongside the answer.
+
+### agent-loop.json
+Tests building a ReAct-pattern autonomous agent loop — DO_WHILE with a hard iteration cap (per optimization rule B5), the canonical self-reference pattern (`loop: ${loop.output}`), workflow-level timeout, and a SWITCH branching on the model's `done` flag.
+
+### orkes-secrets.json
+Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.
 
 ## Running Evaluations
 

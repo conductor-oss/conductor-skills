@@ -1,0 +1,26 @@
+{
+  "name": "Review and Optimize a Workflow",
+  "skills": ["conductor"],
+  "query": "Review my order_processing workflow and tell me what to fix",
+  "expected_behavior": [
+    "Step 1: Ask the user for the workflow source — a JSON file path, or a registered workflow name, or fetch the latest registered version",
+    "Step 2: Load the workflow definition (via `conductor workflow get order_processing` or by reading a file)",
+    "Step 3: For each SIMPLE task in the workflow, also load its task definition with `conductor taskDef get <taskName>` — timeouts and retry config live on the task def, not the workflow task",
+    "Step 4: Walk every item in references/optimization.md (categories A–E, ~19 rules total) against the loaded definition + task defs",
+    "Step 5: Group findings by severity: CRITICAL, WARN, INFO",
+    "Step 6: For each finding cite the specific rule (e.g. B1, B5, D1), the violating field, and the suggested fix",
+    "Step 7: Offer to apply fixes one at a time — do NOT apply changes silently",
+    "Step 8: If the user accepts a fix, propose the JSON change before writing it"
+  ],
+  "success_criteria": [
+    "Agent loads the definition AND every distinct SIMPLE task def (not just the workflow)",
+    "Findings are grouped into CRITICAL / WARN / INFO sections (not a flat list)",
+    "Each finding cites a specific rule ID from the optimization.md checklist (A1–A7, B1–B7, C1–C5, D1–D3, E1–E3)",
+    "Workflow-level issues (timeoutSeconds missing, description empty, schemaVersion=1, no failureWorkflow, no ownerEmail) are surfaced where applicable",
+    "Task-def-level issues (zero/missing responseTimeoutSeconds, retryCount=0, missing rateLimitPerFrequency on external API tasks) are surfaced where applicable",
+    "Secrets-in-input pattern (inputs named like apiKey, token, password, secret) is flagged CRITICAL per rule D1",
+    "Unbounded DO_WHILE loops are flagged CRITICAL per rule B5",
+    "Agent offers fixes one at a time and does NOT modify the workflow definition without explicit user confirmation",
+    "Final output includes a `Recommended Changes` checklist with file/line-level pointers"
+  ]
+}
