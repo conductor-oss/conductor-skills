@@ -205,6 +205,16 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Generate a Go worker that fetches data from a REST API and transforms the response"*
 - *"Scaffold a Java worker for the charge_card task"*
 
+**AI / LLM workflows**
+- *"Create a workflow that summarizes text with Claude"*
+- *"Build me an AI agent that lists MCP tools, picks one, and calls it"* — the canonical first-agent flow ([example](skills/conductor/examples/ai-agent-mcp.md))
+- *"Create a RAG workflow that searches my Pinecone index and answers questions with sources"* ([example](skills/conductor/examples/llm-rag.md))
+- *"Build an autonomous agent loop that runs up to 10 think/act/observe iterations"* ([example](skills/conductor/examples/ai-agent-loop.md))
+- *"Add a HUMAN approval step before the agent calls any tool"*
+- *"Create a workflow that classifies support tickets with GPT-4o-mini and routes to the right queue"*
+- *"Index this document into the knowledge base"* — using `LLM_INDEX_TEXT`
+- *"Generate an image from a prompt with DALL-E"* — using `GENERATE_IMAGE`
+
 **Visualize**
 - *"Show me a diagram of the order-processing workflow"*
 - *"Render the FORK_JOIN flow as a Mermaid chart"*
