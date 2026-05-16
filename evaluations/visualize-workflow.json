@@ -1,7 +1,7 @@
 {
   "name": "Visualize a Workflow Definition",
   "skills": ["conductor"],
-  "query": "Show me a visual diagram of my order-processing workflow",
+  "query": "Show me a visual diagram of an order-processing workflow that has these constructs: a SWITCH branching on order type, a FORK_JOIN running inventory and pricing lookups in parallel, and a WAIT task for human approval. Don't worry about actually fetching it from the server — assume you know the shape and render it as Mermaid with a brief text summary.",
   "expected_behavior": [
     "Step 1: Check if `conductor` CLI is available",
     "Step 2: Fetch the workflow definition using `conductor workflow get order-processing`",
@@ -13,7 +13,7 @@
     "Step 8: Provide a brief text summary of the workflow flow alongside the diagram"
   ],
   "success_criteria": [
-    "Plan includes a command to fetch the workflow definition from the server (e.g., conductor workflow get order-processing) before generating the diagram",
+    "Agent either fetches the definition or, as the query allows, renders directly from the described shape — both paths are acceptable here",
     "Mermaid diagram uses only safe syntax: flowchart TD/LR, --> arrows, no style/title/classDef",
     "SWITCH tasks render as diamond nodes with labeled case edges",
     "FORK_JOIN tasks show parallel branches converging at a join",

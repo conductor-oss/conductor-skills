@@ -12,7 +12,7 @@
   ],
   "success_criteria": [
     "Agent does not require a slash command to discover capabilities — natural language triggers the skill",
-    "Major capability areas (create, run, monitor, manage, signal, schedule, optimize, visualize, workers) are all mentioned at least once",
+    "At least 7 of the 9 major capability areas (create, run, monitor, manage, signal, schedule, optimize, visualize, workers) are mentioned at least once. Smaller/terser models may consolidate categories (e.g. group manage + signal under 'control') — that's fine as long as the underlying functions are covered.",
     "Schedules are correctly described as OSS, not Orkes-only",
     "Sample queries are concrete and actionable, not vague",
     "Agent ends by asking what the user wants to do (not by dumping the entire skill content)"

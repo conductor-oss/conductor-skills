@@ -1,7 +1,7 @@
 {
   "name": "Create and Run a Workflow",
   "skills": ["conductor"],
-  "query": "Create a workflow that fetches data from an API and processes it, then run it",
+  "query": "Create a workflow with two tasks — an HTTP call that fetches data from an API, then a SIMPLE task named `process_data` that runs custom business logic against the fetched payload. Then run it.",
   "expected_behavior": [
     "Step 1: Check if `conductor` CLI is available by running `conductor --version`",
     "Step 2: Verify server is reachable (CLI auto-detects local server, or uses CONDUCTOR_SERVER_URL for remote)",

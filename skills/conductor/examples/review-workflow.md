@@ -39,6 +39,13 @@ INFO
   • A4  12 tasks — well within the 100-task limit
   • B4  No failureWorkflow. This workflow mutates inventory and charges cards;
         consider a failureWorkflow that releases the inventory hold and notifies ops.
+
+Recommended Changes (priority order)
+  [ ] task_def_charge_card.json     set responseTimeoutSeconds=30, pollTimeoutSeconds=60, timeoutSeconds=300
+  [ ] order_processing.json         move stripeApiKey to ${workflow.secrets.STRIPE_KEY}
+  [ ] order_processing.json         add description, timeoutSeconds=1800, timeoutPolicy=TIME_OUT_WF
+  [ ] task_def_send_email.json      set retryCount=3, retryLogic=EXPONENTIAL_BACKOFF, retryDelaySeconds=30
+  [ ] order_processing.json         (discussion) add failureWorkflow for inventory rollback + ops alert
 ```
 
 ## Offer to fix

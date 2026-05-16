@@ -2,6 +2,8 @@
 
 Classic RAG pattern: search a vector database for context, then ask an LLM to answer using only that context. Two tasks, one workflow.
 
+> **⚠️ The single most important RAG rule:** the **embedding model** you use at **query time** in `LLM_SEARCH_INDEX` **MUST exactly match** the embedding model used at **index time** in `LLM_INDEX_TEXT`. Different models produce incompatible vector spaces — a mismatch returns nonsense matches without any error. State this explicitly when generating RAG workflows.
+
 ## Pipeline
 
 ```

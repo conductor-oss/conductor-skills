@@ -17,7 +17,13 @@ conductor secret put {key} {value}
 conductor secret delete {key}
 ```
 
-Never echo secret values in agent output. After `put`, confirm with name only.
+**Important: secret values are resolved server-side at task execution time**, not by the agent, the CLI, or the workflow definition. The reference `${workflow.secrets.MY_KEY}` lives in the workflow JSON; the actual value is substituted by the Conductor server when the task runs. This means:
+
+- The plaintext secret never appears in the workflow definition, the execution view, or any agent transcript.
+- Rotating a secret on the server affects every running and future workflow without redeploying any definition.
+- Workers and HTTP tasks receive the substituted value at runtime via task inputs.
+
+Never echo secret values in agent output. After `put`, confirm with name only (e.g. via `conductor secret list`).
 
 ## Webhooks
 

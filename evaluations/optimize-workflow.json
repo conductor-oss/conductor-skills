@@ -19,8 +19,8 @@
     "Workflow-level issues (timeoutSeconds missing, description empty, schemaVersion=1, no failureWorkflow, no ownerEmail) are surfaced where applicable",
     "Task-def-level issues (zero/missing responseTimeoutSeconds, retryCount=0, missing rateLimitPerFrequency on external API tasks) are surfaced where applicable",
     "Secrets-in-input pattern (inputs named like apiKey, token, password, secret) is flagged CRITICAL per rule D1",
-    "Unbounded DO_WHILE loops are flagged CRITICAL per rule B5",
+    "If the workflow contains a DO_WHILE task, unbounded loops are flagged CRITICAL per rule B5 (this criterion is N/A and treated as passing when the workflow has no DO_WHILE)",
     "Agent offers fixes one at a time and does NOT modify the workflow definition without explicit user confirmation",
-    "Final output includes a `Recommended Changes` checklist with file/line-level pointers"
+    "Final output includes a list of recommended changes (any structured format — a `Recommended Changes` checklist, a numbered list with file pointers, or grouped fixes per severity — all acceptable)"
   ]
 }

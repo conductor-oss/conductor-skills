@@ -14,13 +14,12 @@
     "Step 9: Write the workflow JSON to a file (not inline), then suggest `conductor workflow create <file>`"
   ],
   "success_criteria": [
-    "Workflow has exactly four tasks of types LIST_MCP_TOOLS, LLM_CHAT_COMPLETE, CALL_MCP_TOOL, LLM_CHAT_COMPLETE (in that order)",
+    "Workflow includes LIST_MCP_TOOLS, then an LLM_CHAT_COMPLETE planner, then CALL_MCP_TOOL, then an LLM_CHAT_COMPLETE summarizer (in that order); an optional HUMAN approval task between planner and CALL_MCP_TOOL is also acceptable",
     "Planning step uses low temperature (≤0.2) and a system prompt instructing JSON output",
     "Tool method/arguments are wired from the planner's `${...output.result.method}` and `${...output.result.arguments}`",
     "Summarizer reads the tool result via `${execute.output.content}` (the canonical CALL_MCP_TOOL output field)",
     "`mcpServer` URL is consistent across the LIST and CALL tasks",
-    "Workflow JSON is written to a file via the Write tool before registration",
-    "Agent does not invent a separate prompt-template registration step — prompts are inline in the LLM_CHAT_COMPLETE `messages` field",
-    "Optional HUMAN-in-the-loop variant is mentioned (or offered) since the planner+tool combination benefits from approval"
+    "Workflow JSON is written to a file (via the Write tool, a heredoc, or any equivalent file-creation step) before registration",
+    "Agent does not invent a separate prompt-template registration step — prompts are inline in the LLM_CHAT_COMPLETE `messages` field"
   ]
 }

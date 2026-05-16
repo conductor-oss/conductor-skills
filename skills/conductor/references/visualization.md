@@ -2,6 +2,8 @@
 
 Generate a Mermaid flowchart when the user asks to visualize a workflow, or after creating one. Renders in any Markdown viewer (GitHub, VS Code, etc.).
 
+Always pair the diagram with a **1–2 sentence text summary of the flow** ("Fetches data, then either notifies on success or terminates on failure"). The summary helps users skim and is the accessibility fallback for screen readers and any environment that doesn't render Mermaid.
+
 ## Diagram rules
 
 - Use `flowchart TD` for sequential workflows, `flowchart LR` for wide parallel flows.

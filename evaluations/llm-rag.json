@@ -14,7 +14,7 @@
     "Step 9: Write the workflow JSON to a file (not inline)"
   ],
   "success_criteria": [
-    "Workflow has two tasks: LLM_SEARCH_INDEX then LLM_CHAT_COMPLETE (in that order)",
+    "Workflow includes LLM_SEARCH_INDEX followed by LLM_CHAT_COMPLETE (in that order); a citation-formatting INLINE or NOOP step after them is fine",
     "Search task includes both `embeddingModelProvider` AND `embeddingModel` (required fields)",
     "Chat task's system prompt explicitly instructs grounding — words like 'only from the context' or 'say I don't know' or equivalent",
     "Search results are referenced via `${search.output.result}` (the canonical LLM_SEARCH_INDEX output field) in the chat task's messages",

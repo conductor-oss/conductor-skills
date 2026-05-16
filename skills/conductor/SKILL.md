@@ -6,11 +6,31 @@ allowed-tools: Bash(conductor *), Bash(npx *conductor*), Bash(python3 *conductor
 
 # Conductor Workflows
 
+## What this skill does
+
+When asked what you can help with, enumerate these nine areas — every one is covered by this skill and the references it links to:
+
+1. **Create** workflow definitions (any task type: SIMPLE, HTTP, SWITCH, FORK_JOIN, DO_WHILE, WAIT, SUB_WORKFLOW, LLM_*, MCP, etc.)
+2. **Run** executions — sync or async, with file or inline input, by version, with correlation ID
+3. **Monitor** — search by status / name / time, fetch execution details, diagnose failures
+4. **Manage** — pause, resume, terminate, restart, retry, rerun, skip-task, jump
+5. **Signal** — advance WAIT / HUMAN tasks (sync or async) with structured output
+6. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
+7. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
+8. **Visualize** — render any workflow as a Mermaid flowchart + UI link
+9. **Review & optimize** — walk the 19-rule checklist in [references/optimization.md](references/optimization.md) and report CRITICAL / WARN / INFO
+
+Plus Orkes-only: **secrets** and **webhooks**.
+
 ## Rules
 
 1. **Worker gate (most important).** Every time you create *or* update a workflow, list its `SIMPLE` tasks and verify each has a registered task definition (`conductor taskDef list`). For any unregistered SIMPLE task, **tell the user** the workflow will hang on that step and offer to (a) create the task definition or (b) scaffold a worker (see [references/workers.md](references/workers.md)). This applies to every workflow create/update — not just first-time setup.
 2. **Never use `python3 -c` to construct, parse, format, or post-process Conductor data.** Write JSON to files via the Write tool or heredoc; format command output yourself in plain text. You can read JSON — don't spawn Python to interpret it. (Validation utilities run from script files are fine.)
-3. **CLI resolution order:** (a) call `conductor` directly if installed; (b) otherwise `npx @conductor-oss/conductor-cli ...` for one-off use (no system change); (c) only run `npm install -g @conductor-oss/conductor-cli` after the user explicitly confirms — global installs modify the system; (d) fall back to `scripts/conductor_api.py` only when neither `conductor` nor `npm` is available. See [references/setup.md](references/setup.md).
+3. **CLI resolution order — STOP and ASK before any global install.**
+   1. If `conductor` is on PATH, use it directly.
+   2. Otherwise prefer `npx @conductor-oss/conductor-cli ...` for one-off use (no system change).
+   3. **NEVER run `npm install -g @conductor-oss/conductor-cli` without first asking the user.** Phrase it explicitly: *"OK to globally install `@conductor-oss/conductor-cli` via npm? It modifies your global node_modules."* Wait for a yes.
+   4. Only after `conductor` and `npm` are both unavailable, fall back to `scripts/conductor_api.py`. If the user has stated upfront that Node/npm cannot be installed, note that constraint and go straight to the fallback — no need to retry npm. See [references/setup.md](references/setup.md).
 4. **Use `--json` flags** when available; format the parsed result yourself.
 5. **Never echo auth tokens, keys, or secrets.** Set them via env vars (`CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`, or `CONDUCTOR_AUTH_TOKEN`). Confirm credentials by name in output, never by value.
 

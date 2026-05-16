@@ -13,8 +13,7 @@
     "Step 8: Inform user that all subsequent operations will use the fallback script"
   ],
   "success_criteria": [
-    "CLI installation is attempted first before falling back",
-    "Fallback is only used after confirming CLI cannot be installed",
+    "Agent acknowledges the user-stated constraint (no Node/npm) and does NOT attempt `npm install -g` after the user has explicitly said it's not possible — per SKILL.md Rule 3 point 4",
     "Plan uses the bundled scripts/conductor_api.py fallback, not raw curl/wget commands",
     "CONDUCTOR_SERVER_URL is verified before making API calls",
     "Script output is parsed and presented clearly to the user",

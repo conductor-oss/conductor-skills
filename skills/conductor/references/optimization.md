@@ -122,9 +122,19 @@ WARN (4)
 INFO (2)
   • A4  47 tasks — well within the 100-task soft limit
   • A5  Task names are descriptive
+
+Recommended Changes (priority order)
+  [ ] task_def_charge_card.json  set responseTimeoutSeconds=30, pollTimeoutSeconds=60, timeoutSeconds=300
+  [ ] order_processing.json:7    add `$.retry_loop['iteration'] < 10` clause to loopCondition
+  [ ] order_processing.json:2    move stripeKey to ${workflow.secrets.STRIPE_KEY}
+  [ ] order_processing.json:1    add description, timeoutSeconds, timeoutPolicy
+  [ ] task_def_send_email.json   set retryCount=3, retryLogic=EXPONENTIAL_BACKOFF
+  [ ] compute_pricing INLINE     extract to a Python worker
 ```
 
 Then offer: *"Want me to apply any of these? I can update the task definitions and re-register the workflow."*
+
+**Always end with a `Recommended Changes` checklist** even if the findings are split by severity above. The checklist is the actionable artifact the user takes away — one bullet per fix, file/path pointer first, then the change to make. Skip findings that are INFO-only.
 
 ## When the user just says "make it simpler"
 
