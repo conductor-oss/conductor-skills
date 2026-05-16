@@ -161,7 +161,15 @@ Weekly scheduled runs against the default model cost ~$2/week (~$100/year).
 
 ### Running multi-model comparisons
 
-For a side-by-side comparison report like the one in our `release/1.4.0` tag, run `workflow_dispatch` three times with different `model` inputs, download the three JSON artifacts, then:
+Two paths:
+
+**Option A — one-click via `eval-compare.yml`.** A second workflow at `.github/workflows/eval-compare.yml` runs the suite against three models in parallel (matrix) and produces a single side-by-side HTML report. Triggers:
+- `workflow_dispatch` with comma-separated `models` input
+- `pull_request` labeled `run-eval-compare`
+
+Cost: ~$6–7 per matrix run. Outputs an `eval-comparison` artifact with the combined HTML. On PR runs, posts one combined summary comment.
+
+**Option B — manual local merge.** Run `workflow_dispatch` on `evals.yml` three times with different `model` inputs, download the three JSON artifacts, then:
 
 ```bash
 python3 scripts/render_evals_html.py \
