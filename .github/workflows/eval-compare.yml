@@ -1,0 +1,227 @@
+name: Skill Evals — Multi-Model Compare
+
+# Runs the eval suite against three models in parallel (matrix) and produces
+# a single side-by-side HTML comparison report. Heavier and pricier than
+# evals.yml — opt-in only.
+#
+# Cost per matrix run (3 models × 19 scenarios): roughly $6–7.
+#
+# Triggers:
+#   - workflow_dispatch — pick which models, override defaults
+#   - pull_request labeled `run-eval-compare`
+#
+# Required repository secrets:
+#   ANTHROPIC_API_KEY  — agent + judge (always)
+#   OPENAI_API_KEY     — agent (for gpt-* models)
+#   GEMINI_API_KEY     — agent (for gemini-* models)
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Comma-separated agent models (default: claude-sonnet-4-6, gpt-5.4, gemini-3-flash-preview)'
+        required: false
+        default: 'claude-sonnet-4-6,gpt-5.4,gemini-3-flash-preview'
+      judge:
+        description: 'Judge model'
+        required: false
+        default: 'claude-sonnet-4-20250514'
+
+  pull_request:
+    types: [labeled]
+
+jobs:
+  # --------------------------------------------------------------------
+  # Resolve the model list once so both matrix + aggregator agree.
+  # --------------------------------------------------------------------
+  plan:
+    if: github.event_name != 'pull_request' || github.event.label.name == 'run-eval-compare'
+    runs-on: ubuntu-latest
+    outputs:
+      models_json: ${{ steps.parse.outputs.models_json }}
+      judge: ${{ steps.parse.outputs.judge }}
+    steps:
+      - name: Parse model list
+        id: parse
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MODELS="${{ inputs.models }}"
+            JUDGE="${{ inputs.judge }}"
+          else
+            MODELS="claude-sonnet-4-6,gpt-5.4,gemini-3-flash-preview"
+            JUDGE="claude-sonnet-4-20250514"
+          fi
+          # Convert "a,b,c" → '["a","b","c"]' for matrix consumption
+          JSON=$(echo "$MODELS" | python3 -c "import sys,json; print(json.dumps([m.strip() for m in sys.stdin.read().split(',') if m.strip()]))")
+          echo "models_json=$JSON" >> "$GITHUB_OUTPUT"
+          echo "judge=$JUDGE" >> "$GITHUB_OUTPUT"
+          echo "Will run: $JSON"
+          echo "Judge: $JUDGE"
+
+  # --------------------------------------------------------------------
+  # Matrix: one job per model, fail-isolated so one model's API issue
+  # doesn't kill the others.
+  # --------------------------------------------------------------------
+  evals:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.plan.outputs.models_json) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate plugin (cheap gate before spending API tokens)
+        run: python3 scripts/validate_plugin.py
+
+      - name: Run evals — ${{ matrix.model }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY:    ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          mkdir -p out
+          # Sanitize model name for filenames
+          SAFE=$(echo "${{ matrix.model }}" | tr '/' '-' | tr ':' '-')
+          python3 scripts/run_evals.py \
+            --model "${{ matrix.model }}" \
+            --judge-model "${{ needs.plan.outputs.judge }}" \
+            --json \
+            --output "out/report-${SAFE}.json"
+
+      - name: Upload per-model report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-json-${{ matrix.model }}
+          path: out/
+          retention-days: 30
+
+  # --------------------------------------------------------------------
+  # Aggregate: pulls every matrix artifact and renders one HTML page
+  # with N model columns. Always runs (even if one matrix job failed)
+  # so we still get a partial comparison.
+  # --------------------------------------------------------------------
+  compare:
+    needs: evals
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download all matrix reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-json-*
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List downloaded reports
+        run: ls -la artifacts/ || true
+
+      - name: Render comparison HTML
+        run: |
+          shopt -s nullglob
+          JSONS=(artifacts/*.json)
+          if [ ${#JSONS[@]} -eq 0 ]; then
+            echo "No JSON reports downloaded; skipping render"
+            exit 0
+          fi
+          python3 scripts/render_evals_html.py \
+            "${JSONS[@]}" \
+            -o comparison.html \
+            --title "Conductor Skill — Multi-Model Comparison"
+          ls -la comparison.html
+
+      - name: Upload comparison HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-comparison
+          path: |
+            comparison.html
+            artifacts/
+          retention-days: 30
+
+      - name: Comment on PR with combined summary
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const dir = 'artifacts';
+            if (!fs.existsSync(dir)) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '## Multi-model eval results\n\n:x: No reports produced — check matrix logs.'
+              });
+              return;
+            }
+            const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+            const rows = [];
+            for (const f of files) {
+              try {
+                const r = JSON.parse(fs.readFileSync(path.join(dir, f)));
+                const results = r.results || [];
+                const passed = results.filter(x => x.overall_pass).length;
+                const total = results.length;
+                const critPass = results.reduce((s,x) => s + (x.passed||0), 0);
+                const critTotal = results.reduce((s,x) => s + (x.total||0), 0);
+                const pct = critTotal ? (critPass/critTotal*100).toFixed(1) : '0.0';
+                const allPassed = passed === total;
+                const fails = results.filter(x => !x.overall_pass).map(x => x.name);
+                rows.push({
+                  model: r.model || f,
+                  passed, total,
+                  critPass, critTotal,
+                  pct, allPassed,
+                  fails
+                });
+              } catch (e) {
+                rows.push({ model: f, error: e.message });
+              }
+            }
+            rows.sort((a, b) => (a.model || '').localeCompare(b.model || ''));
+
+            let body = `## Multi-model eval results\n\n`;
+            body += `| Model | Evals | Criteria | Status |\n|---|---|---|---|\n`;
+            for (const r of rows) {
+              if (r.error) {
+                body += `| \`${r.model}\` | — | — | :x: ${r.error} |\n`;
+                continue;
+              }
+              const icon = r.allPassed ? ':white_check_mark:' : ':warning:';
+              body += `| \`${r.model}\` | ${r.passed}/${r.total} | ${r.critPass}/${r.critTotal} (${r.pct}%) | ${icon} |\n`;
+            }
+            const anyFails = rows.some(r => r.fails && r.fails.length);
+            if (anyFails) {
+              body += `\n### Failed scenarios\n\n`;
+              for (const r of rows) {
+                if (r.fails && r.fails.length) {
+                  body += `**\`${r.model}\`:** ${r.fails.map(n => `\`${n}\``).join(', ')}\n\n`;
+                }
+              }
+            }
+            body += `\nDownload the \`eval-comparison\` artifact for the side-by-side HTML report.\n`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });

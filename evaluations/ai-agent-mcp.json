@@ -1,0 +1,25 @@
+{
+  "name": "Build an AI Agent Using MCP Tools",
+  "skills": ["conductor"],
+  "query": "Build me an AI agent workflow that lists MCP tools, picks one, calls it, and summarizes the result",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md and examples/ai-agent-mcp.md for the canonical first-AI-agent pattern",
+    "Step 2: Mention that LLM providers (OpenAI, Anthropic, etc.) are auto-enabled when their API key is set in the Conductor server's environment — no separate registration needed in OSS",
+    "Step 3: Construct a 4-task workflow: LIST_MCP_TOOLS → LLM_CHAT_COMPLETE (planning) → CALL_MCP_TOOL → LLM_CHAT_COMPLETE (summarize)",
+    "Step 4: First LLM call (planning) uses `temperature: 0.1` and instructs the model to emit JSON with `method` and `arguments` fields",
+    "Step 5: Wire planner output into the tool call: `${plan.output.result.method}` and `${plan.output.result.arguments}`",
+    "Step 6: Wire the tool result into the summarizer: `${execute.output.content}`",
+    "Step 7: Set `mcpServer` (e.g. `http://localhost:3001/mcp`) on both `LIST_MCP_TOOLS` and `CALL_MCP_TOOL` tasks",
+    "Step 8: Define `outputParameters` exposing the plan, the raw tool result, and the final summary",
+    "Step 9: Write the workflow JSON to a file (not inline), then suggest `conductor workflow create <file>`"
+  ],
+  "success_criteria": [
+    "Workflow includes LIST_MCP_TOOLS, then an LLM_CHAT_COMPLETE planner, then CALL_MCP_TOOL, then an LLM_CHAT_COMPLETE summarizer (in that order); an optional HUMAN approval task between planner and CALL_MCP_TOOL is also acceptable",
+    "Planning step uses low temperature (≤0.2) and a system prompt instructing JSON output",
+    "Tool method/arguments are wired from the planner's `${...output.result.method}` and `${...output.result.arguments}`",
+    "Summarizer reads the tool result via `${execute.output.content}` (the canonical CALL_MCP_TOOL output field)",
+    "`mcpServer` URL is consistent across the LIST and CALL tasks",
+    "Workflow JSON is written to a file (via the Write tool, a heredoc, or any equivalent file-creation step) before registration",
+    "Agent does not invent a separate prompt-template registration step — prompts are inline in the LLM_CHAT_COMPLETE `messages` field"
+  ]
+}

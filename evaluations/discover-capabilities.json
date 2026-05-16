@@ -1,0 +1,20 @@
+{
+  "name": "Discover Skill Capabilities",
+  "skills": ["conductor"],
+  "query": "What can you help me do with Conductor?",
+  "expected_behavior": [
+    "Step 1: Activate the conductor skill from natural-language intent (no slash command typed)",
+    "Step 2: Summarize the major capability groups from SKILL.md: workflow CRUD, execution, monitoring, management, signaling, scheduling, worker scaffolding, visualization, review/optimization",
+    "Step 3: Mention that schedules are part of OSS (not Orkes-only) and that secrets/webhooks are Orkes-only",
+    "Step 4: Offer concrete sample requests the user can make (e.g. 'create a workflow that...', 'review my workflow', 'schedule X daily')",
+    "Step 5: Optionally mention the slash-command shortcuts that exist on Claude Code (/conductor-setup, /conductor-optimize, /conductor-scaffold-worker) but emphasize plain English works too",
+    "Step 6: Ask what the user wants to do next"
+  ],
+  "success_criteria": [
+    "Agent does not require a slash command to discover capabilities — natural language triggers the skill",
+    "At least 7 of the 9 major capability areas (create, run, monitor, manage, signal, schedule, optimize, visualize, workers) are mentioned at least once. Smaller/terser models may consolidate categories (e.g. group manage + signal under 'control') — that's fine as long as the underlying functions are covered.",
+    "Schedules are correctly described as OSS, not Orkes-only",
+    "Sample queries are concrete and actionable, not vague",
+    "Agent ends by asking what the user wants to do (not by dumping the entire skill content)"
+  ]
+}

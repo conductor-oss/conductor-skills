@@ -1,0 +1,28 @@
+{
+  "name": "summarize_text",
+  "description": "Summarize input text using an LLM",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["text"],
+  "tasks": [
+    {
+      "name": "summarize",
+      "taskReferenceName": "summarize",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o-mini",
+        "messages": [
+          {"role": "system", "message": "You summarize text in one sentence."},
+          {"role": "user", "message": "${workflow.input.text}"}
+        ],
+        "temperature": 0.3,
+        "maxTokens": 200
+      }
+    }
+  ],
+  "outputParameters": {
+    "summary": "${summarize.output.result}",
+    "tokensUsed": "${summarize.output.tokenUsed}"
+  }
+}

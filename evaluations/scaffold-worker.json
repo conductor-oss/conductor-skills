@@ -1,0 +1,23 @@
+{
+  "name": "Scaffold a Worker in the User's Language",
+  "skills": ["conductor"],
+  "query": "Write me a Python worker that processes the charge_card task",
+  "expected_behavior": [
+    "Step 1: Confirm the language (Python) and the task type name (charge_card)",
+    "Step 2: Consult references/workers.md for the Python SDK pattern",
+    "Step 3: Generate a Python worker using the `@worker_task` decorator from `conductor.client.worker.worker_task`, decorated with `task_definition_name='charge_card'`",
+    "Step 4: Include the TaskHandler boilerplate to actually start the worker (`TaskHandler(configuration=config, scan_for_annotated_workers=True)`)",
+    "Step 5: Show the install command: `pip install conductor-python`",
+    "Step 6: Add a comment or docstring noting the worker must be idempotent (Conductor may redeliver on failure or timeout)",
+    "Step 7: Mention the worker gate — the task type name in the worker must match the `name` of the SIMPLE task in the workflow definition exactly",
+    "Step 8: Offer to verify against an existing workflow JSON if the user has one"
+  ],
+  "success_criteria": [
+    "Worker uses the `@worker_task` decorator pattern from references/workers.md (not a hand-rolled poll loop)",
+    "The `task_definition_name` argument exactly matches the user-supplied task name `charge_card`",
+    "TaskHandler / runner code is included so the worker is actually runnable, not just a function",
+    "Install command (`pip install conductor-python`) is shown",
+    "Idempotency note is present as a code comment or docstring",
+    "Agent does not invent a different SDK or library name (e.g. it does not write `pip install conductor` or `from conductor import ...`)"
+  ]
+}

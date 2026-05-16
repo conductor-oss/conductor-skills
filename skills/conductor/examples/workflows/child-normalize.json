@@ -1,0 +1,21 @@
+{
+  "name": "child_normalize",
+  "description": "Normalize a user payload (lowercase email, trim name)",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["payload"],
+  "tasks": [
+    {
+      "name": "transform",
+      "taskReferenceName": "transform",
+      "type": "JSON_JQ_TRANSFORM",
+      "inputParameters": {
+        "data": "${workflow.input.payload}",
+        "queryExpression": "{name: (.name | ascii_downcase | gsub(\"^\\\\s+|\\\\s+$\"; \"\")), email: (.email | ascii_downcase)}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "normalized": "${transform.output.result}"
+  }
+}

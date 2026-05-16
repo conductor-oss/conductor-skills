@@ -1,0 +1,22 @@
+{
+  "name": "Schedule a Workflow to Run Daily",
+  "skills": ["conductor"],
+  "query": "Schedule the cleanup-workflow to run every day at 2am",
+  "expected_behavior": [
+    "Step 1: Consult references/schedules.md for the schedule JSON schema and Quartz cron format",
+    "Step 2: Recognize that schedules are part of OSS — do NOT tell the user this requires Orkes",
+    "Step 3: Construct a schedule JSON with `name`, `cronExpression`, `startWorkflowRequest`, and `paused: false`",
+    "Step 4: Use the correct Quartz cron expression for 'every day at 2am': `0 0 2 * * ?` (note: day-of-month and day-of-week cannot both be specified — one must be `?`)",
+    "Step 5: Write the schedule JSON to a file with the Write tool, not inline",
+    "Step 6: Register the schedule with `conductor schedule create schedule.json`",
+    "Step 7: Optionally suggest a correlationId pattern (e.g. `cleanup-${date}`) for idempotency when the schedule fires"
+  ],
+  "success_criteria": [
+    "Agent treats schedules as OSS (not gated behind Orkes)",
+    "JSON is written to a file via the Write tool, not constructed inline in a shell command",
+    "Quartz cron expression is correct for daily-at-2am (`0 0 2 * * ?`), and the day-of-month vs day-of-week quirk is respected",
+    "`startWorkflowRequest` references the correct workflow name (`cleanup-workflow` or `cleanup_workflow`)",
+    "Registration command is `conductor schedule create <file>`, not `conductor workflow create` or any other variant",
+    "Agent does not invent or use Orkes-only commands"
+  ]
+}

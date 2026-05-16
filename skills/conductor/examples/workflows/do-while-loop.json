@@ -1,0 +1,35 @@
+{
+  "name": "paginated_fetch",
+  "description": "Fetch N pages from an endpoint via DO_WHILE",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["endpoint", "count"],
+  "tasks": [
+    {
+      "name": "loop",
+      "taskReferenceName": "loop_ref",
+      "type": "DO_WHILE",
+      "loopCondition": "if ($.loop_ref['iteration'] < $.value) { true; } else { false; }",
+      "loopOver": [
+        {
+          "name": "do_work",
+          "taskReferenceName": "do_work",
+          "type": "HTTP",
+          "inputParameters": {
+            "http_request": {
+              "uri": "${workflow.input.endpoint}?page=${loop_ref.output.iteration}",
+              "method": "GET"
+            }
+          }
+        }
+      ],
+      "inputParameters": {
+        "value": "${workflow.input.count}",
+        "loop_ref": "${loop_ref.output}"
+      }
+    }
+  ],
+  "outputParameters": {
+    "iterations": "${loop_ref.output.iteration}"
+  }
+}

@@ -1,0 +1,43 @@
+name: Validate Plugin
+
+on:
+  pull_request:
+    paths:
+      - '.claude-plugin/**'
+      - 'skills/**'
+      - 'commands/**'
+      - 'bin/**'
+      - 'VERSION'
+      - 'package.json'
+      - 'install.sh'
+      - 'install.ps1'
+      - 'scripts/validate_plugin.py'
+      - '.github/workflows/validate-plugin.yml'
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate plugin manifest
+        run: python3 scripts/validate_plugin.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify npm pack
+        run: |
+          npm pack --dry-run
+          # Ensure the bin script at least executes for --help
+          node bin/conductor-skills.js --version
+          node bin/conductor-skills.js --help > /dev/null

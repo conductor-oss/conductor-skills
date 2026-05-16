@@ -1,0 +1,26 @@
+{
+  "name": "Build an Autonomous Agent Loop with Iteration Cap",
+  "skills": ["conductor"],
+  "query": "Build me an autonomous agent loop that tries up to 10 think/act iterations and stops when the model says it's done",
+  "expected_behavior": [
+    "Step 1: Consult examples/ai-agent-loop.md and references/workflow-definition.md (DO_WHILE) for the ReAct pattern",
+    "Step 2: Construct a DO_WHILE task wrapping an LLM_CHAT_COMPLETE (think) + SWITCH (act) → CALL_MCP_TOOL or NOOP",
+    "Step 3: The `loopCondition` MUST include both a max-iteration cap AND a done-check: `$.loop['iteration'] < 10 && $.loop[...].think.output.result.done != true`",
+    "Step 4: Use the self-reference pattern: declare `\"loop\": \"${loop.output}\"` in the DO_WHILE task's inputParameters so the loopCondition can read prior iterations' outputs (the `$.var` rule)",
+    "Step 5: System prompt for the LLM tells it to emit JSON `{ done: bool, method?, arguments?, answer? }`",
+    "Step 6: SWITCH branches on `done` — if true go to NOOP, otherwise CALL_MCP_TOOL with `${think.output.result.method}` and `${think.output.result.arguments}`",
+    "Step 7: Set workflow-level `timeoutSeconds` + `timeoutPolicy: TIME_OUT_WF` so a stuck tool call cannot hang indefinitely even with the iteration cap",
+    "Step 8: After the loop, an INLINE task extracts the final `answer` from the last iteration",
+    "Step 9: Write the workflow JSON to a file (not inline)"
+  ],
+  "success_criteria": [
+    "`loopCondition` includes a hard iteration cap (e.g. `iteration < 10`) — NOT just a result-driven exit",
+    "Every variable used as `$.x` in the loopCondition is declared in the DO_WHILE task's `inputParameters` (the canonical $.var rule)",
+    "Self-reference pattern is present: the DO_WHILE task's inputParameters wires its own output back in (e.g. `\"loop\": \"${loop.output}\"`)",
+    "System prompt requires JSON output with a `done` field so termination is deterministic",
+    "Workflow-level `timeoutSeconds` AND `timeoutPolicy: TIME_OUT_WF` are set",
+    "Agent mentions or implements the iteration cap as CRITICAL per the optimization checklist (rule B5)",
+    "SWITCH evaluator type is `javascript` (since the branching depends on a runtime value)",
+    "Agent does not invent a non-existent task type like AGENT_LOOP or REACT_LOOP"
+  ]
+}

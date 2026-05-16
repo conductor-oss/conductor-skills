@@ -198,7 +198,9 @@ Loop until a condition is met.
   }
 }
 ```
-**Important**: The `loopCondition` is evaluated as JavaScript. The same `$.varName` rule applies — every variable referenced as `$.varName` must be declared in `inputParameters`. Here, `$.loop_ref['iteration']` requires `loop_ref` to be declared. The mapping `"loop_ref": "${loop_ref.output}"` wires the task's own output (which includes the `iteration` counter) back into the script's scope.
+**Important**: The `loopCondition` is evaluated as JavaScript. The same `$.varName` rule applies — every variable referenced as `$.varName` must be declared in `inputParameters`. Here, `$.loop_ref['iteration']` requires `loop_ref` to be declared.
+
+The mapping `"loop_ref": "${loop_ref.output}"` looks like a typo — referencing a task before it has output — but **it is the canonical pattern**, not a mistake. Conductor resolves the reference lazily on each iteration, exposing the running `iteration` counter (and prior iterations' task outputs) inside the script. See [examples/do-while-loop.md](../examples/do-while-loop.md) for a runnable workflow.
 
 ### WAIT
 Pause execution until a signal, a duration elapses, or a specific date/time is reached. Use `conductor task signal` to resume a signal-based wait.
@@ -667,4 +669,4 @@ Call a specific tool on an MCP server. All extra inputParameters are passed as t
 
 ## Visualization
 
-To generate a visual diagram of any workflow definition, see the **"9) Workflow visualization"** section in [SKILL.md](../SKILL.md#9-workflow-visualization). It maps Conductor constructs (SWITCH, FORK_JOIN, DO_WHILE, WAIT, etc.) to Mermaid flowchart syntax.
+To generate a Mermaid diagram of any workflow definition, see [visualization.md](visualization.md). It maps Conductor constructs (SWITCH, FORK_JOIN, DO_WHILE, WAIT, etc.) to flowchart syntax and covers the Conductor UI link format.
