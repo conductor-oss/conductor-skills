@@ -120,6 +120,55 @@ A user installs via:
 
 It also validates that every JSON file under `skills/*/examples/workflows/` parses. Those files are loaded by users via `conductor workflow create` — broken JSON would surface only at install time, so we catch it at CI time.
 
+## Skill evals (separate workflow)
+
+`.github/workflows/evals.yml` runs the agent eval suite — 19 natural-language scenarios judged by an LLM. It's separate from `validate-plugin.yml` because it costs real API tokens.
+
+### Triggers
+
+- **`workflow_dispatch`** — run on demand. Inputs let you pick the agent model and judge model.
+- **`schedule`** — Sundays 08:00 UTC against `claude-sonnet-4-6`. Weekly regression check.
+- **`pull_request`** labeled `run-evals` — apply the `run-evals` label to a PR to trigger a run. Skipped on every other PR (cost control).
+- **`push` to `main`** — only when files under `skills/`, `commands/`, `evaluations/`, or the eval scripts change.
+
+### Required repository secrets
+
+Set these under **Settings → Secrets and variables → Actions**:
+
+| Secret | Required for | Used by |
+|--------|--------------|---------|
+| `ANTHROPIC_API_KEY` | All runs (default agent + default judge) | Always |
+| `OPENAI_API_KEY` | Runs against `gpt-*` models | Only when model starts with `gpt-` |
+| `GEMINI_API_KEY` | Runs against `gemini-*` models | Only when model starts with `gemini-` |
+
+For PR comments on private repos, the default `GITHUB_TOKEN` is sufficient — no extra config needed.
+
+### Outputs
+
+Every run uploads an artifact named `eval-report-<model>` containing:
+- `report.json` — machine-readable per-criterion results
+- `report.html` — self-contained HTML report (open locally)
+
+On PR runs, the workflow also posts a summary comment with totals + any failed scenarios + partial-pass deltas.
+
+### Approximate cost per run (one model, 19 scenarios)
+
+- Claude-Sonnet-4.6: ~$1 (agent) + ~$1 (judge) = **~$2**
+- GPT-5.4: ~$2 (agent) + ~$1 (judge) = **~$3**
+- Gemini-3-Flash-Preview: ~$0.20 (agent) + ~$1 (judge) = **~$1.20**
+
+Weekly scheduled runs against the default model cost ~$2/week (~$100/year).
+
+### Running multi-model comparisons
+
+For a side-by-side comparison report like the one in our `release/1.4.0` tag, run `workflow_dispatch` three times with different `model` inputs, download the three JSON artifacts, then:
+
+```bash
+python3 scripts/render_evals_html.py \
+  claude-report.json gpt-report.json gemini-report.json \
+  -o compare.html --title "3-model comparison"
+```
+
 ## Adding a new plugin to the marketplace
 
 1. Create `skills/<new-plugin>/SKILL.md` with frontmatter `name: <new-plugin>`.

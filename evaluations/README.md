@@ -118,6 +118,20 @@ python3 scripts/run_evals.py --model gemini-2.5-pro -o gemini.json
 
 Exit code is `0` if all evals pass, `1` if any fail — suitable for CI/CD gates.
 
+### HTML report
+
+After a run, render the JSON as a self-contained HTML page:
+
+```bash
+python3 scripts/render_evals_html.py report.json -o report.html
+# multi-model comparison:
+python3 scripts/render_evals_html.py claude.json gpt.json gemini.json -o compare.html
+```
+
+### In CI
+
+The repo has a dedicated workflow `.github/workflows/evals.yml` that runs the suite on schedule + `workflow_dispatch` + PRs labeled `run-evals` + push to `main` (skill/eval changes only). It uploads both JSON and HTML as artifacts and posts a summary comment on PR runs. See `PUBLISHING.md` for the required `ANTHROPIC_API_KEY` (+ optional `OPENAI_API_KEY` / `GEMINI_API_KEY`) secrets.
+
 ### Manual
 
 1. Enable the `conductor` skill
