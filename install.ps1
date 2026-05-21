@@ -19,10 +19,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $SCRIPT_VERSION = "1.4.2"
-# Per-file fetches are pinned to this version's tag (see install.sh notes).
-# main is only used for the "is there a newer release?" check.
-$REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/v$SCRIPT_VERSION"
-$REPO_MAIN = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
+# Per-file fetches and the upgrade-check both read from `main`. Releases are
+# rolled by bumping VERSION on main, not by tagging.
+$REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
 # When set, skip the network fetch and copy from this directory instead.
 # The npm package sets this so the bundled files are used.
@@ -185,7 +184,7 @@ function Fetch-RemoteVersion {
         return (Get-Content (Join-Path $LOCAL_DIR "VERSION") -Raw).Trim()
     }
     try {
-        $ver = (Invoke-WebRequest -Uri "$REPO_MAIN/VERSION" -UseBasicParsing -ErrorAction Stop).Content.Trim()
+        $ver = (Invoke-WebRequest -Uri "$REPO_BASE/VERSION" -UseBasicParsing -ErrorAction Stop).Content.Trim()
         return $ver
     } catch { return "" }
 }
@@ -355,10 +354,11 @@ function Install-ToFile {
     if ($Prefix) {
         $tmpFile = [System.IO.Path]::GetTempFileName()
         ($Prefix + (Get-Content $Assembled -Raw)) | Set-Content -Path $tmpFile -NoNewline
-        Safe-Write -Target $Target -Source $tmpFile -ForceWrite $ForceWrite
+        $result = Safe-Write -Target $Target -Source $tmpFile -ForceWrite $ForceWrite
         Remove-Item $tmpFile -ErrorAction SilentlyContinue
+        return $result
     } else {
-        Safe-Write -Target $Target -Source $Assembled -ForceWrite $ForceWrite
+        return Safe-Write -Target $Target -Source $Assembled -ForceWrite $ForceWrite
     }
 }
 
@@ -410,29 +410,33 @@ function Install-ForAgent {
         $installDir = $env:USERPROFILE
         if ($AgentName -eq "aider") {
             Install-AiderToDir -SkillDir (Join-Path $installDir ".conductor-skills") -TmpDir $TmpDir -Config (Join-Path $installDir ".aider.conf.yml") -ReadPrefix "$installDir/.conductor-skills/"
+            return $true
         } else {
             $targetPath = Get-GlobalPath -AgentName $AgentName
-            Install-ToFile -Target $targetPath -Assembled $Assembled -ForceWrite $ForceWrite
+            return Install-ToFile -Target $targetPath -Assembled $Assembled -ForceWrite $ForceWrite
         }
     } else {
         switch ($AgentName) {
-            "codex"    { Install-ToFile -Target (Join-Path $ProjDir "AGENTS.md") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "gemini"   { Install-ToFile -Target (Join-Path $ProjDir "GEMINI.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "codex"    { return Install-ToFile -Target (Join-Path $ProjDir "AGENTS.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "gemini"   { return Install-ToFile -Target (Join-Path $ProjDir "GEMINI.md") -Assembled $Assembled -ForceWrite $ForceWrite }
             "cursor"   {
                 $frontmatter = "---`ndescription: Conductor workflow orchestration - create, run, monitor, and manage workflows`nglobs: `"**/*`"`nalwaysApply: true`n---`n`n"
-                Install-ToFile -Target (Join-Path $ProjDir ".cursor\rules\conductor.mdc") -Assembled $Assembled -ForceWrite $ForceWrite -Prefix $frontmatter
+                return Install-ToFile -Target (Join-Path $ProjDir ".cursor\rules\conductor.mdc") -Assembled $Assembled -ForceWrite $ForceWrite -Prefix $frontmatter
             }
-            "windsurf" { Install-ToFile -Target (Join-Path $ProjDir ".windsurfrules") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "cline"    { Install-ToFile -Target (Join-Path $ProjDir ".clinerules") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "aider"    { Install-AiderToDir -SkillDir (Join-Path $ProjDir ".conductor-skills") -TmpDir $TmpDir -Config (Join-Path $ProjDir ".aider.conf.yml") -ReadPrefix ".conductor-skills/" }
-            "copilot"  { Install-ToFile -Target (Join-Path $ProjDir ".github\copilot-instructions.md") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "amazonq"  { Install-ToFile -Target (Join-Path $ProjDir ".amazonq\rules\conductor.md") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "opencode" { Install-ToFile -Target (Join-Path $ProjDir "AGENTS.md") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "roo"      { Install-ToFile -Target (Join-Path $ProjDir ".roo\rules\conductor.md") -Assembled $Assembled -ForceWrite $ForceWrite }
-            "amp"      { Install-ToFile -Target (Join-Path $ProjDir ".amp\instructions.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "windsurf" { return Install-ToFile -Target (Join-Path $ProjDir ".windsurfrules") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "cline"    { return Install-ToFile -Target (Join-Path $ProjDir ".clinerules") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "aider"    {
+                Install-AiderToDir -SkillDir (Join-Path $ProjDir ".conductor-skills") -TmpDir $TmpDir -Config (Join-Path $ProjDir ".aider.conf.yml") -ReadPrefix ".conductor-skills/"
+                return $true
+            }
+            "copilot"  { return Install-ToFile -Target (Join-Path $ProjDir ".github\copilot-instructions.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "amazonq"  { return Install-ToFile -Target (Join-Path $ProjDir ".amazonq\rules\conductor.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "opencode" { return Install-ToFile -Target (Join-Path $ProjDir "AGENTS.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "roo"      { return Install-ToFile -Target (Join-Path $ProjDir ".roo\rules\conductor.md") -Assembled $Assembled -ForceWrite $ForceWrite }
+            "amp"      { return Install-ToFile -Target (Join-Path $ProjDir ".amp\instructions.md") -Assembled $Assembled -ForceWrite $ForceWrite }
         }
     }
-    return $true
+    return $false
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -638,9 +642,9 @@ try {
             continue
         }
 
-        # Idempotency check
+        # Idempotency check. -Force re-installs; -Upgrade does not (matches -Check).
         $installedVer = Read-ManifestVersion -ManifestPath $manifest -AgentName $a
-        if ($installedVer -and ($installedVer -eq $targetVersion) -and !$Force -and !$Upgrade) {
+        if ($installedVer -and ($installedVer -eq $targetVersion) -and !$Force) {
             Write-Ok "$a already at v$installedVer, skipping."
             $skippedCount++
             continue
@@ -652,8 +656,13 @@ try {
             Write-Info "Installing for $a ..."
         }
 
+        # -Upgrade implies force-overwrite at write-time so the upgrade flow
+        # doesn't strand on a Read-Host prompt under non-interactive shells.
+        $installForce = [bool]$Force
+        if ($Upgrade) { $installForce = $true }
+
         # Perform install
-        $result = Install-ForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal -ForceWrite $Force -TmpDir $tmpDir -Assembled $assembled
+        $result = Install-ForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal -ForceWrite $installForce -TmpDir $tmpDir -Assembled $assembled
         if ($result -ne $false) {
             $targetPath = if ($useGlobal) { Get-GlobalPath -AgentName $a } else { Get-TargetPath -AgentName $a -ProjDir $ProjectDir }
             $mode = if ($useGlobal) { "global" } else { "project" }
