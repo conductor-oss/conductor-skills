@@ -8,13 +8,10 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 
 VERSION="1.4.2"
-# Per-file fetches are pinned to this version's tag so the installer and the
-# files it pulls always come from the same release. Pages can serve a cached
-# install.sh older than `main`; pinning prevents schema drift.
-# `main` is only used for fetch_remote_version (the "is there a newer release?"
-# check), never for file content.
-REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/v${VERSION}"
-REPO_MAIN="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
+# Per-file fetches and the upgrade-check both read from `main`. Releases are
+# rolled by bumping VERSION on main, not by tagging — the install scripts ride
+# along with whatever main is serving.
+REPO_BASE="https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
 
 # When set, skip the network fetch and copy from this directory instead.
 # The npm package sets this so the bundled files are used.
@@ -268,7 +265,7 @@ fetch_remote_version() {
     return
   fi
   local remote_ver
-  remote_ver=$(curl -sSfL "$REPO_MAIN/VERSION" 2>/dev/null | tr -d '[:space:]') || true
+  remote_ver=$(curl -sSfL "$REPO_BASE/VERSION" 2>/dev/null | tr -d '[:space:]') || true
   echo "$remote_ver"
 }
 
@@ -306,8 +303,15 @@ download_files() {
     dir=$(dirname "$file")
     mkdir -p "$tmp_dir/$dir"
     if ! curl -sSfL "$REPO_BASE/$file" -o "$tmp_dir/$file" 2>/dev/null; then
-      error "Failed to download $file"
-      error "Check your internet connection and try again."
+      local http_code
+      http_code=$(curl -sS -o /dev/null -w "%{http_code}" "$REPO_BASE/$file" 2>/dev/null || echo "?")
+      error "Failed to download $file (HTTP $http_code from $REPO_BASE)"
+      if [ "$http_code" = "404" ]; then
+        error "File is missing upstream — likely a release packaging bug."
+        error "Please report: https://github.com/conductor-oss/conductor-skills/issues"
+      else
+        error "Check your internet connection and try again."
+      fi
       # tmp_dir cleanup handled by EXIT trap
       exit 1
     fi
@@ -451,8 +455,10 @@ install_to_file() {
       echo "$prefix"
       cat "$assembled"
     } > "$tmp_with_prefix"
-    safe_write "$target" "$tmp_with_prefix" "$force"
+    local rv=0
+    safe_write "$target" "$tmp_with_prefix" "$force" || rv=$?
     rm -f "$tmp_with_prefix"
+    return $rv
   else
     safe_write "$target" "$assembled" "$force"
   fi
@@ -809,10 +815,11 @@ main() {
       continue
     fi
 
-    # Idempotency check
+    # Idempotency check. --force re-installs anyway; --upgrade does not (matches
+    # --check semantics: "already at latest" should be a no-op).
     local installed_ver
     installed_ver=$(read_manifest_version "$manifest" "$a")
-    if [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ] && [ "$upgrade" != "true" ]; then
+    if [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
       ok "${a} already at v${installed_ver}, skipping."
       skipped_count=$((skipped_count + 1))
       continue
@@ -824,8 +831,14 @@ main() {
       info "Installing for ${BOLD}${a}${NC} ..."
     fi
 
+    # --upgrade implies force-overwrite at write-time (no `read -r` prompt,
+    # which breaks under `curl | bash`). The idempotency check above already
+    # gates whether we even reach this point.
+    local install_force="$force"
+    [ "$upgrade" = "true" ] && install_force="true"
+
     # Perform install
-    if install_for_agent "$a" "$project_dir" "$use_global" "$force" "$tmp_dir" "$assembled"; then
+    if install_for_agent "$a" "$project_dir" "$use_global" "$install_force" "$tmp_dir" "$assembled"; then
       # Determine target path for manifest
       local target_path
       if [ "$use_global" = "true" ]; then

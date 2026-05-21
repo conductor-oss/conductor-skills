@@ -66,17 +66,15 @@ A user installs via:
    python3 scripts/run_evals.py --verbose
    ```
 
-5. **Commit and push to `main`**. CI re-runs validation.
+5. **Commit and push to `main`**. CI re-runs validation. The install scripts fetch from `main` (not from tags), so the release is live to `curl | bash` users the moment the push lands.
 
-6. **Tag the release**:
+6. **(Optional) Tag and create a GitHub Release** for the changelog / release notes UI. The install scripts do **not** depend on tags — they read everything from `main`:
    ```bash
    git tag -a vX.Y.Z -m "Release vX.Y.Z"
    git push origin vX.Y.Z
    ```
 
-7. **Create a GitHub Release** off the tag with a short changelog. The install scripts (`install.sh` / `install.ps1`) read the latest tag for `--upgrade`, so the tag is what users actually pull.
-
-8. **Publish to npm** (after the GitHub tag/release is up):
+7. **Publish to npm**:
    ```bash
    # First time only — log in with the @conductor-oss org account:
    npm login --scope=@conductor-oss
@@ -91,7 +89,7 @@ A user installs via:
    npm view @conductor-oss/conductor-skills version
    ```
 
-9. **Smoke-test the install** in a clean environment, hitting all three channels:
+8. **Smoke-test the install** in a clean environment, hitting all three channels:
    ```bash
    # 1) Claude Code plugin path
    /plugin marketplace add conductor-oss/conductor-skills
