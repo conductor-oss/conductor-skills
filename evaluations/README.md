@@ -53,7 +53,7 @@ Tests scaffolding a worker for a SIMPLE task using the appropriate SDK.
 Tests the fallback path when Node.js/npm cannot be installed, using the bundled `conductor_api.py` script.
 
 ### optimize-workflow.json
-Tests review/optimization of an existing workflow — loading the workflow + each SIMPLE task's task def, walking the 19-rule checklist in `references/optimization.md`, grouping findings by CRITICAL/WARN/INFO, and offering fixes one at a time without applying silently.
+Tests review/optimization of an existing workflow — loading the workflow + each SIMPLE task's task def, walking the 22-rule checklist in `references/optimization.md` (covers LLM-specific gotchas like `jsonOutput` without "JSON" in prompt and `previousResponseId` provider lock-in), grouping findings by CRITICAL/WARN/INFO, and offering fixes one at a time without applying silently.
 
 ### discover-capabilities.json
 Tests natural-language activation — when a user asks "what can you help me do with Conductor?" the agent should activate from the skill description (no slash command needed) and summarize the major capability areas, including that schedules are OSS.
@@ -87,6 +87,9 @@ Tests choosing the right tool to serialize structured task output into a string 
 
 ### llm-previousresponse-chaining.json
 Tests OpenAI Responses API chaining via `previousResponseId` — turn 1 carries the full prompt, turns 2+ contain only the new user message and reference the prior turn's `${turnN.output.responseId}`. Verifies the agent uses Conductor's `{role, message}` schema, chains each turn to the *immediately preceding* one (not always turn 1), warns about provider lock-in (OpenAI/Azure-only, mid-chain provider switch breaks the chain) and the responseId retention bound.
+
+### llm-builtin-tools.json
+Tests provider-native built-in tools — `webSearch: true` (real-time web search; OpenAI/Anthropic/Gemini) and `codeInterpreter: true` (sandboxed code execution; same providers). Verifies the agent reaches for these instead of inventing an MCP server, custom HTTP fetcher, or custom Conductor worker when the task naturally calls for them.
 
 ### orkes-secrets.json
 Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.

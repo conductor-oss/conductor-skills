@@ -15,7 +15,7 @@
   "success_criteria": [
     "Agent loads the definition AND every distinct SIMPLE task def (not just the workflow)",
     "Findings are grouped into CRITICAL / WARN / INFO sections (not a flat list)",
-    "Each finding cites a specific rule ID from the optimization.md checklist (A1–A7, B1–B7, C1–C5, D1–D3, E1–E3)",
+    "Each finding cites a specific rule ID from the optimization.md checklist (A1–A7, B1–B9, C1–C5, D1–D4, E1–E3)",
     "Workflow-level issues (timeoutSeconds missing, description empty, schemaVersion=1, no failureWorkflow, no ownerEmail) are surfaced where applicable",
     "Task-def-level issues (zero/missing responseTimeoutSeconds, retryCount=0, missing rateLimitPerFrequency on external API tasks) are surfaced where applicable",
     "Secrets-in-input pattern (inputs named like apiKey, token, password, secret) is flagged CRITICAL per rule D1",

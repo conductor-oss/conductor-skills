@@ -269,7 +269,7 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
 | [Visualization](skills/conductor/references/visualization.md) | Mermaid mappings for every Conductor construct + UI link |
 | [Schedules](skills/conductor/references/schedules.md) | Cron schedules (OSS) — schema, format, idempotency patterns |
-| [Optimization Checklist](skills/conductor/references/optimization.md) | 19 review rules across structure, reliability, performance, security |
+| [Optimization Checklist](skills/conductor/references/optimization.md) | 22 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
 | [Fallback CLI](skills/conductor/references/fallback-cli.md) | Python REST script equivalents when the CLI isn't available |

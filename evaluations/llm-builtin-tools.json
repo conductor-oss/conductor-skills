@@ -1,0 +1,23 @@
+{
+  "name": "Use Provider-Native Built-in Tools (webSearch / codeInterpreter)",
+  "skills": ["conductor"],
+  "query": "I need two LLM workflows. (a) A research assistant that answers questions about current events — it needs real-time information. (b) A data analyst that can compute Fibonacci numbers and the golden ratio convergence, with actual numerical results. For both, I want the simplest possible workflow — no MCP server, no custom workers if I can avoid them.",
+  "expected_behavior": [
+    "Step 1: Consult examples/llm-chat.md and references/workflow-definition.md (LLM_CHAT_COMPLETE section, built-in tools matrix)",
+    "Step 2: Recognize that the research assistant needs `webSearch: true` (provider-native real-time web search; no MCP needed). Supported by OpenAI, Anthropic, and Gemini.",
+    "Step 3: Recognize that the data analyst needs `codeInterpreter: true` (provider-native sandboxed code execution). Supported by OpenAI (code_interpreter), Anthropic (code_execution), Gemini (codeExecution).",
+    "Step 4: Build BOTH workflows as single-task LLM_CHAT_COMPLETE workflows — no MCP LIST_MCP_TOOLS, no CALL_MCP_TOOL, no custom HTTP fetching task, no custom Conductor worker for executing code. The whole point is provider-native simplicity.",
+    "Step 5: Use Conductor's `{role, message}` schema (NOT `{role, content}`) on all messages",
+    "Step 6: Pick a provider that supports the feature — e.g. OpenAI gpt-4o for both, or Gemini 2.5-flash for code execution",
+    "Step 7: Write each workflow JSON to a file before registration"
+  ],
+  "success_criteria": [
+    "Research workflow has `webSearch: true` set on the LLM_CHAT_COMPLETE task",
+    "Data analyst workflow has `codeInterpreter: true` set on the LLM_CHAT_COMPLETE task",
+    "Neither workflow invents an MCP server, LIST_MCP_TOOLS, or CALL_MCP_TOOL — the agent recognizes the built-in tools eliminate that scaffolding",
+    "Neither workflow uses an HTTP task to fetch search results, nor a custom Conductor worker to run code — the built-in tools handle these on the provider side",
+    "Both workflows use Conductor's `{role, message}` schema (NOT `{role, content}`)",
+    "Each task uses an `llmProvider` that actually supports the relevant built-in tool (e.g. openai, anthropic, or google_gemini — not a provider that doesn't ship those tools)",
+    "Both workflow JSON files are written to files (not inline) before registration"
+  ]
+}

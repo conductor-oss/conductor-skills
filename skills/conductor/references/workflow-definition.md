@@ -426,7 +426,7 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
 | `frequencyPenalty` | number | OpenAI-style frequency penalty |
 | `presencePenalty` | number | OpenAI-style presence penalty |
 | `stopSequences` | array | stop tokens (also accepted: `stopWords`) |
-| `tools` | array | function-calling tool schemas; tools may be registered Conductor workers or supported integrations |
+| `tools` | array | function-calling tool definitions. **Each tool is a registered Conductor worker** (default `type: SIMPLE`) or a supported integration — when the LLM emits a tool call, Conductor dispatches it to the matching worker. See below. |
 | `participants` | object | role assignments for MCP tool integrations |
 | `jsonOutput` | boolean | parse the raw text as JSON into `output.result`. **For some models (notably Anthropic Claude), you MUST include the word `JSON` somewhere in the prompt** — otherwise the model emits prose. Conductor parses via Jackson and fails hard on markdown fences. |
 | `inputSchema` | object | `SchemaDef` — validates the inputs before calling the model |
@@ -473,6 +473,38 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
 | Custom tools / your own workflows / external APIs | `tools: [...]` (function calling) or `CALL_MCP_TOOL` |
 
 These are mutually compatible — a single task can combine `webSearch: true` with `tools: [...]` for a custom-tool agent that can also browse the web.
+
+**Custom tools dispatched to Conductor workers.**
+
+The `tools` array is Conductor-distinctive. Each entry is a `ToolSpec`:
+
+```json
+"tools": [
+  {
+    "name": "lookup_customer",
+    "type": "SIMPLE",
+    "description": "Look up a customer by ID. Returns name, email, and account status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "customer_id": { "type": "string" } },
+      "required": ["customer_id"]
+    }
+  }
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Tool name the LLM sees. Must match a registered Conductor worker `taskDefName` (when `type` is `SIMPLE`). |
+| `type` | Task type. Defaults to `SIMPLE`. Other values dispatch through the corresponding Conductor task. |
+| `description` | What the LLM reads to decide whether to call this tool. Be specific — this is the only signal the model has. |
+| `inputSchema` | JSON Schema for the tool's inputs. The LLM-emitted arguments are validated against this. |
+| `outputSchema` | JSON Schema for the tool's outputs (informational). |
+| `configParams` / `integrationNames` | Per-tool config and integration overrides. |
+
+When the LLM emits a tool call, `output.finishReason` is `TOOL_CALLS` and `output.toolCalls` contains the resolved invocations — each `ToolCall` includes the matched `type` (the Conductor task type to dispatch). You typically follow with a SWITCH or DYNAMIC task that runs the worker, then a follow-up `LLM_CHAT_COMPLETE` that consumes the tool result.
+
+This is the "registered Conductor worker is a tool" pattern. The LLM picks from your registered task definitions; no separate function-calling layer to write. Combine with `previousResponseId` (OpenAI) to chain tool-call turns without resending history.
 
 **Multi-turn chaining without resending history (OpenAI/Azure).**
 

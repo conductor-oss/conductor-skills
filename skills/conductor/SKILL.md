@@ -18,7 +18,7 @@ When asked what you can help with, enumerate these nine areas — every one is c
 6. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
 7. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
 8. **Visualize** — render any workflow as a Mermaid flowchart + UI link
-9. **Review & optimize** — walk the 19-rule checklist in [references/optimization.md](references/optimization.md) and report CRITICAL / WARN / INFO
+9. **Review & optimize** — walk the 22-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas) and report CRITICAL / WARN / INFO
 
 Plus Orkes-only: **secrets** and **webhooks**.
 
