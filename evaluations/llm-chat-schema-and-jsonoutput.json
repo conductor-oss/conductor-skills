@@ -1,0 +1,25 @@
+{
+  "name": "LLM_CHAT_COMPLETE Message Schema and jsonOutput Gotchas",
+  "skills": ["conductor"],
+  "query": "I want to build a workflow with two LLM_CHAT_COMPLETE tasks using Anthropic Claude. The first is a classifier that should return parsed JSON `{category: \"...\"}` via Conductor's built-in `jsonOutput: true` (I'm not using Anthropic tool-use — I want to know how to make jsonOutput work). A SWITCH then routes on the parsed category to one of two follow-up prompts. Walk me through the message schema, the jsonOutput pitfalls, and the right way to wire the SWITCH.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (LLM_CHAT_COMPLETE), examples/llm-chat.md, and references/template-resolution.md",
+    "Step 2: Use Conductor's message schema `{role, message}` — NOT `{role, content}`. Call this out explicitly because every native LLM provider API uses `content`.",
+    "Step 3: For the classifier, set `jsonOutput: true` so Conductor parses the model output and `${classifier.output.result.category}` is accessible as a parsed field",
+    "Step 4: Warn about the strict-Jackson-parse pitfall — Claude often emits ```json ... ``` markdown fences regardless of system-prompt instructions, and `jsonOutput: true` fails hard on those. Mention at least one mitigation (defensive system prompt + `jsonOutput: false` with substring extraction, OR provider-native structured output as the more robust path).",
+    "Step 5: SWITCH routes on `${classifier.output.result.category}` with an empty (`[]`) `defaultCase` so a malformed LLM emission doesn't silently fall through to the wrong branch",
+    "Step 6: System prompt instructs the model to emit JSON only (no fences) — but treat this as best-effort, not a guarantee",
+    "Step 7: Workflow inputs/outputs use the right `${...}` paths (NOT `${classifier.result.category}` which is missing `.output`)",
+    "Step 8: Write the JSON to a file before registering"
+  ],
+  "success_criteria": [
+    "Every `messages` entry uses `{role, message}` — NOT `{role, content}`",
+    "Agent explicitly contrasts Conductor's `{role, message}` with the `{role, content}` shape used by Anthropic/OpenAI native APIs, since this mismatch is the #1 surprise for new users",
+    "Classifier task sets `jsonOutput: true` (the user explicitly requested this path)",
+    "Agent warns about the strict-Jackson-parse pitfall with `jsonOutput: true` (markdown fences cause hard failures, especially with Claude) and proposes at least one mitigation",
+    "SWITCH that routes on the classifier output has an empty `defaultCase: []` (or an explicit no-op handler) — NOT a default-case branch that silently runs business logic for unrecognized categories",
+    "References to classifier output use `${classifier.output.result.category}` (with `.output.result`), not `${classifier.result.category}` or `${classifier.output.category}`",
+    "System prompt for the classifier instructs JSON-only output (no markdown fences) — treated as best-effort guidance",
+    "Workflow JSON is written to a file (not inline) before registration"
+  ]
+}

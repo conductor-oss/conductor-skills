@@ -74,7 +74,16 @@ Tests building the canonical first-AI-agent workflow — 4 tasks (LIST_MCP_TOOLS
 Tests building a RAG workflow — `LLM_SEARCH_INDEX` followed by a grounded `LLM_CHAT_COMPLETE`, including a system prompt that instructs the model to answer only from context, low temperature, and returning sources alongside the answer.
 
 ### agent-loop.json
-Tests building a ReAct-pattern autonomous agent loop — DO_WHILE with a hard iteration cap (per optimization rule B5), the canonical self-reference pattern (`loop: ${loop.output}`), workflow-level timeout, and a SWITCH branching on the model's `done` flag.
+Tests building a ReAct-pattern autonomous agent loop with the full production-grade scaffold — DO_WHILE with `evaluatorType: "graaljs"`, IIFE `loopCondition`, hard iteration cap (per optimization rule B5), the canonical self-reference pattern (`loop: ${loop.output}`), SET_VARIABLE message accumulation, LLM_CHAT_COMPLETE with `jsonOutput: true` and Conductor's `{role, message}` schema, SWITCH with empty `defaultCase`, JSON_JQ_TRANSFORM with `tojson` to stringify tool output, optional HTTP tools, and workflow-level timeout.
+
+### dowhile-graaljs-gotchas.json
+Tests the GraalJS rules for `DO_WHILE` loops: `evaluatorType: "graaljs"` at the top of the DO_WHILE task, IIFE form for `loopCondition`, `$.workflow.*` is NOT in scope inside the script (workflow inputs/variables must be plumbed through `inputParameters`), the `$.varName` rule, and the `${loop_ref.output.iteration}` vs `${loop_ref.iteration}` access path.
+
+### llm-chat-schema-and-jsonoutput.json
+Tests `LLM_CHAT_COMPLETE` schema and `jsonOutput` behavior: messages use Conductor's `{role, message}` (NOT the native LLM `{role, content}`), `jsonOutput: true` for parsed results, the strict-Jackson-parse pitfall (markdown fences fail), SWITCH with empty `defaultCase` to absorb malformed LLM emissions, and correct `${task.output.result.field}` access paths.
+
+### inline-jq-tojson-stringify.json
+Tests choosing the right tool to serialize structured task output into a string field — `JSON_JQ_TRANSFORM` with `tojson`, NOT INLINE. Verifies the agent recognizes the Java-Map-backed proxy hazards: `String($.x)` produces `{k=v}` (Java toString), `JSON.stringify` returns `"{}"`, `Object.keys` returns `[]`. Interpolating an object directly into a string field also yields `{k=v}` garbage.
 
 ### orkes-secrets.json
 Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.
