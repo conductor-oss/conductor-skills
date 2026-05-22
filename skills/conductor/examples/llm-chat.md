@@ -42,16 +42,39 @@ conductor workflow start -w summarize_text -i '{"text": "Conductor is a workflow
 
 The `--sync` flag waits for completion and returns the workflow result inline. For long-running prompts (large models, long outputs), drop `--sync` and poll via `conductor workflow get-execution`.
 
+## Message schema gotcha
+
+> Conductor uses `{role, message}`. Anthropic and OpenAI native APIs use `{role, content}`. **Conductor's field is `message`** — using `content` produces `Content must not be null for SYSTEM or USER messages`. This single difference catches almost everyone.
+
+```json
+{"role": "user", "message": "Summarize this article"}        // correct
+{"role": "user", "content": "Summarize this article"}        // WRONG — fails at runtime
+```
+
+Always pass **strings** in `message`. Interpolating a structured object (e.g. `${some_task.output}` without stringifying) causes Conductor to Java-`toString` it into `{key=value}` garbage on the way to the provider. If you need to embed a tool result or structured data, stringify upstream with `JSON_JQ_TRANSFORM` and `tojson` — see [ai-agent-loop.md](ai-agent-loop.md).
+
 ## Output shape
 
 `LLM_CHAT_COMPLETE` returns:
 
-- `result` — the response text (string)
+- `result` — **the response. Type depends on `jsonOutput`:**
+  - `jsonOutput: false` (default) — `result` is a **string** (the raw model response).
+  - `jsonOutput: true` — `result` is a **parsed object** (Conductor parses the raw text via Jackson).
 - `finishReason` — `STOP`, `LENGTH`, or `TOOL_CALLS`
 - `tokenUsed`, `promptTokens`, `completionTokens` — token accounting
 - `toolCalls` — present if the model invoked a tool (see [ai-agent-mcp.md](ai-agent-mcp.md))
 
 Downstream tasks read `${summarize.output.result}` for the text and `${summarize.output.tokenUsed}` for cost tracking.
+
+## `jsonOutput: true` — strict parsing pitfall
+
+Setting `jsonOutput: true` instructs Conductor to parse the raw model text via Jackson. This is the easiest path to clean structured output **only** if the model emits raw JSON. Two real-world failure modes:
+
+1. **Markdown fences.** Claude (and sometimes other models) emit ```` ```json ... ``` ```` regardless of system-prompt instructions like "no markdown fences." Jackson fails hard on these — there is no tolerant mode that strips fences. Workarounds:
+   - Use the provider's native structured-output mode (Anthropic tool-use, OpenAI JSON mode) via the `tools` parameter.
+   - Keep `jsonOutput: false` and substring-extract `{...}` from `result` in a downstream INLINE.
+   - Use a SIMPLE worker that calls the provider directly when you need bulletproof structured output.
+2. **Result-type inconsistency.** With `jsonOutput: true`, when the parse succeeds, `output.result` is an object; when it fails or the model emits non-JSON, behavior depends on cluster version (task fail vs. result-as-string fallback). Any SWITCH that routes on `output.result.action` should have an **empty `defaultCase`** to avoid acting on garbage. See [ai-agent-loop.md](ai-agent-loop.md).
 
 ## Patterns
 

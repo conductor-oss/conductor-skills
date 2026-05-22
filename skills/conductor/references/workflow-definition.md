@@ -117,34 +117,46 @@ Common jq patterns:
 - Aggregate: `{total: ([.[].amount] | add), count: length}`
 - Flatten: `[.[][] | .field]`
 
-> **Rule for all JavaScript-evaluated tasks (INLINE, DO_WHILE, SWITCH with `javascript` evaluator):**
-> Every variable referenced as `$.varName` inside a script or condition **must** be declared as an `inputParameters` key on that task. The `$` object in the script is the task's resolved `inputParameters` map.
+> **The `$.varName` rule — applies to every JavaScript-evaluated task (INLINE, DO_WHILE `loopCondition`, SWITCH with `javascript`/`graaljs` evaluator):**
+> Every variable referenced as `$.varName` inside a script or condition **must** be declared as an `inputParameters` key on that task. The `$` object in the script is the task's resolved `inputParameters` map (excluding `evaluatorType` and `expression`).
+>
+> `$.workflow.input.*` and `$.workflow.variables.*` are **NOT** in scope inside a script — they throw `TypeError: Cannot read property "input"/"variables" from undefined`. To use a workflow input or variable in a script, plumb it through `inputParameters`.
+>
+> Prefer `evaluatorType: "graaljs"` — older `"javascript"` may not be wired up on recent clusters. See [graaljs-gotchas.md](graaljs-gotchas.md) for full rules.
 
 ### INLINE
 Execute lightweight scripts (JavaScript via GraalVM).
+
+**The `$.varName` rule applies — every `$.x` in the script must be declared as an `inputParameters` key.**
+
 ```json
 {
   "name": "inline_task", "taskReferenceName": "compute", "type": "INLINE",
   "inputParameters": {
     "evaluatorType": "graaljs",
-    "expression": "function e() { return $.value * 2; } e();",
+    "expression": "(function(){ return $.value * 2; })();",
     "value": "${workflow.input.number}"
   }
 }
 ```
-**Important**: Every variable referenced as `$.varName` inside the script **must** be declared as an `inputParameters` key. For example, if the script uses `$.value` and `$.name`, both `value` and `name` must be present in `inputParameters`:
+
+Example with multiple inputs — every `$.x` referenced in the script needs a matching key:
 ```json
 {
   "name": "inline_task", "taskReferenceName": "compute", "type": "INLINE",
   "inputParameters": {
     "evaluatorType": "graaljs",
-    "expression": "function e() { return $.name + ' is ' + $.age; } e();",
+    "expression": "(function(){ return $.name + ' is ' + $.age; })();",
     "name": "${workflow.input.name}",
     "age": "${workflow.input.age}"
   }
 }
 ```
-The `$` object inside the script is the task's resolved `inputParameters` map (excluding `evaluatorType` and `expression`).
+
+**Important gotchas (see [graaljs-gotchas.md](graaljs-gotchas.md) for full rules):**
+- Task outputs (HTTP, LLM, MCP) are already parsed objects. Don't `String()` then `JSON.parse` — `String()` on a Java-Map-backed proxy yields `{k=v}`, not JSON.
+- `JSON.stringify` and `Object.keys` return `"{}"` / `[]` on those proxies. To serialize structured output into a string field, use `JSON_JQ_TRANSFORM` with `tojson`, not INLINE.
+- Avoid `input` and `messages` as INLINE input-parameter names — observed obscure failures; rename to `inputMessages` etc.
 
 ### SWITCH
 Conditional branching based on a value or JavaScript expression.
@@ -161,11 +173,11 @@ Conditional branching based on a value or JavaScript expression.
   "defaultCase": [{"...default task...": ""}]
 }
 ```
-When using `evaluatorType: "javascript"`, the same `$.varName` rule applies — all variables referenced in the expression must be declared in `inputParameters`:
+**When using JavaScript evaluation, the `$.varName` rule applies** — every variable referenced in the expression must be declared in `inputParameters`. Prefer `evaluatorType: "graaljs"`:
 ```json
 {
   "name": "switch_task", "taskReferenceName": "js_route", "type": "SWITCH",
-  "evaluatorType": "javascript",
+  "evaluatorType": "graaljs",
   "expression": "$.priority > 5 ? 'high' : 'low'",
   "inputParameters": {"priority": "${workflow.input.priority}"},
   "decisionCases": {
@@ -175,6 +187,8 @@ When using `evaluatorType: "javascript"`, the same `$.varName` rule applies — 
   "defaultCase": [{"...default task...": ""}]
 }
 ```
+
+**Keep `defaultCase` empty (or a single `NOOP`) unless you have a meaningful no-op handler** — a `defaultCase` that performs a finalize/cleanup step will fire on every unrecognized value and overwrite downstream state with garbage. See [template-resolution.md](template-resolution.md) Pitfall 1.
 
 ### FORK_JOIN / JOIN
 Execute tasks in parallel. Always pair FORK_JOIN with a JOIN task.
@@ -186,11 +200,17 @@ Execute tasks in parallel. Always pair FORK_JOIN with a JOIN task.
 ```
 
 ### DO_WHILE
-Loop until a condition is met.
+Loop until a JavaScript condition returns false.
+
+**The `$.varName` rule applies — every variable in `loopCondition` must be declared in `inputParameters`. Always set `evaluatorType: "graaljs"` at the top level of the DO_WHILE task.**
+
 ```json
 {
-  "name": "loop", "taskReferenceName": "loop_ref", "type": "DO_WHILE",
-  "loopCondition": "if ($.loop_ref['iteration'] < $.value) true; else false;",
+  "name": "loop",
+  "taskReferenceName": "loop_ref",
+  "type": "DO_WHILE",
+  "evaluatorType": "graaljs",
+  "loopCondition": "(function(){ return $.loop_ref['iteration'] < $.value; })();",
   "loopOver": [{"...task...": ""}],
   "inputParameters": {
     "value": "${workflow.input.count}",
@@ -198,9 +218,27 @@ Loop until a condition is met.
   }
 }
 ```
-**Important**: The `loopCondition` is evaluated as JavaScript. The same `$.varName` rule applies — every variable referenced as `$.varName` must be declared in `inputParameters`. Here, `$.loop_ref['iteration']` requires `loop_ref` to be declared.
 
-The mapping `"loop_ref": "${loop_ref.output}"` looks like a typo — referencing a task before it has output — but **it is the canonical pattern**, not a mistake. Conductor resolves the reference lazily on each iteration, exposing the running `iteration` counter (and prior iterations' task outputs) inside the script. See [examples/do-while-loop.md](../examples/do-while-loop.md) for a runnable workflow.
+**The self-reference pattern.** `"loop_ref": "${loop_ref.output}"` looks like a typo — referencing a task before it has output — but it is the canonical pattern. Conductor resolves the reference lazily on each iteration, exposing the running `iteration` counter (and prior iterations' task outputs) inside the script. See [examples/do-while-loop.md](../examples/do-while-loop.md) for a runnable workflow.
+
+**Use an IIFE for `loopCondition`.** Conductor reads the final value of the script. The IIFE form returns a clean boolean across cluster versions; the older `if (...) { true; } else { false; }` statement form is fragile, and named functions or `return true; return false;` patterns produce confusing failures. See [graaljs-gotchas.md](graaljs-gotchas.md) Rule 6.
+
+**Scope inside `loopCondition`:**
+
+- `$.<key>` for every key in `inputParameters` (after `${...}` resolution).
+- **Not** in scope: `$.workflow.input.*`, `$.workflow.variables.*`. Plumb workflow inputs/variables through `inputParameters` if you need them.
+
+**Reading the iteration counter from outside the loop:**
+
+| Where | Expression |
+|-------|------------|
+| `workflow.outputParameters` | `${loop_ref.output.iteration}` |
+| Another task's `inputParameters` | `${loop_ref.output.iteration}` |
+| Inside `loopCondition` (after wiring `loop_ref: ${loop_ref.output}`) | `$.loop_ref['iteration']` |
+
+`${loop_ref.iteration}` (no `.output`) is wrong — `iteration` lives inside `outputData`, not on the task. See [template-resolution.md](template-resolution.md) Pitfall 3.
+
+**Always cap the loop.** Even when the body has a result-driven exit, include an iteration cap in the condition (`$.loop_ref['iteration'] < N`). An unbounded loop is flagged CRITICAL by the optimization checklist.
 
 ### WAIT
 Pause execution until a signal, a duration elapses, or a specific date/time is reached. Use `conductor task signal` to resume a signal-based wait.
@@ -354,6 +392,9 @@ Conductor has built-in AI tasks supporting 12 LLM providers (OpenAI, Anthropic, 
 
 ### LLM_CHAT_COMPLETE
 Multi-turn conversational AI with optional tool calling. Supports all LLM providers.
+
+> **Message schema is `{role, message}`, NOT `{role, content}`.** This contradicts the native Anthropic, OpenAI, and most other LLM-provider schemas (which use `content`). Conductor's field is `message`. Using `content` produces `Content must not be null for SYSTEM or USER messages`.
+
 ```json
 {
   "name": "chat_task", "taskReferenceName": "chat", "type": "LLM_CHAT_COMPLETE",
@@ -365,12 +406,34 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
       {"role": "user", "message": "${workflow.input.question}"}
     ],
     "temperature": 0.7,
-    "maxTokens": 500
+    "maxTokens": 500,
+    "jsonOutput": false
   }
 }
 ```
-**Inputs**: `llmProvider` (required), `model` (required), `messages` (required, array of `{role, message}`), `temperature`, `maxTokens`, `topP`, `stopSequences`, `tools` (for function calling).
-**Outputs**: `result` (response text), `finishReason` (`STOP`, `TOOL_CALLS`, `LENGTH`), `tokenUsed`, `promptTokens`, `completionTokens`, `toolCalls`.
+**Inputs**:
+| Field | Type | Description |
+|-------|------|-------------|
+| `llmProvider` | string (required) | e.g. `openai`, `anthropic`, `vertex_ai` |
+| `model` | string (required) | provider-specific model ID |
+| `messages` | array (required) | `[{role, message}]` — note `message`, not `content` |
+| `temperature` | number | sampling temperature |
+| `maxTokens` | integer | hard cap on completion length |
+| `topP` | number | nucleus sampling |
+| `stopSequences` | array | stop tokens |
+| `tools` | array | function-calling tool schemas |
+| `jsonOutput` | boolean | if `true`, Conductor parses the raw text via Jackson and sets `result` to the parsed object. If `false`, `result` is the raw response string. |
+
+**Outputs**: `result`, `finishReason` (`STOP`, `TOOL_CALLS`, `LENGTH`), `tokenUsed`, `promptTokens`, `completionTokens`, `toolCalls`.
+
+**The `result` type is `jsonOutput`-dependent.** With `jsonOutput: true`, `result` is a **parsed object** and you access fields as `${chat.output.result.action}`. With `jsonOutput: false`, `result` is a **string** and you have to parse it yourself (or branch on it as text). Downstream SWITCH cases that route on `output.result.action` should always have an empty `defaultCase` or a sentinel branch, since a malformed LLM emission falls through as a string.
+
+**`jsonOutput: true` is strict.** Conductor parses the raw model text via Jackson. If the model emits markdown fences (```` ```json ... ``` ````) — which Claude frequently does regardless of system-prompt instructions — the parse fails hard and the task errors. There is no "tolerant" mode that strips fences. Workarounds:
+- Use the provider's native structured-output mode (Anthropic tool-use, OpenAI JSON mode) via `tools`.
+- Keep `jsonOutput: false` and parse defensively downstream (substring-extract the JSON between `{` and the matching `}`).
+- Use a SIMPLE worker that calls the provider directly when you need strict structured output.
+
+**Object-typed `message` fields are dangerous.** If a `messages[].message` value is a structured object rather than a string (e.g. you accidentally interpolate `${some_task.output}` without stringifying), Conductor Java-`toString`s it to `{key=value}` on the way to the provider — producing garbage in the chat history and nonsense responses. Always serialize structured data into a string first using `JSON_JQ_TRANSFORM` with `tojson` (not INLINE — see [graaljs-gotchas.md](graaljs-gotchas.md) Rule 3).
 
 ### LLM_TEXT_COMPLETE
 Single prompt text completion.

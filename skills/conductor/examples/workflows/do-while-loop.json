@@ -9,7 +9,8 @@
       "name": "loop",
       "taskReferenceName": "loop_ref",
       "type": "DO_WHILE",
-      "loopCondition": "if ($.loop_ref['iteration'] < $.value) { true; } else { false; }",
+      "evaluatorType": "graaljs",
+      "loopCondition": "(function(){ return $.loop_ref['iteration'] < $.value; })();",
       "loopOver": [
         {
           "name": "do_work",

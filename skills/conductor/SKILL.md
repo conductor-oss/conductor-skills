@@ -63,8 +63,10 @@ Full verb-to-CLI lookup is in **[references/cli-index.md](references/cli-index.m
 ## Creating workflows
 
 1. Consult **[references/workflow-definition.md](references/workflow-definition.md)** for task types, the `${...}` expression syntax, and the `$.var` rule for JS-evaluated tasks (INLINE, DO_WHILE, SWITCH/javascript).
-2. Write the JSON to a file with the Write tool, then `conductor workflow create file.json`.
-3. **Run the worker gate** (Rule 1).
+2. For any workflow using INLINE / DO_WHILE / SWITCH-javascript, also skim **[references/graaljs-gotchas.md](references/graaljs-gotchas.md)** — Java-Map-backed proxies, `$.workflow.*` scope, and the IIFE `loopCondition` convention catch most first-time authors.
+3. For workflows that interpolate task output into string fields (LLM messages, HTTP bodies), see **[references/template-resolution.md](references/template-resolution.md)** for the missing-field-returns-parent and object-to-string-toString pitfalls.
+4. Write the JSON to a file with the Write tool, then `conductor workflow create file.json`.
+5. **Run the worker gate** (Rule 1).
 
 For inputs to workflow start: use `-i '{"...":"..."}'` for small inline JSON, `-f input.json` for larger payloads.
 
@@ -142,6 +144,8 @@ When the user asks to write a worker:
 | [cli-index.md](references/cli-index.md) | Verb → CLI command lookup |
 | [fallback-cli.md](references/fallback-cli.md) | Python fallback equivalents (subset of CLI) |
 | [workflow-definition.md](references/workflow-definition.md) | JSON schema, all task types, expression syntax |
+| [graaljs-gotchas.md](references/graaljs-gotchas.md) | JS-evaluated task pitfalls (INLINE, DO_WHILE, SWITCH/js) — Java-Map proxies, `$.varName` rule, scope, IIFE convention |
+| [template-resolution.md](references/template-resolution.md) | `${...}` resolution pitfalls — missing-field-returns-parent, object→string `toString`, iteration paths |
 | [workers.md](references/workers.md) | SDK examples in 7 languages |
 | [api-reference.md](references/api-reference.md) | REST endpoints |
 | [visualization.md](references/visualization.md) | Mermaid mappings + UI link |

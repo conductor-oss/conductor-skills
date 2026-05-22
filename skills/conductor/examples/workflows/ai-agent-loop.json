@@ -1,15 +1,42 @@
 {
   "name": "autonomous_agent",
-  "description": "ReAct-pattern agent loop: think → act → observe until done",
+  "description": "ReAct-pattern agent loop with durable chat history, tool calls, and graceful failure",
   "version": 1,
   "schemaVersion": 2,
-  "inputParameters": ["task", "mcpServer", "tools"],
+  "inputParameters": ["question", "max_iterations"],
+  "variables": {
+    "messages": [],
+    "final_response": ""
+  },
   "tasks": [
     {
+      "name": "init_messages",
+      "taskReferenceName": "init_messages",
+      "type": "SET_VARIABLE",
+      "inputParameters": {
+        "messages": [
+          {
+            "role": "system",
+            "message": "You are an agent. Tools available: get_weather(city: string). Respond ONLY as JSON, no markdown fences: {\"action\": \"call_tool\", \"tool\": \"get_weather\", \"args\": {\"city\": \"...\"}} OR {\"action\": \"answer\", \"answer\": \"...\"}."
+          },
+          {
+            "role": "user",
+            "message": "${workflow.input.question}"
+          }
+        ]
+      }
+    },
+    {
       "name": "agent_loop",
-      "taskReferenceName": "loop",
+      "taskReferenceName": "agent_loop",
       "type": "DO_WHILE",
-      "loopCondition": "if ($.loop['iteration'] < 10 && $.loop[$.loop['iteration']].think.output.result.done != true) { true; } else { false; }",
+      "evaluatorType": "graaljs",
+      "loopCondition": "(function(){ return $.agent_loop['iteration'] < $.max_iterations && $.final_response === ''; })();",
+      "inputParameters": {
+        "agent_loop": "${agent_loop.output}",
+        "max_iterations": "${workflow.input.max_iterations}",
+        "final_response": "${workflow.variables.final_response}"
+      },
       "loopOver": [
         {
           "name": "think",
@@ -18,70 +45,81 @@
           "inputParameters": {
             "llmProvider": "openai",
             "model": "gpt-4o-mini",
-            "messages": [
-              {
-                "role": "system",
-                "message": "You are an agent. Tools: ${workflow.input.tools}. Previous results: ${loop.output}. Decide next step. Respond as JSON: { done: bool, method?: string, arguments?: object, answer?: string }."
-              },
-              {
-                "role": "user",
-                "message": "${workflow.input.task}"
-              }
-            ],
+            "messages": "${workflow.variables.messages}",
             "temperature": 0.1,
-            "maxTokens": 500
+            "maxTokens": 500,
+            "jsonOutput": true
           }
         },
         {
-          "name": "act",
-          "taskReferenceName": "act",
+          "name": "route",
+          "taskReferenceName": "route",
           "type": "SWITCH",
-          "evaluatorType": "javascript",
-          "expression": "$.done ? 'finish' : 'call_tool'",
+          "evaluatorType": "graaljs",
+          "expression": "$.action",
           "inputParameters": {
-            "done": "${think.output.result.done}"
+            "action": "${think.output.result.action}"
           },
           "decisionCases": {
             "call_tool": [
               {
-                "name": "execute",
-                "taskReferenceName": "execute",
-                "type": "CALL_MCP_TOOL",
+                "name": "call_weather",
+                "taskReferenceName": "call_weather",
+                "type": "HTTP",
+                "optional": true,
                 "inputParameters": {
-                  "mcpServer": "${workflow.input.mcpServer}",
-                  "method": "${think.output.result.method}",
-                  "arguments": "${think.output.result.arguments}"
+                  "http_request": {
+                    "uri": "https://wttr.in/${think.output.result.args.city}?format=j1",
+                    "method": "GET"
+                  }
+                }
+              },
+              {
+                "name": "stringify_result",
+                "taskReferenceName": "stringify_result",
+                "type": "JSON_JQ_TRANSFORM",
+                "inputParameters": {
+                  "data": "${call_weather.output.response.body}",
+                  "queryExpression": ". | tojson"
+                }
+              },
+              {
+                "name": "append_messages",
+                "taskReferenceName": "append_messages",
+                "type": "SET_VARIABLE",
+                "inputParameters": {
+                  "messages": [
+                    {
+                      "role": "assistant",
+                      "message": "Called get_weather."
+                    },
+                    {
+                      "role": "user",
+                      "message": "Tool result: ${stringify_result.output.result}"
+                    }
+                  ]
                 }
               }
             ],
-            "finish": [
+            "answer": [
               {
-                "name": "done",
-                "taskReferenceName": "done",
-                "type": "NOOP"
+                "name": "finalize",
+                "taskReferenceName": "finalize",
+                "type": "SET_VARIABLE",
+                "inputParameters": {
+                  "final_response": "${think.output.result.answer}"
+                }
               }
             ]
-          }
+          },
+          "defaultCase": []
         }
-      ],
-      "inputParameters": {
-        "loop": "${loop.output}"
-      }
-    },
-    {
-      "name": "final_answer",
-      "taskReferenceName": "final",
-      "type": "INLINE",
-      "inputParameters": {
-        "evaluatorType": "graaljs",
-        "expression": "function e() { var i = $.loop_output['iteration']; return { answer: $.loop_output[i].think.output.result.answer }; } e();",
-        "loop_output": "${loop.output}"
-      }
+      ]
     }
   ],
   "outputParameters": {
-    "iterations": "${loop.output.iteration}",
-    "answer": "${final.output.result.answer}"
+    "answer": "${workflow.variables.final_response}",
+    "iterations": "${agent_loop.output.iteration}"
   },
   "timeoutSeconds": 600,
   "timeoutPolicy": "TIME_OUT_WF"

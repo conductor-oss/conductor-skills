@@ -24,7 +24,8 @@ See [workflows/do-while-loop.json](workflows/do-while-loop.json):
   "name": "loop",
   "taskReferenceName": "loop_ref",
   "type": "DO_WHILE",
-  "loopCondition": "if ($.loop_ref['iteration'] < $.value) { true; } else { false; }",
+  "evaluatorType": "graaljs",
+  "loopCondition": "(function(){ return $.loop_ref['iteration'] < $.value; })();",
   "loopOver": [
     {
       "name": "do_work",
@@ -45,6 +46,12 @@ See [workflows/do-while-loop.json](workflows/do-while-loop.json):
 }
 ```
 
+Three details that are easy to miss:
+
+1. **`evaluatorType: "graaljs"` at the top of the DO_WHILE task.** Older docs omit it, and without it the condition fails at runtime on recent clusters.
+2. **IIFE form for `loopCondition`.** `(function(){ return <expr>; })()` returns a clean boolean. The older `if (...) { true; } else { false; }` statement form is fragile, and named functions or `return true; return false;` are red flags.
+3. **`loop_ref` wired through `inputParameters`.** This is what makes `$.loop_ref['iteration']` accessible inside the condition. Forgetting it is the #1 cause of `Cannot read property ... from undefined` failures.
+
 ## Run
 
 ```bash
@@ -62,11 +69,35 @@ ${loop_ref.output.2.do_work.response.body}
 ...
 ```
 
-The total iteration count is at `${loop_ref.output.iteration}`.
+The total iteration count is at `${loop_ref.output.iteration}` — **not** `${loop_ref.iteration}`. See [../references/template-resolution.md](../references/template-resolution.md) Pitfall 3.
+
+## Scope inside `loopCondition`
+
+Only these are accessible:
+
+- `$.<key>` for every key declared in `inputParameters` (after `${...}` resolution).
+
+These are **not** in scope and will throw `TypeError`:
+
+- `$.workflow.input.*`
+- `$.workflow.variables.*`
+- Any other task's output you didn't plumb in via `inputParameters`.
+
+If you need a workflow input or variable inside the condition, declare it as an input parameter on the DO_WHILE task:
+
+```json
+"inputParameters": {
+  "loop_ref": "${loop_ref.output}",
+  "max_iterations": "${workflow.input.max_iterations}",
+  "stop_flag": "${workflow.variables.stop_flag}"
+}
+```
+
+then reference `$.max_iterations`, `$.stop_flag` in the condition.
 
 ## Notes
 
 - `iteration` is 1-indexed.
-- The condition uses semicolon-terminated JS — Conductor's evaluator is strict.
-- Every variable referenced as `$.x` in the condition must appear as a key in `inputParameters`. Forgetting this gives a confusing "undefined" failure at runtime.
-- For unbounded loops, guard with both an iteration cap and a result-driven condition (e.g. `iteration < 100 && !$.loop_ref[iteration].do_work.output.done`).
+- Every variable referenced as `$.x` in the condition must appear as a key in `inputParameters`. Forgetting this gives a confusing `undefined` failure at runtime.
+- For unbounded loops, **always** include an iteration cap in addition to any result-driven exit (`(function(){ return $.loop_ref['iteration'] < 100 && !$.loop_ref[$.loop_ref['iteration']].do_work.output.done; })();`). The optimization checklist flags unbounded loops as CRITICAL.
+- See [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) for the full set of GraalJS pitfalls (Java-Map-backed proxies, `JSON.stringify` behavior, reserved-ish input names, etc.).

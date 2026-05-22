@@ -263,6 +263,8 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [Setup](skills/conductor/references/setup.md) | Install the CLI, choose a server, configure auth, named profiles |
 | [CLI Index](skills/conductor/references/cli-index.md) | Verb → CLI command lookup, grouped by lifecycle / intervention / tasks |
 | [Workflow Definition Schema](skills/conductor/references/workflow-definition.md) | Full JSON schema, every task type, expression syntax |
+| [GraalJS Gotchas](skills/conductor/references/graaljs-gotchas.md) | JS-evaluated task pitfalls — Java-Map proxies, `$.varName` rule, scope rules, IIFE convention for DO_WHILE |
+| [Template Resolution](skills/conductor/references/template-resolution.md) | `${...}` resolution pitfalls — missing-field-returns-parent, object → string `toString`, iteration paths |
 | [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, C#, Ruby, Rust |
 | [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
 | [Visualization](skills/conductor/references/visualization.md) | Mermaid mappings for every Conductor construct + UI link |
