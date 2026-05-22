@@ -235,6 +235,21 @@ conductor workflow start -w autonomous_agent -i '{
 }' --sync
 ```
 
+## OpenAI optimization — `previousResponseId` chaining
+
+If your loop is committed to OpenAI (or Azure OpenAI), you can reduce per-iteration token cost dramatically by chaining via the Responses API. Instead of sending the accumulated `messages` array on every iteration, each chat task only sends the new content and references the prior turn's `responseId`.
+
+**Changes from the canonical scaffold above:**
+
+1. Add `previous_response_id` to `workflow.variables` (initialized empty).
+2. In the `think` task, add `"previousResponseId": "${workflow.variables.previous_response_id}"`. On iteration 1 this is empty and the provider treats it as a fresh chain; on subsequent iterations it points at the prior task's `responseId`.
+3. After `think`, add a `SET_VARIABLE` that updates `workflow.variables.previous_response_id = ${think.output.responseId}`.
+4. Shrink `messages` — on each iteration you only need the latest user content (the tool result, the next instruction), not the system prompt or prior turns.
+
+The full message-accumulation scaffold above remains the right default for **portable** workflows (mixed providers, base URLs / proxies without Responses API, long-running workflows that outlive OpenAI's response retention window — currently ~30 days). Use chaining only when you're committed to OpenAI and the savings matter.
+
+See [llm-chaining.md](llm-chaining.md) for the full pattern, caveats around provider lock-in, and the `responseId` lifetime.
+
 ## A simpler MCP variant
 
 If you have an MCP server and don't need the chat-history-accumulation pattern, the loop collapses considerably — system message includes `Previous results: ${agent_loop.output}` and the tool branch is just a single `CALL_MCP_TOOL`. That was the previous shape of this example; it works for simple flows but breaks down for longer chains and harder failure modes.
@@ -258,6 +273,19 @@ Choose the variant by how the loop terminates: if the LLM reliably emits `{ acti
 - **Token budget per iteration is enforced by `maxTokens`** — the loop itself has no token budget. For cost control, multiply: 10 iterations × 500 max tokens × $/token.
 - **No secrets in `workflow.input`.** API keys, signing secrets, etc. go in `${workflow.secrets.X}` (Orkes) or worker env. Workflow inputs are visible in the execution view.
 - **Empty SWITCH `defaultCase`** unless you have a real no-op handler.
+
+## Built-in tools as an alternative to MCP
+
+Recent Conductor releases let `LLM_CHAT_COMPLETE` enable provider-native tools with a boolean — no MCP server or worker needed:
+
+- `webSearch: true` (OpenAI / Anthropic / Gemini) — real-time information
+- `codeInterpreter: true` (OpenAI / Anthropic / Gemini) — sandboxed Python/JS execution
+- `fileSearchVectorStoreIds: ["vs_..."]` (OpenAI) — search through pre-uploaded documents
+- `googleSearchRetrieval: true` (Gemini) — Google Search grounding
+
+For agent loops where the "tools" are just "web search and run some code," skip the MCP server entirely and set these on every `think` task. Combine with `tools: [...]` (function calling) for custom tools alongside the built-ins.
+
+See [llm-chat.md](llm-chat.md) for the full list and provider matrix.
 
 ## When to use the loop vs the single-shot
 

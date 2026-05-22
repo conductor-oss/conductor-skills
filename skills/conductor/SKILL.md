@@ -87,7 +87,8 @@ Design patterns:
 
 AI / LLM patterns:
 
-- [Minimum LLM workflow](examples/llm-chat.md) — single `LLM_CHAT_COMPLETE` task.
+- [Minimum LLM workflow](examples/llm-chat.md) — single `LLM_CHAT_COMPLETE` task; also covers built-in tools (`webSearch`, `codeInterpreter`, `fileSearchVectorStoreIds`), extended thinking/reasoning, `jsonOutput`/`outputSchema`.
+- [Multi-turn chaining via `previousResponseId`](examples/llm-chaining.md) — OpenAI/Azure Responses API: chain turns without resending message history.
 - [AI agent with MCP tools](examples/ai-agent-mcp.md) — `LIST_MCP_TOOLS` → plan → `CALL_MCP_TOOL` → summarize.
 - [Autonomous agent loop (ReAct)](examples/ai-agent-loop.md) — `DO_WHILE` think/act/observe until done.
 - [RAG — retrieval-augmented Q&A](examples/llm-rag.md) — `LLM_SEARCH_INDEX` then grounded `LLM_CHAT_COMPLETE`.
@@ -104,6 +105,7 @@ Raw definitions in [examples/workflows/](examples/workflows/) — pass any direc
 | `llm-chat.json` | Single LLM_CHAT_COMPLETE — summarize text |
 | `ai-agent-mcp.json` | 4-task AI agent: list tools → plan → call → summarize |
 | `ai-agent-loop.json` | DO_WHILE agent loop, ReAct pattern |
+| `llm-chaining.json` | OpenAI multi-turn chain via `previousResponseId` (no message-history resend) |
 | `llm-rag.json` | RAG: vector search + grounded LLM answer |
 
 ## Reviewing workflows

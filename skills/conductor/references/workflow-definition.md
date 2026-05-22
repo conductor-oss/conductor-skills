@@ -411,20 +411,108 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
   }
 }
 ```
-**Inputs**:
+**Inputs** (full list — see [examples/llm-chat.md](../examples/llm-chat.md) for usage patterns):
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `llmProvider` | string (required) | e.g. `openai`, `anthropic`, `vertex_ai` |
+| `llmProvider` | string (required) | e.g. `openai`, `anthropic`, `google_gemini`, `vertex_ai`, `azureopenai`, `bedrock`, `mistral`, `cohere`, `grok`, `perplexity`, `huggingface`, `ollama` |
 | `model` | string (required) | provider-specific model ID |
 | `messages` | array (required) | `[{role, message}]` — note `message`, not `content` |
-| `temperature` | number | sampling temperature |
-| `maxTokens` | integer | hard cap on completion length |
+| `instructions` | string | optional system instructions (alias for the legacy `prompt` field) |
+| `temperature` | number | sampling temperature (0.0–2.0) |
+| `maxTokens` | integer | hard cap on completion length (default `8192`) |
 | `topP` | number | nucleus sampling |
-| `stopSequences` | array | stop tokens |
-| `tools` | array | function-calling tool schemas |
-| `jsonOutput` | boolean | if `true`, Conductor parses the raw text via Jackson and sets `result` to the parsed object. If `false`, `result` is the raw response string. |
+| `topK` | integer | top-k sampling (where supported) |
+| `frequencyPenalty` | number | OpenAI-style frequency penalty |
+| `presencePenalty` | number | OpenAI-style presence penalty |
+| `stopSequences` | array | stop tokens (also accepted: `stopWords`) |
+| `tools` | array | function-calling tool schemas; tools may be registered Conductor workers or supported integrations |
+| `participants` | object | role assignments for MCP tool integrations |
+| `jsonOutput` | boolean | parse the raw text as JSON into `output.result`. **For some models (notably Anthropic Claude), you MUST include the word `JSON` somewhere in the prompt** — otherwise the model emits prose. Conductor parses via Jackson and fails hard on markdown fences. |
+| `inputSchema` | object | `SchemaDef` — validates the inputs before calling the model |
+| `outputSchema` | object | `SchemaDef` — validates the parsed output. On schema failure the task is **retried `retryCount` times** (default 3) with no backoff. Useful with `jsonOutput: true`. |
+| `webSearch` | boolean | enable provider-native web search. Supported by **OpenAI, Anthropic, Google Gemini**. |
+| `codeInterpreter` | boolean | enable sandboxed code execution. Supported by **OpenAI (`code_interpreter`), Anthropic (`code_execution`), Google Gemini (`codeExecution`)**. |
+| `fileSearchVectorStoreIds` | array\<string\> | vector store IDs for file search. **OpenAI only.** |
+| `googleSearchRetrieval` | boolean | enable Google Search grounding. **Gemini only.** |
+| `thinkingTokenLimit` | integer | token budget for extended reasoning **before** the model writes its answer. Supported by **Anthropic** (Claude 3.7+/Sonnet 4 extended thinking) and **Google Gemini** (2.5+). |
+| `reasoningEffort` | string | `low`, `medium`, or `high`. **OpenAI only** (o-series / gpt-5+ via the Responses API). |
+| `reasoningSummary` | string | surface chain-of-thought reasoning on the task output. Values: OpenAI accepts `auto` / `concise` / `detailed`; Anthropic and Gemini accept any non-blank value to opt in. When set, `output.reasoning` and `output.reasoningTokens` are populated. |
+| `previousResponseId` | string | **chain multi-turn conversations without resending message history**. The output `responseId` of a prior `LLM_CHAT_COMPLETE` task is referenced here, e.g. `${turn1.output.responseId}`. **OpenAI and Azure OpenAI only** (uses the Responses API). The new task's `messages` array is treated as the next turn appended to the chain. |
+| `outputMimeType` | string | HTTP-style content type for the output (media generation flows) |
+| `outputLocation` | string | URI where results should be stored (e.g., audio/video output paths) |
+| `voice` | string | audio output voice (when the model supports speech) |
+| `promptVersion` / `promptVariables` / `allowRawPrompts` | — | Orkes prompt-template integration (named prompts stored on the server, with versioning and variable interpolation). Pair with the legacy `prompt` field on the task. |
+| `integrationName` | string | named Orkes integration override (per-environment auth) |
+| `maxResults` | integer | when the provider returns N choices, how many to keep (default `1`) |
 
-**Outputs**: `result`, `finishReason` (`STOP`, `TOOL_CALLS`, `LENGTH`), `tokenUsed`, `promptTokens`, `completionTokens`, `toolCalls`.
+**Outputs** — `output.result` is an `Object` whose runtime type depends on `jsonOutput` and the provider's reply:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result` | string or object | response text (default) or parsed object (when `jsonOutput: true` AND the model emitted parseable JSON) |
+| `finishReason` | string | `STOP`, `TOOL_CALLS`, `LENGTH` |
+| `tokenUsed`, `promptTokens`, `completionTokens` | integer | token accounting |
+| `toolCalls` | array | present when `finishReason == "TOOL_CALLS"` |
+| `responseId` | string | provider-side response ID. **Pass into the next task's `previousResponseId` to chain (OpenAI/Azure).** |
+| `reasoning` | string | chain-of-thought text when `reasoningSummary` was set (OpenAI/Anthropic/Gemini) |
+| `reasoningTokens` | integer | tokens spent on reasoning (where supported) |
+| `media` | array | generated media items (`location`, `mimeType`) for audio/video output |
+| `jobId` | string | provider's async job ID for long-running operations |
+
+**Built-in tools — when to use which.**
+
+| Need | Use |
+|------|-----|
+| Real-time / fresh-from-the-web answers | `webSearch: true` (no MCP needed) |
+| Run Python/JS to compute, analyze, generate charts | `codeInterpreter: true` |
+| Search through pre-uploaded files (OpenAI Vector Stores) | `fileSearchVectorStoreIds: ["vs_..."]` |
+| Ground a Gemini answer in Google Search results | `googleSearchRetrieval: true` (Gemini only) |
+| Deeper reasoning before the final answer | `thinkingTokenLimit: 10000` (Anthropic/Gemini) or `reasoningEffort: "high"` (OpenAI) |
+| Surface the reasoning text in the task output | `reasoningSummary: "detailed"` |
+| Custom tools / your own workflows / external APIs | `tools: [...]` (function calling) or `CALL_MCP_TOOL` |
+
+These are mutually compatible — a single task can combine `webSearch: true` with `tools: [...]` for a custom-tool agent that can also browse the web.
+
+**Multi-turn chaining without resending history (OpenAI/Azure).**
+
+The Responses API stores the entire conversation server-side. `previousResponseId` references the prior turn; you only need to send the new user turn in `messages`. This cuts cost and latency dramatically across long agent loops or multi-turn dialogues.
+
+```json
+{
+  "tasks": [
+    {
+      "taskReferenceName": "turn1",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o",
+        "messages": [
+          {"role": "system", "message": "You are a technical architect."},
+          {"role": "user", "message": "Design X."}
+        ]
+      }
+    },
+    {
+      "taskReferenceName": "turn2",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "message": "Now list the key risks."}],
+        "previousResponseId": "${turn1.output.responseId}"
+      }
+    }
+  ]
+}
+```
+
+**Caveats:**
+- `previousResponseId` is **OpenAI- and Azure-OpenAI-only**. Other providers ignore it. For portable chains, accumulate the full `messages` array (see [../examples/ai-agent-loop.md](../examples/ai-agent-loop.md)).
+- Server-side state expires per OpenAI's Responses retention policy (currently ~30 days). For long-lived agent state, persist messages yourself.
+- You cannot mix providers mid-chain — every turn must point to the same provider that produced the original `responseId`.
+
+See [../examples/llm-chaining.md](../examples/llm-chaining.md) for the full pattern.
 
 **The `result` type is `jsonOutput`-dependent.** With `jsonOutput: true`, `result` is a **parsed object** and you access fields as `${chat.output.result.action}`. With `jsonOutput: false`, `result` is a **string** and you have to parse it yourself (or branch on it as text). Downstream SWITCH cases that route on `output.result.action` should always have an empty `defaultCase` or a sentinel branch, since a malformed LLM emission falls through as a string.
 
@@ -579,6 +667,48 @@ Search using a pre-computed embedding vector.
 Retrieve stored embeddings by document ID.
 **Inputs**: `vectorDB`, `namespace`, `index`, `docId` (all required).
 **Outputs**: `result` (array of floats).
+
+### GENERATE_PDF
+Convert markdown text to a PDF document. Built-in (Apache PDFBox); no external API key required. Supports full GitHub-Flavored Markdown — headings, tables, code blocks, lists, task lists, blockquotes, images (HTTP/HTTPS, `file://`, `data:`, relative paths), links, footnotes, strikethrough, inline formatting.
+
+```json
+{
+  "name": "gen_pdf", "taskReferenceName": "pdf", "type": "GENERATE_PDF",
+  "inputParameters": {
+    "markdown": "${report.output.result}",
+    "pageSize": "A4",
+    "theme": "default",
+    "baseFontSize": 11,
+    "pdfMetadata": {
+      "title": "${workflow.input.topic}",
+      "author": "Conductor",
+      "subject": "Auto-generated report"
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|:--------:|---------|-------------|
+| `markdown` | string | ✅ | — | Markdown text to render |
+| `pageSize` | string | ❌ | `A4` | `A4`, `LETTER`, `LEGAL`, `A3`, `A5` |
+| `marginTop` / `marginRight` / `marginBottom` / `marginLeft` | number | ❌ | `72` | Margins in points (72 = 1 inch) |
+| `theme` | string | ❌ | `default` | `default` or `compact` |
+| `baseFontSize` | number | ❌ | `11` | Base font size in points |
+| `outputLocation` | string | ❌ | auto | Output URI (e.g., `file:///tmp/report.pdf`). Defaults to payload store. |
+| `pdfMetadata` | object | ❌ | — | `{title, author, subject, keywords}` |
+| `imageBaseUrl` | string | ❌ | — | Base URL for resolving relative image paths in markdown |
+
+**Outputs:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result.location` | string | URI of the generated PDF |
+| `result.sizeBytes` | integer | Size of the generated PDF in bytes |
+| `media` | array | `[{location, mimeType: "application/pdf"}]` |
+| `finishReason` | string | `COMPLETED` on success |
+
+Common pattern is LLM → PDF: an `LLM_CHAT_COMPLETE` task emits markdown into `output.result`, then `GENERATE_PDF` consumes `${report.output.result}` and writes the binary out.
 
 ### LIST_MCP_TOOLS
 List available tools from an MCP (Model Context Protocol) server.

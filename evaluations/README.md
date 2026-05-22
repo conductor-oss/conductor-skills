@@ -85,6 +85,9 @@ Tests `LLM_CHAT_COMPLETE` schema and `jsonOutput` behavior: messages use Conduct
 ### inline-jq-tojson-stringify.json
 Tests choosing the right tool to serialize structured task output into a string field — `JSON_JQ_TRANSFORM` with `tojson`, NOT INLINE. Verifies the agent recognizes the Java-Map-backed proxy hazards: `String($.x)` produces `{k=v}` (Java toString), `JSON.stringify` returns `"{}"`, `Object.keys` returns `[]`. Interpolating an object directly into a string field also yields `{k=v}` garbage.
 
+### llm-previousresponse-chaining.json
+Tests OpenAI Responses API chaining via `previousResponseId` — turn 1 carries the full prompt, turns 2+ contain only the new user message and reference the prior turn's `${turnN.output.responseId}`. Verifies the agent uses Conductor's `{role, message}` schema, chains each turn to the *immediately preceding* one (not always turn 1), warns about provider lock-in (OpenAI/Azure-only, mid-chain provider switch breaks the chain) and the responseId retention bound.
+
 ### orkes-secrets.json
 Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.
 
