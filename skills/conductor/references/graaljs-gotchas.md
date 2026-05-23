@@ -1,6 +1,6 @@
 # GraalJS Gotchas
 
-Conductor evaluates JavaScript in **INLINE**, **DO_WHILE** (`loopCondition`), and **SWITCH** (`evaluatorType: "javascript"`) tasks through the GraalVM JavaScript engine. The engine runs on the JVM and is fed Java objects, which behave subtly differently from plain JS objects. Most "the script ran but the data is garbage" failures trace back to one of the rules below.
+Conductor evaluates JavaScript in **INLINE**, **DO_WHILE** (`loopCondition`), and **SWITCH** (`evaluatorType: "javascript"` or `"graaljs"`) tasks through the GraalVM JavaScript engine. The engine runs on the JVM and is fed Java objects, which behave subtly differently from plain JS objects. Most "the script ran but the data is garbage" failures trace back to one of the rules below.
 
 If you are writing any `expression` or `loopCondition` script, read this page first.
 
@@ -174,7 +174,7 @@ Most "I'm writing JS to massage task output" tasks should be `JSON_JQ_TRANSFORM`
 
 Before submitting a workflow with any JS-evaluated task:
 
-- [ ] `evaluatorType` is `"graaljs"` (not `"javascript"`).
+- [ ] `evaluatorType` is set. For DO_WHILE, set `"graaljs"` explicitly. For INLINE either `"javascript"` or `"graaljs"` works (they're aliased), but `"graaljs"` is the safer default.
 - [ ] Every `$.x` in the script has a matching key in `inputParameters`.
 - [ ] No `String($.someTaskOutput)` followed by `JSON.parse`.
 - [ ] No `JSON.stringify($.someTaskOutput)` — use JQ `tojson`.

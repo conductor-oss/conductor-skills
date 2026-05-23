@@ -77,7 +77,7 @@ Setting `jsonOutput: true` instructs Conductor to parse the raw model text via J
 2. **The word "JSON" must appear in the prompt for some providers.** Anthropic Claude in particular silently degrades to prose if no JSON cue is in the system or user message. Conductor's `@Documented` on `jsonOutput` says exactly this — "Depending on the model you MUST include JSON word as part of the prompt." Make this part of any structured-output system message.
 3. **Result-type inconsistency.** With `jsonOutput: true`, when the parse succeeds, `output.result` is an object; when it fails or the model emits non-JSON, behavior depends on cluster version (task fail vs. result-as-string fallback). Any SWITCH that routes on `output.result.action` should have an **empty `defaultCase`** to avoid acting on garbage. See [ai-agent-loop.md](ai-agent-loop.md).
 
-**`outputSchema` for retried validation.** Combine `jsonOutput: true` with an `outputSchema` to validate the parsed result. On validation failure, Conductor retries up to `retryCount` (task definition, default 3) times **with no backoff** — useful when the model occasionally emits malformed JSON but settles on a valid one after a retry.
+**`outputSchema` for retried validation.** Combine `jsonOutput: true` with an `outputSchema` to validate the parsed result. On validation failure, Conductor retries up to the task definition's `retryCount` (defaults to 3 if no `retryCount` is set) **with no backoff** — useful when the model occasionally emits malformed JSON but settles on a valid one after a retry.
 
 ## Built-in tools (no MCP / worker needed)
 

@@ -143,7 +143,7 @@ The agentic loop touches every Conductor gotcha at once. Each line of the exampl
 
 ### 1. `evaluatorType: "graaljs"` on the DO_WHILE task
 
-Without this the `loopCondition` fails at runtime on recent clusters with `"javascript"`. Older docs omit it — add it.
+For INLINE tasks, the platform aliases `"javascript"` and `"graaljs"`. For DO_WHILE's `loopCondition`, the alias has been reported to fail on some cluster versions — set `"graaljs"` explicitly here. Older docs omit it; that's where most "loop condition fails at runtime" reports trace back to.
 
 ### 2. IIFE `loopCondition` with iteration cap
 
@@ -221,7 +221,7 @@ For more sophisticated failure handling, branch `route` on `call_weather.output.
 
 ### 8. Workflow `variables` for chat history accumulation
 
-`workflow.variables.messages` is appended to each iteration with `SET_VARIABLE`. We persist chat history outside the loop's per-iteration outputs because:
+Each iteration grows `workflow.variables.messages` via the JQ-concat-then-SET_VARIABLE pair from step 6. We persist chat history in a workflow variable, outside the loop's per-iteration outputs, because:
 
 - The LLM needs the full conversation each iteration.
 - Reading `${workflow.variables.messages}` from inside the loop is clean and unambiguous; pulling from the loop's nested per-iteration outputs is fragile.
@@ -241,7 +241,7 @@ conductor workflow start -w autonomous_agent -i '{
 
 ## OpenAI optimization — `previousResponseId` chaining
 
-If your loop is committed to OpenAI (or Azure OpenAI), you can reduce per-iteration token cost dramatically by chaining via the Responses API. Instead of sending the accumulated `messages` array on every iteration, each chat task only sends the new content and references the prior turn's `responseId`.
+If your loop is committed to OpenAI (or Azure OpenAI), you can reduce per-iteration token cost by chaining via the Responses API instead of sending the accumulated `messages` array every iteration. Each chat task sends only the new content and references the prior turn's `responseId`. The savings scale with how much prior context you'd otherwise be re-sending — meaningful for long loops with a substantial system prompt; marginal for short ones.
 
 **Changes from the canonical scaffold above:**
 
