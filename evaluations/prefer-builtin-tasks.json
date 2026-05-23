@@ -1,0 +1,23 @@
+{
+  "name": "Prefer Built-in Conductor Tasks Over Custom Workers / HTTP for Non-LLM Operations",
+  "skills": ["conductor"],
+  "query": "I have two pieces of work I want to add to my Conductor pipeline. (1) After an order is placed, publish a JSON message about it to a Kafka topic `orders.created` on `kafka.internal:9092` with the order's ID as the message key. (2) At the end of the pipeline, render a markdown summary of the order into a PDF and store it. For (1), I was going to write a Python worker that uses kafka-python. For (2), I was going to call an HTTP service we run that wraps wkhtmltopdf. Help me wire these into the workflow, and also do a quick review of my intended approach against the Conductor optimization checklist — I want to know if I'm reinventing anything.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md (Rule 6 — prefer built-in tasks; the table maps Kafka → KAFKA_PUBLISH and PDF → GENERATE_PDF), references/workflow-definition.md (KAFKA_PUBLISH and GENERATE_PDF sections), and references/optimization.md (rule E4)",
+    "Step 2: For (1), recommend `KAFKA_PUBLISH` instead of a custom Python worker. Explain that the built-in handles producer config, serialization, headers, and retries — none of which the user gets free with kafka-python. Show a `KAFKA_PUBLISH` task with `kafka_request.topic: orders.created`, `bootStrapServers: kafka.internal:9092`, `value: ${workflow.input.order}`, and `key: ${workflow.input.order.id}`.",
+    "Step 3: For (2), recommend `GENERATE_PDF` instead of the HTTP-to-wkhtmltopdf service. Note that GENERATE_PDF is built-in (Apache PDFBox), needs no external service, and consumes markdown directly. Show a `GENERATE_PDF` task that reads markdown from an upstream task or workflow input into `inputParameters.markdown`.",
+    "Step 4: The *recommended implementation* should use the built-ins — do not deliver the Python kafka-python worker or the HTTP-to-wkhtmltopdf task as the primary answer. If the agent shows worker code at all, it should be clearly framed as the antipattern the user was about to take, not the recommended path.",
+    "Step 5: If the user is uncertain about the Kafka module being enabled on their server, note that KAFKA_PUBLISH requires the Kafka module to be enabled (per references/workflow-definition.md); explain that's a server-config check, not a reason to fall back to a worker.",
+    "Step 6: Materialize the workflow JSON to a file before registering (Write tool, or a heredoc to a file) — never construct it inline as a single CLI argument.",
+    "Step 7: When reviewing the user's intended approach, explicitly cite optimization rule **E4** (reinventing a built-in) — name the rule, not just generic 'avoid reinventing' advice."
+  ],
+  "success_criteria": [
+    "Task (1) is implemented as a `KAFKA_PUBLISH` task — NOT a SIMPLE/Python worker — with `kafka_request.topic`, `bootStrapServers`, `value`, and `key` fields populated from workflow input",
+    "Task (2) is implemented as a `GENERATE_PDF` task — NOT an HTTP task to the user's wkhtmltopdf service — with `markdown` sourced from an upstream task output or workflow input",
+    "The agent's *recommended implementation* uses the built-in tasks; any Python kafka-python worker code shown is clearly labelled as the antipattern the user was about to take, not the recommendation",
+    "The agent does not write an HTTP task to the wkhtmltopdf service as the recommended approach",
+    "The agent's review explicitly references optimization rule **E4** by name (the rule for reinventing a built-in), not just generic 'avoid reinventing' advice",
+    "Workflow JSON is materialized to a file before registration (Write tool, or a heredoc redirected into a file) — not constructed as an inline JSON literal passed directly as a CLI argument",
+    "The agent does NOT invent fields not in the KAFKA_PUBLISH / GENERATE_PDF schemas (e.g. it does not put `markdown` outside `inputParameters` on GENERATE_PDF, and uses `kafka_request` as the wrapper key for KAFKA_PUBLISH)"
+  ]
+}

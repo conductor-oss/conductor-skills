@@ -1,0 +1,25 @@
+{
+  "name": "Prefer Built-in LLM Tasks Over Raw HTTP to Provider APIs",
+  "skills": ["conductor"],
+  "query": "I want a Conductor workflow that summarizes a blog post with Claude. Anthropic's API is already reachable from this server — I've previously called https://api.anthropic.com/v1/messages from an HTTP task and it worked. The new workflow should accept `{\"text\": \"...\"}` as input and return a one-sentence summary. After you write it, also review this existing workflow that I want to migrate — it currently uses an HTTP task to OpenAI:\n\n```json\n{\n  \"name\": \"classify_ticket\",\n  \"version\": 1,\n  \"tasks\": [\n    {\n      \"name\": \"call_openai\",\n      \"taskReferenceName\": \"call_openai\",\n      \"type\": \"HTTP\",\n      \"inputParameters\": {\n        \"http_request\": {\n          \"uri\": \"https://api.openai.com/v1/chat/completions\",\n          \"method\": \"POST\",\n          \"headers\": {\"Authorization\": \"Bearer ${workflow.input.openai_key}\", \"Content-Type\": \"application/json\"},\n          \"body\": {\n            \"model\": \"gpt-4o-mini\",\n            \"messages\": [\n              {\"role\": \"system\", \"content\": \"Classify support tickets as billing, technical, or other. Reply with one word.\"},\n              {\"role\": \"user\", \"content\": \"${workflow.input.ticket}\"}\n            ]\n          }\n        }\n      }\n    }\n  ],\n  \"outputParameters\": {\"category\": \"${call_openai.output.response.body.choices[0].message.content}\"},\n  \"schemaVersion\": 2\n}\n```",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md (Rule 6 — prefer built-in LLM tasks over HTTP to provider APIs), references/workflow-definition.md (LLM_CHAT_COMPLETE section), and examples/llm-chat.md",
+    "Step 2: For the new summarization workflow, build it with a single `LLM_CHAT_COMPLETE` task — `llmProvider: anthropic`, a Claude model, Conductor's `{role, message}` schema. Do NOT use an HTTP task to api.anthropic.com, even though the user explicitly says that path has worked before.",
+    "Step 3: If the user worries about whether the server has Anthropic configured, explain that Conductor auto-enables providers when ANTHROPIC_API_KEY is set in the server's environment — and that the fix (if missing) is to set the key, not to fall back to HTTP. Do not propose HTTP-to-Anthropic as an equally valid alternative.",
+    "Step 4: Write the workflow JSON to a file (Write tool), not inline. Run the worker gate trivially (no SIMPLE tasks → nothing to register).",
+    "Step 5: For the migration review, apply the optimization checklist from references/optimization.md and flag the HTTP-to-OpenAI task as **CRITICAL under rule B10** (HTTP task hitting an LLM provider API).",
+    "Step 6: Also surface the secondary D1 issue — the OpenAI key is being passed via `${workflow.input.openai_key}`, which exposes it in execution view. Recommend `${workflow.secrets.OPENAI_API_KEY}` (Orkes) or rely on the server-configured OPENAI_API_KEY once the task is converted to LLM_CHAT_COMPLETE.",
+    "Step 7: Provide a converted version of `classify_ticket` using `LLM_CHAT_COMPLETE` with `llmProvider: openai`, `model: gpt-4o-mini`, Conductor's `{role, message}` schema, and `outputParameters.category` pointing at `${call_openai.output.result}` (not the HTTP response body path).",
+    "Step 8: Render the review as the structured CRITICAL/WARN/INFO report with a `Recommended Changes` checklist, per references/optimization.md."
+  ],
+  "success_criteria": [
+    "The new summarization workflow uses a single `LLM_CHAT_COMPLETE` task — NOT an HTTP task — and sets `llmProvider: anthropic` with a Claude model",
+    "Messages on the new workflow use Conductor's `{role, message}` schema (NOT `{role, content}`)",
+    "The agent does NOT propose HTTP-to-api.anthropic.com as a viable alternative, and does NOT justify HTTP with 'the integration may not be configured' — it explains the auto-enable-on-env-var behavior instead",
+    "The review of `classify_ticket` explicitly flags the HTTP-to-api.openai.com task as **CRITICAL** and cites optimization rule **B10**",
+    "The agent provides a converted version of `classify_ticket` that uses `LLM_CHAT_COMPLETE` with `llmProvider: openai`, Conductor's `{role, message}` schema, and reads the result from `${task.output.result}` (not `response.body.choices[0].message.content`)",
+    "The converted workflow removes the inlined `openai_key` from workflow input (server env / secret reference, not workflow input)",
+    "The review output uses the CRITICAL / WARN / INFO grouping and ends with a `Recommended Changes` checklist, per the report template in references/optimization.md",
+    "Workflow JSON is written to a file (Write tool), not constructed inline in a shell command"
+  ]
+}

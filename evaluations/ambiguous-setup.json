@@ -1,0 +1,26 @@
+{
+  "name": "Ambiguous Prompt — 'Set Up Conductor for Me' with No Context",
+  "skills": ["conductor"],
+  "query": "Set up Conductor for me.",
+  "expected_behavior": [
+    "Step 1: Recognize the prompt is ambiguous — there are multiple incompatible setup paths. Do NOT pick one silently and run with it.",
+    "Step 2: Ask (or surface as explicit assumptions, in a one-shot plan) the questions that actually branch the setup:",
+    "  - Local development server, or connecting to a remote/existing Conductor instance? (drives `conductor server start` vs. `conductor config save` with a URL)",
+    "  - If remote: OSS (no auth or basic auth) or Orkes (auth key/secret)? (drives whether to ask for `CONDUCTOR_AUTH_KEY`/`CONDUCTOR_AUTH_SECRET`)",
+    "  - If remote: what URL / profile name should the connection be saved under?",
+    "Step 3: For each branch, sketch what the steps would look like — don't make the user do the path-mapping themselves. Show: 'If you want LOCAL: I'll run X, Y, Z. If you want REMOTE+OSS: I'll need the URL. If you want REMOTE+ORKES: I'll need URL + key + secret (env vars).'",
+    "Step 4: Do NOT proactively run `npm install -g @conductor-oss/conductor-cli` — that's a global system change requiring explicit consent (Rule 3). Confirm whether `conductor` is already on PATH, then offer `npx` as the consent-free fallback, asking before global install.",
+    "Step 5: Do NOT proactively `conductor server start` — that runs a server locally and may conflict with the user's existing infra. Wait for the local-vs-remote decision.",
+    "Step 6: Reference references/setup.md for the full first-time-setup flow as the source.",
+    "Step 7: End with an explicit branching question — not a wall of text and not silent picking. Keep the response short enough that the user can pick a branch and reply."
+  ],
+  "success_criteria": [
+    "Agent does NOT silently pick a single setup path and execute it (e.g. doesn't just start a local server, doesn't just install the CLI globally)",
+    "Agent explicitly asks (or lists as explicit assumptions to confirm) the local-vs-remote question",
+    "For the remote path, agent acknowledges auth may be needed (mentions `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` env vars OR `--auth-key` / `--auth-secret` flags OR Orkes/OSS distinction) without preemptively demanding the credentials before a 401/403 — i.e., surfaces the possibility, doesn't ask for the values up front",
+    "Agent does NOT proactively run `npm install -g @conductor-oss/conductor-cli` without consent — Rule 3 is honored",
+    "Agent does NOT proactively start a local server (`conductor server start`) before the user has chosen the local path",
+    "Agent's response leads with the branching question (local vs remote, etc.) clearly enough that the user can reply with a short choice — any tutorial-style explanation is secondary, not the main payload",
+    "Agent does NOT ask for auth credentials (CONDUCTOR_AUTH_KEY / CONDUCTOR_AUTH_SECRET) preemptively — only on the remote-Orkes branch, and even there only on 401/403"
+  ]
+}

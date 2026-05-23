@@ -1,0 +1,25 @@
+{
+  "name": "Conflicting Requirements — Anthropic Provider with Gemini-Only Feature",
+  "skills": ["conductor"],
+  "query": "I want a Conductor workflow that calls Claude (`claude-sonnet-4-20250514`) with `googleSearchRetrieval: true` so it can ground its answers in Google Search results. Set it up.",
+  "expected_behavior": [
+    "Step 1: Catch the conflict before generating the workflow. `googleSearchRetrieval` is a **Gemini-only** field (per references/workflow-definition.md and examples/llm-chat.md's built-in-tools table). It is silently ignored on Anthropic.",
+    "Step 2: Explain the conflict to the user in one or two sentences, plainly: 'You've combined an Anthropic model with a Gemini-only field. Anthropic doesn't support googleSearchRetrieval — the field will be silently dropped and Claude will answer without web grounding.'",
+    "Step 3: Offer the two valid paths and let the user pick:",
+    "  - (a) **Keep Anthropic, swap to a feature it supports.** Use `webSearch: true` — Anthropic supports provider-native real-time web search. This is the right fix if 'I want Claude' is the firm requirement.",
+    "  - (b) **Keep Google Search grounding, swap the provider to Gemini.** Use `llmProvider: google_gemini`, a Gemini thinking-capable model, and `googleSearchRetrieval: true`. This is the right fix if 'I want Google Search grounding' is the firm requirement.",
+    "Step 4: Briefly note the difference between the two paths so the user can pick — `webSearch` on Anthropic uses Anthropic's own web-search provider; `googleSearchRetrieval` on Gemini uses Google Search specifically. Not interchangeable in source.",
+    "Step 5: Do NOT generate the requested broken workflow as the primary deliverable. Either ask the user which path they want, OR generate both as labelled alternatives — but never silently ship the Anthropic + googleSearchRetrieval combination as if it works.",
+    "Step 6: Use Conductor's `{role, message}` schema (not `{role, content}`) in any workflow snippets shown.",
+    "Step 7: Reference the built-in-tools provider matrix from examples/llm-chat.md or references/workflow-definition.md when explaining what each provider supports."
+  ],
+  "success_criteria": [
+    "Agent catches the conflict (Anthropic + googleSearchRetrieval) — does NOT silently produce the broken workflow as the recommended implementation",
+    "Agent correctly identifies `googleSearchRetrieval` as Gemini-only",
+    "Agent correctly identifies `webSearch` as the Anthropic-compatible equivalent",
+    "Agent offers both valid alternative paths (keep Anthropic + use webSearch, OR keep googleSearchRetrieval + switch to Gemini) — does not unilaterally pick one",
+    "Agent explains the substantive difference between `webSearch` (Anthropic's own search) and `googleSearchRetrieval` (Google Search) so the user can make an informed pick",
+    "Any workflow JSON shown uses Conductor's `{role, message}` message schema (not `{role, content}`)",
+    "Agent does NOT invent a way to make Anthropic accept `googleSearchRetrieval` (no fake configuration, no claim that Conductor routes the call somehow) — the conflict is real and stated as real"
+  ]
+}

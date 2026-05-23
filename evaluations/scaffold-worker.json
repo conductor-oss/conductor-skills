@@ -1,23 +1,28 @@
 {
-  "name": "Scaffold a Worker in the User's Language",
+  "name": "Scaffold a Worker in the User's Language (Built-in First, Fetch SDK Before Writing)",
   "skills": ["conductor"],
-  "query": "Write me a Python worker that processes the charge_card task",
+  "query": "I have a Conductor task type `charge_card` that needs to call our internal payments API at `payments.internal/charge` — it's a proprietary service, not Stripe or anything off-the-shelf. Write me a worker for this in Python.",
   "expected_behavior": [
-    "Step 1: Confirm the language (Python) and the task type name (charge_card)",
-    "Step 2: Consult references/workers.md for the Python SDK pattern",
-    "Step 3: Generate a Python worker using the `@worker_task` decorator from `conductor.client.worker.worker_task`, decorated with `task_definition_name='charge_card'`",
-    "Step 4: Include the TaskHandler boilerplate to actually start the worker (`TaskHandler(configuration=config, scan_for_annotated_workers=True)`)",
-    "Step 5: Show the install command: `pip install conductor-python`",
-    "Step 6: Add a comment or docstring noting the worker must be idempotent (Conductor may redeliver on failure or timeout)",
-    "Step 7: Mention the worker gate — the task type name in the worker must match the `name` of the SIMPLE task in the workflow definition exactly",
-    "Step 8: Offer to verify against an existing workflow JSON if the user has one"
+    "Step 1: Confirm there is no built-in match (no LLM_*, HTTP-to-internal-API would lose retries/observability but more importantly the user explicitly said it's a *worker*-shaped task — proprietary business logic, not a generic HTTP call). State briefly why a SIMPLE worker is the right answer here vs. e.g. an HTTP task (proprietary auth, retry semantics, idempotency keys, etc.).",
+    "Step 2: Confirm the language with the user (Python) and the task type name (`charge_card`).",
+    "Step 3: **WebFetch the Python SDK README from https://github.com/conductor-oss/python-sdk** before writing any code, to get the current install command, latest version, and scaffold pattern. Cite or quote what the README says about the runner class / annotation in your scaffolded code.",
+    "Step 4: Consult references/workers.md for the Python SDK pattern as a reference, but defer to what the fetched README currently shows if they differ.",
+    "Step 5: Generate a Python worker using the `@worker_task` decorator from `conductor.client.worker.worker_task` (or whatever the README currently shows), decorated with `task_definition_name='charge_card'`.",
+    "Step 6: Include the TaskHandler boilerplate to actually start the worker (per the fetched README).",
+    "Step 7: Show the install command from the README (e.g. `pip install conductor-python` pinned to the current latest version).",
+    "Step 8: Add a comment or docstring noting the worker must be idempotent (Conductor may redeliver on failure or timeout).",
+    "Step 9: Mention the worker gate — the task type name in the worker must match the `name` of the SIMPLE task in the workflow definition exactly.",
+    "Step 10: Offer to verify against an existing workflow JSON if the user has one."
   ],
   "success_criteria": [
-    "Worker uses the `@worker_task` decorator pattern from references/workers.md (not a hand-rolled poll loop)",
+    "Agent explicitly considered and rejected the built-in route (no LLM_/HTTP fit) before scaffolding — does not jump straight to worker code",
+    "Agent WebFetched the Python SDK README (github.com/conductor-oss/python-sdk) before writing code — verifiable by a WebFetch tool call appearing in the transcript prior to any code generation",
+    "Worker uses the `@worker_task` decorator pattern from the fetched README / references/workers.md (not a hand-rolled poll loop)",
     "The `task_definition_name` argument exactly matches the user-supplied task name `charge_card`",
     "TaskHandler / runner code is included so the worker is actually runnable, not just a function",
-    "Install command (`pip install conductor-python`) is shown",
+    "Install command (`pip install conductor-python`) is shown with the current version observed in the fetched README, not a stale hardcoded version",
     "Idempotency note is present as a code comment or docstring",
-    "Agent does not invent a different SDK or library name (e.g. it does not write `pip install conductor` or `from conductor import ...`)"
+    "Agent does not invent a different SDK or library name (e.g. it does not write `pip install conductor` or `from conductor import ...`)",
+    "Agent does not propose using HTTP task to call payments.internal/charge as a substitute for the worker — recognizes that proprietary internal API + business-logic shape calls for a worker"
   ]
 }

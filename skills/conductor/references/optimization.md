@@ -66,6 +66,10 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
 - **B9. `previousResponseId` provider lock-in / chain breakage.** The OpenAI Responses-API chaining field is silently ignored on other providers, and a mid-chain provider switch breaks the chain.
   - Severity: WARN when any task uses `previousResponseId` and either (a) `llmProvider` is not `openai`/`azureopenai`, or (b) a chained task's provider differs from the task whose `responseId` it references.
   - For long-running workflows where chain lifetime exceeds OpenAI's ~30-day `responseId` retention, recommend the accumulated-messages fallback ([../examples/ai-agent-loop.md](../examples/ai-agent-loop.md)) and downgrade to INFO when an explicit fallback path is present.
+- **B10. HTTP task hitting an LLM provider API — use the built-in LLM task instead.** Conductor ships first-class LLM tasks (`LLM_CHAT_COMPLETE`, `LLM_GENERATE_EMBEDDINGS`, `LLM_GENERATE_IMAGE`, `LLM_GENERATE_TTS`, `LLM_GENERATE_VIDEO`, `LLM_SEARCH_INDEX`). Hand-rolling the same call as an `HTTP` task to `api.openai.com` / `api.anthropic.com` / `generativelanguage.googleapis.com` / Vertex / Bedrock / Azure-OpenAI / Cohere / Mistral / Grok / Perplexity / HuggingFace / Ollama loses everything the built-in tasks give you: auth wiring, retries, token accounting, the `{role, message}` schema, `webSearch`/`codeInterpreter` built-in tools, `previousResponseId` chaining, `tools[]` function-calling, structured-output parsing (`jsonOutput` + `outputSchema`-driven retry), and a uniform `output.result` shape that downstream tasks can consume.
+  - Severity: **CRITICAL** when an `HTTP` task's `http_request.uri` matches a known LLM-provider host (`*.openai.com`, `*.anthropic.com`, `generativelanguage.googleapis.com`, `*-aiplatform.googleapis.com`, `bedrock-runtime.*.amazonaws.com`, `*.openai.azure.com`, `api.cohere.ai`, `api.mistral.ai`, `api.x.ai`, `api.perplexity.ai`, `api-inference.huggingface.co`, `*.ollama.ai`, or any `/v1/chat/completions`, `/v1/messages`, `/v1/embeddings`, `/v1/responses` path on a non-Conductor host).
+  - Fix: replace the HTTP task with the matching `LLM_*` task. If the user says "the server doesn't have an Anthropic integration configured," the answer is to set `ANTHROPIC_API_KEY` (or the provider-equivalent env var) on the Conductor server, not to keep the HTTP task. Conductor auto-enables providers when the key is present.
+  - Legitimate exceptions (downgrade to INFO with a one-line note): (a) the URL is a non-AI endpoint the provider happens to host (e.g. an admin/billing API); (b) the user has demonstrated a specific feature gap not yet exposed by the built-in task — name the missing field. Provider lock-in concerns ("we want to swap providers later") are *not* a reason for HTTP; that's exactly what `llmProvider` on the built-in task solves.
 
 ### C. Performance & complexity
 
@@ -104,6 +108,26 @@ Sometimes the right answer is *not a workflow*. Smell tests:
 - **E2. Single-task "workflows."** A workflow with one HTTP task is a queue with extra steps. Use a queue, scheduled worker, or just a function call.
 - **E3. Large payloads in inputs/outputs.** Conductor has practical limits — typically a few MB before perf degrades and the UI struggles. Push blobs (uploaded files, large model outputs, dataset rows) to object storage and let the workflow carry only references (`{ "bucket": "...", "key": "..." }`).
   - Severity: WARN/CRITICAL depending on actual payload size and frequency.
+- **E4. Reinventing a built-in task with HTTP / INLINE / a custom worker.** Conductor ships dedicated system tasks for most common operations — using HTTP, INLINE, or a hand-rolled worker for any of them loses retries, schema validation, observability, and clean parameter swaps. B10 is the LLM-specific instance of this rule (CRITICAL); E4 covers everything else (WARN by default).
+  - Common patterns to flag:
+
+    | Smell | Use built-in |
+    |---|---|
+    | `HTTP` POST to a Kafka REST proxy, or worker that calls a Kafka producer | `KAFKA_PUBLISH` |
+    | Worker that renders HTML/markdown to PDF | `GENERATE_PDF` |
+    | `HTTP` POST to `pinecone.io`, `*.pinecone.io`, `api.pinecone.io`, `*.weaviate.network`, MongoDB Atlas Search, or worker that wraps a vector-DB client | `LLM_INDEX_TEXT` / `LLM_STORE_EMBEDDINGS` / `LLM_SEARCH_INDEX` / `LLM_SEARCH_EMBEDDINGS` / `LLM_GET_EMBEDDINGS` |
+    | Worker that just sleeps / polls a deadline | `WAIT` (duration or `until`) |
+    | Worker that waits on a human approval queue | `HUMAN` |
+    | Worker that triggers another workflow via the REST API | `SUB_WORKFLOW` (synchronous) or `START_WORKFLOW` (fire-and-forget) |
+    | `INLINE` script that just reshapes / filters / aggregates / stringifies JSON | `JSON_JQ_TRANSFORM` (also covered by C2 — INFO) |
+    | Worker that publishes to SQS / internal Conductor event sink | `EVENT` |
+    | Worker that resolves "which task to run" at runtime from input | `DYNAMIC` / `FORK_JOIN_DYNAMIC` |
+    | `HTTP` POST to OpenAI Images / Vertex Imagen, OpenAI TTS, OpenAI Sora / Vertex Veo | `GENERATE_IMAGE` / `GENERATE_AUDIO` / `GENERATE_VIDEO` (B10 CRITICAL — these are LLM-provider hosts) |
+    | `HTTP` GET/POST to an MCP server | `LIST_MCP_TOOLS` / `CALL_MCP_TOOL` |
+
+  - Severity: **WARN** by default; **CRITICAL** when the reinvented task is on the B10 list (LLM/media providers — auth/secret-leak risk is concentrated there).
+  - Fix: replace the HTTP/INLINE/worker task with the matching built-in. If the user objects ("we want flexibility / we want to swap providers"), point out that flexibility is exactly what `llmProvider` on `LLM_*`, `vectorDB` on `LLM_INDEX_TEXT`/`LLM_SEARCH_INDEX`, and `subWorkflowParam` on `SUB_WORKFLOW` already give you.
+  - Legitimate exceptions (downgrade to INFO with one-line reason): (a) the operation truly has no built-in (custom internal API, proprietary system); (b) the user has demonstrated a specific missing feature in the built-in — name it. In case (a), follow SKILL.md Rule 7 to scaffold a worker (ask language, WebFetch the SDK).
 
 ## Report template
 
@@ -112,11 +136,14 @@ Render findings like this:
 ```
 Workflow: order_processing v3 (47 tasks)
 
-CRITICAL (3)
+CRITICAL (4)
   ✗ B1  SIMPLE task `charge_card`: responseTimeoutSeconds=0
         → Set responseTimeoutSeconds >= 30, pollTimeoutSeconds >= 60, timeoutSeconds = 300
   ✗ B5  DO_WHILE `retry_loop`: condition has no iteration cap
         → Add `$.retry_loop['iteration'] < 10 &&` to loopCondition
+  ✗ B10 HTTP task `call_claude` posts to https://api.anthropic.com/v1/messages
+        → Replace with an LLM_CHAT_COMPLETE task (llmProvider: anthropic). Set
+          ANTHROPIC_API_KEY on the server if the integration isn't configured yet.
   ✗ D1  Workflow input `stripeKey` looks like a secret
         → Move to ${workflow.secrets.STRIPE_KEY} or worker env
 

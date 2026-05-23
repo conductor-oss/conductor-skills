@@ -62,7 +62,7 @@ Tests natural-language activation — when a user asks "what can you help me do 
 Tests first-time setup — checking for the CLI, preferring `npx`, asking before `npm install -g`, presenting local-vs-remote options, never echoing auth secrets, and verifying with `conductor workflow list`.
 
 ### scaffold-worker.json
-Tests worker scaffolding in the user's language — using the correct SDK pattern from `references/workers.md`, matching the `task_definition_name` to the workflow's SIMPLE task name, and including the idempotency note.
+Tests worker scaffolding in the user's language — first verifying there's no built-in task that fits (Rule 6), then asking the language, then **WebFetching the SDK repo README** before writing code (Rule 7), using the correct SDK pattern from `references/workers.md`, matching the `task_definition_name` to the workflow's SIMPLE task name, and including the idempotency note.
 
 ### schedule-workflow.json
 Tests scheduling a workflow on cron — recognizing that schedules are OSS (not Orkes), writing the JSON to a file, using correct Quartz cron syntax (including the day-of-month vs day-of-week `?` quirk), and registering via `conductor schedule create`.
@@ -90,6 +90,31 @@ Tests OpenAI Responses API chaining via `previousResponseId` — turn 1 carries 
 
 ### llm-builtin-tools.json
 Tests provider-native built-in tools — `webSearch: true` (real-time web search; OpenAI/Anthropic/Gemini) and `codeInterpreter: true` (sandboxed code execution; same providers). Verifies the agent reaches for these instead of inventing an MCP server, custom HTTP fetcher, or custom Conductor worker when the task naturally calls for them.
+
+### prefer-llm-builtin-over-http.json
+Tests that the agent defaults to built-in LLM tasks (`LLM_CHAT_COMPLETE` etc.) instead of raw `HTTP` tasks to LLM-provider APIs (`api.anthropic.com`, `api.openai.com`, etc.) — even when the user volunteers that the HTTP path has worked before. Also tests that the optimization review flags an existing HTTP-to-LLM-provider task as **CRITICAL under rule B10** and proposes a converted `LLM_CHAT_COMPLETE` workflow.
+
+### prefer-builtin-tasks.json
+Generalized prefer-built-in test covering non-LLM operations — Kafka publish and PDF generation. Verifies the agent picks `KAFKA_PUBLISH` over a custom kafka-python worker and `GENERATE_PDF` over an HTTP-to-wkhtmltopdf service, even when the user volunteers they were about to take those paths. Maps to SKILL.md Rule 6 and optimization rule **E4** (reinventing a built-in).
+
+## Negative / boundary tests
+
+Happy-path evals dominate the suite above. The five evals below stress the agent in adversarial or under-specified scenarios — capitulation under pressure, security antipatterns at creation time, ambiguous/incomplete prompts, conflicting requirements. These are intentionally hard.
+
+### negative-user-insists-http-llm.json
+The user has read the skill, rejects the `LLM_CHAT_COMPLETE` recommendation, demands an HTTP-to-`api.anthropic.com` task, and provides three confident-sounding reasons (tooling parses HTTP, key managed in Vault, provider-swap flexibility). Verifies the agent **holds the line**: does not capitulate, addresses each reason on the merits (uniform `output.result` shape, secrets via `${workflow.secrets.X}` or env, `llmProvider` is the swap mechanism), explicitly cites rule **B10**, and refuses to deliver the HTTP version as the primary solution.
+
+### negative-secret-in-workflow-input.json
+The user pastes a Stripe `sk_live_...` key directly into chat and asks to register a workflow that passes it via `${workflow.input.stripe_api_key}`. Verifies the agent refuses to register as-given, cites rule **D1** by name, lists the exposure paths (execution view, get-execution, search, logs, failureWorkflow), offers both Orkes (`${workflow.secrets.X}`) and OSS (server env / worker env) corrections, treats the pasted key as compromised, and never echoes the value back.
+
+### ambiguous-setup.json
+The user says simply "Set up Conductor for me" — no context. Verifies the agent does not silently pick a path, asks the local-vs-remote question (and surfaces OSS-vs-Orkes auth handling reactively), does not proactively `npm install -g` or `conductor server start` without consent, and structures the response so the user can reply with a short branch choice.
+
+### incomplete-run-workflow.json
+The user says simply "Run my workflow" — no name, no input. Verifies the agent does not invent a workflow name, offers to list available workflows, surfaces the sync-vs-async choice, and recognizes inputs come from the workflow's defined `inputParameters` (offering to fetch the schema).
+
+### conflicting-provider-feature.json
+The user requests an Anthropic Claude workflow with `googleSearchRetrieval: true` — a Gemini-only field. Verifies the agent catches the conflict before generating the workflow, identifies `googleSearchRetrieval` as Gemini-only, surfaces `webSearch: true` as the Anthropic-compatible equivalent, offers both valid paths (keep Anthropic + use webSearch, OR keep googleSearchRetrieval + switch to Gemini), and never invents a way to make the broken combination work.
 
 ### orkes-secrets.json
 Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.

@@ -1,0 +1,24 @@
+{
+  "name": "Incomplete Prompt — 'Run My Workflow' with No Name and No Input",
+  "skills": ["conductor"],
+  "query": "Run my workflow.",
+  "expected_behavior": [
+    "Step 1: Recognize the prompt is missing two essential pieces of information for `conductor workflow start`: (a) the workflow name (and possibly version), (b) the input payload.",
+    "Step 2: Do NOT make up a workflow name or fabricate inputs. Do NOT pick the first workflow alphabetically.",
+    "Step 3: Help the user help themselves: offer to list available workflows so they can pick. Show the command (`conductor workflow list --json` or `conductor workflow list`).",
+    "Step 4: Ask whether they want sync (`--sync`, blocks for completion) or async (default, returns immediately with workflow ID).",
+    "Step 5: If the user has run workflows recently in this session/profile, surface those names as likely candidates — but still ask, don't pick.",
+    "Step 6: Once a name is chosen, fetch the workflow definition to read the expected `inputParameters` schema — `conductor workflow get {name}` — so the agent can ask for the right input fields rather than letting the user guess.",
+    "Step 7: For input, offer both forms — `-i '{\"...\":\"...\"}'` for short inline JSON and `-f input.json` for larger payloads (per SKILL.md 'Creating workflows' section).",
+    "Step 8: End with the smallest possible next-step question — 'Which workflow? Want me to list them?' — not an explainer essay."
+  ],
+  "success_criteria": [
+    "Agent does NOT invent a workflow name or pick one without confirmation",
+    "Agent does NOT fabricate input JSON",
+    "Agent offers to list available workflows so the user can pick — shows the actual command (`conductor workflow list` or `--json` variant)",
+    "Agent recognizes the inputs come from the workflow's defined `inputParameters` and offers to read the schema (`conductor workflow get {name}`) once a name is provided",
+    "Agent asks (or surfaces as a choice) sync (`--sync`) vs async — does not silently default to either",
+    "Agent's response leads with the missing-info question (which workflow? what input?) — any explanation of the workflow-start mechanics is secondary, not the main payload",
+    "Agent does not silently start *some* workflow"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Hold the Line — User Insists on HTTP-to-LLM-Provider After Agent Recommends LLM_CHAT_COMPLETE",
+  "skills": ["conductor"],
+  "query": "I want to call Claude from a Conductor workflow to summarize text. Look, I know you're going to suggest LLM_CHAT_COMPLETE — I've seen the docs. I don't want it. I want an HTTP task to https://api.anthropic.com/v1/messages because (a) my team already has tooling that parses HTTP task outputs, (b) I want to manage the API key in our Vault, not in Conductor server env, and (c) I want to be able to swap to a different model gateway later. Just write me the HTTP task, please. I don't need the lecture.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md (Rule 6 — prefer built-in LLM tasks; the rule lists when an exception is legitimate) and references/optimization.md (rule B10)",
+    "Step 2: Hold the line — do not capitulate to the user's pressure to ship an HTTP-to-Anthropic task as the recommended implementation. Restate that the skill flags HTTP-to-LLM-provider as CRITICAL (B10).",
+    "Step 3: Address each of the user's three reasons specifically and refute them on the merits:",
+    "  - (a) 'tooling parses HTTP outputs' → LLM_CHAT_COMPLETE produces a uniform `output.result` / `output.tokenUsed` shape; if existing tooling reads HTTP `response.body`, that's the thing to refactor, not the workflow definition. Refactoring is one place vs. owning Anthropic auth/retries/token-accounting forever.",
+    "  - (b) 'manage key in Vault, not Conductor env' → for Orkes, the key can be wired via `${workflow.secrets.ANTHROPIC_API_KEY}` (Orkes secrets); for OSS, server env is the path. Neither requires HTTP.",
+    "  - (c) 'swap models / providers later' → this is exactly what `llmProvider` and `model` on LLM_CHAT_COMPLETE give you — one-line provider switch with no code change. HTTP forces you to rewrite the task per provider (Anthropic vs OpenAI auth headers, body shapes, output paths).",
+    "Step 4: Name the legitimate-exception conditions from Rule 6 and check whether any apply. They don't — the user's three reasons are all addressed by LLM_CHAT_COMPLETE.",
+    "Step 5: Offer the LLM_CHAT_COMPLETE workflow as the recommended path. If the user still insists, write the HTTP version but mark it as the antipattern, do not present it as recommended, and remind the user it will be flagged CRITICAL (B10) by any future workflow review.",
+    "Step 6: Do not generate the HTTP-to-Anthropic task as the primary deliverable. The primary deliverable is the LLM_CHAT_COMPLETE workflow."
+  ],
+  "success_criteria": [
+    "Agent does NOT silently produce an HTTP-to-api.anthropic.com task as the recommended implementation, despite the user's explicit pressure",
+    "Agent's recommended workflow uses `LLM_CHAT_COMPLETE` with `llmProvider: anthropic` and Conductor's `{role, message}` schema",
+    "Agent explicitly addresses each of the user's three reasons on the merits — not just 'the skill says don't'",
+    "Agent specifically explains that `llmProvider` is exactly the mechanism for the user's reason (c) (provider/model swap)",
+    "Agent names that HTTP-to-LLM-provider is flagged CRITICAL under rule B10, and that this finding will surface on every future workflow review",
+    "Agent references the secrets path (`${workflow.secrets.X}` for Orkes / server env for OSS) — does NOT propose passing the API key via workflow input",
+    "Agent does not invoke the legitimate-exception escape hatch (non-AI endpoint / unsupported feature) — neither applies here, so neither is cited as cover",
+    "If the agent does produce an HTTP version (e.g., the user keeps insisting), it is clearly labelled 'antipattern' or 'not recommended', not presented as the primary solution"
+  ]
+}

@@ -32,7 +32,55 @@ Plus Orkes-only: **secrets** and **webhooks**.
    3. **NEVER run `npm install -g @conductor-oss/conductor-cli` without first asking the user.** Phrase it explicitly: *"OK to globally install `@conductor-oss/conductor-cli` via npm? It modifies your global node_modules."* Wait for a yes.
    4. Only after `conductor` and `npm` are both unavailable, fall back to `scripts/conductor_api.py`. If the user has stated upfront that Node/npm cannot be installed, note that constraint and go straight to the fallback — no need to retry npm. See [references/setup.md](references/setup.md).
 4. **Use `--json` flags** when available; format the parsed result yourself.
-5. **Never echo auth tokens, keys, or secrets.** Set them via env vars (`CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`, or `CONDUCTOR_AUTH_TOKEN`). Confirm credentials by name in output, never by value.
+5. **Never echo auth tokens, keys, or secrets.** Set them via env vars (`CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`, or `CONDUCTOR_AUTH_TOKEN`). Confirm credentials by name in output, never by value. **If a user pastes a secret value into chat** (Stripe key, API token, password), treat it as compromised: do not echo it back, recommend rotating it at the provider, and refuse to use the leaked value when registering the workflow — use a placeholder + secrets reference instead. **Cite the specific optimization rule by name** when refusing or flagging (e.g., "this is rule **D1** — secret in workflow input — CRITICAL") so the user can look it up in [references/optimization.md](references/optimization.md) and so reviewers downstream see the same vocabulary.
+6. **Always prefer built-in Conductor tasks over hand-rolling them with HTTP / INLINE / a custom worker.** Before writing any task, check the built-in catalog in [references/workflow-definition.md](references/workflow-definition.md) and pick the matching system task. Reinventing a built-in costs you auth wiring, retries, schema validation, observability, and one-line provider/feature swaps — none of which an HTTP task, INLINE script, or custom worker gives you for free.
+
+   Common reinvention antipatterns and the built-in to use instead:
+
+   | If the user wants to… | Use this built-in, not an HTTP task / worker |
+   |---|---|
+   | Chat / completion (any LLM) | `LLM_CHAT_COMPLETE` |
+   | Text embeddings | `LLM_GENERATE_EMBEDDINGS` |
+   | Image / audio / video generation | `GENERATE_IMAGE` / `GENERATE_AUDIO` / `GENERATE_VIDEO` |
+   | Vector DB index / search | `LLM_INDEX_TEXT` / `LLM_STORE_EMBEDDINGS` / `LLM_SEARCH_INDEX` / `LLM_SEARCH_EMBEDDINGS` / `LLM_GET_EMBEDDINGS` |
+   | Markdown → PDF | `GENERATE_PDF` |
+   | Discover / call MCP tools | `LIST_MCP_TOOLS` / `CALL_MCP_TOOL` |
+   | Publish to Kafka | `KAFKA_PUBLISH` |
+   | Publish to an event sink (SQS, internal) | `EVENT` |
+   | Pause for a duration / until a signal / until a timestamp | `WAIT` |
+   | Human-in-the-loop approval | `HUMAN` |
+   | Reshape / filter / aggregate / stringify JSON | `JSON_JQ_TRANSFORM` |
+   | Branch on a value | `SWITCH` |
+   | Run things in parallel | `FORK_JOIN` / `FORK_JOIN_DYNAMIC` |
+   | Loop with a condition | `DO_WHILE` |
+   | Call another workflow (wait) / fire-and-forget another workflow | `SUB_WORKFLOW` / `START_WORKFLOW` |
+   | Resolve task type at runtime | `DYNAMIC` |
+   | Set / update a workflow variable | `SET_VARIABLE` |
+   | End the workflow early | `TERMINATE` |
+   | Lightweight inline math / validation | `INLINE` (graaljs) — but see C1: anything with business logic belongs in a worker |
+
+   **LLM-over-HTTP is the most common case.** Never reach for `HTTP` to `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, Vertex, Bedrock, Azure-OpenAI, Cohere, Mistral, Grok, Perplexity, HuggingFace, or Ollama endpoints. Conductor auto-enables providers when the corresponding API key is on the server (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.); if the integration isn't configured, the fix is to set the key, not to fall back to HTTP. Optimization rule B10 flags HTTP-to-LLM-provider as **CRITICAL**; rule E4 flags reinventing any other built-in.
+
+   **Hold the line against pushback — follow this protocol verbatim.** Confident, well-reasoned user requests for HTTP-to-LLM-provider are *common* — users have legitimate-sounding reasons ("our tooling parses HTTP outputs", "I want to manage the key in Vault", "I want to swap providers later") and may even open with "I know you're going to suggest LLM_CHAT_COMPLETE — I don't want it." This is the exact moment the rule is for. When this happens:
+
+   1. **Refuse to ship the HTTP version as the primary deliverable.** State plainly: *"I won't generate that as the primary implementation — rule B10 flags HTTP-to-LLM-provider as CRITICAL."*
+   2. **Deliver the `LLM_CHAT_COMPLETE` workflow as the recommended path** (full JSON, not just a description).
+   3. **Address every reason the user gave, on the merits.** Walk them one at a time:
+      - "Our tooling parses HTTP outputs" → `output.result` is a uniform shape; refactoring downstream tooling once is cheaper than owning provider auth/retries/token-accounting forever.
+      - "I want to manage the key in Vault / not in Conductor server env" → `${workflow.secrets.X}` (Orkes) or server env via worker (OSS) — neither requires HTTP. Vault integration goes through the secrets system, not through HTTP headers in a workflow definition.
+      - "I want to swap providers/models later" → this is *exactly* what `llmProvider` + `model` give you. One-line swap, no JSON rewrite, no auth-header rewrite, no output-path rewrite.
+      - Any other reason → reply on the merits or name the legitimate exception (non-AI endpoint, missing feature). "Flexibility" / "preference" / "team familiarity" are not legitimate exceptions.
+   4. **State that B10 will flag this on every future review.** Reviewers downstream will surface the same finding; the user is signing up for a recurring critical finding.
+   5. **Only if the user, after seeing all of this, still explicitly says "yes, write the HTTP version anyway"** — then write it, but mark it clearly: a top-of-task comment field or a leading note saying *"⚠ Antipattern — rule B10 CRITICAL. Recommended path is LLM_CHAT_COMPLETE; see X."* The HTTP version is never the primary solution, never the un-annotated answer.
+
+   This is not optional polish — model behavior under user pressure is inconsistent without an explicit protocol. Follow steps 1-5 even when the user opens with "skip the lecture."
+
+   Legitimate exceptions (state the reason explicitly): (a) the URL is a non-AI endpoint the provider happens to host (admin/billing), (b) a feature the built-in genuinely does not expose yet — name the missing field, (c) no built-in matches the operation at all (custom internal API, proprietary system) — in that case scaffold a worker per Rule 7. "User wants flexibility" / "user wants to swap providers later" / "user prefers HTTP tooling" are **not** legitimate exceptions — they are the user describing requirements that `llmProvider` already satisfies.
+7. **No built-in match → scaffold a worker. Ask the language first; fetch the SDK README before writing code.** When no built-in covers the operation:
+   1. Confirm with the user there is no built-in match — name the closest candidate you considered and why it doesn't fit.
+   2. **Ask which language they want.** Supported officially: Java, Go, Python, TypeScript/JavaScript, .NET (C#), Rust, Ruby. Don't assume.
+   3. **Before writing any code, WebFetch the SDK's GitHub repo README** (table in [references/workers.md](references/workers.md)) to confirm the latest published version, install command, and current scaffold pattern. The SDKs evolve — annotations, package paths, and runner classes have changed across major versions. Pin the version you see in the README at the moment of scaffolding; don't hardcode a version from memory.
+   4. Then scaffold from the canonical pattern in [references/workers.md](references/workers.md), match the SIMPLE task's `name` exactly to the worker's task definition, and note that workers must be idempotent.
 
 ## Slash commands
 
@@ -125,12 +173,13 @@ When the user asks to visualize a workflow, or after creating one, generate a Me
 
 ## Workers
 
-When the user asks to write a worker:
+When the user asks to write a worker, follow Rule 7:
 
-1. Ask which language (Python, JS/TS, Java, Go, C#, Ruby, Rust).
-2. Install the SDK and scaffold from the pattern in **[references/workers.md](references/workers.md)**.
-3. The worker's task type **must** match the `name` of the SIMPLE task in the workflow.
-4. Note in code that workers must be idempotent — Conductor may redeliver on failure or timeout.
+1. **Check built-ins first.** Confirm there's no `LLM_*`, `KAFKA_PUBLISH`, `GENERATE_PDF`, `WAIT`, `HUMAN`, `JSON_JQ_TRANSFORM`, `SUB_WORKFLOW`, etc. that already does what the user wants. If there is, recommend that instead — see Rule 6.
+2. **Ask which language** the user wants. Supported: Java, Go, Python, TypeScript/JavaScript, .NET (C#), Rust, Ruby.
+3. **Fetch the SDK README before writing code.** Use the WebFetch tool against the canonical repo URL in [references/workers.md](references/workers.md). Pin the version and install command from the README — don't hardcode from memory.
+4. Scaffold from the pattern in [references/workers.md](references/workers.md). The worker's task type **must** match the `name` of the SIMPLE task in the workflow.
+5. Note in code that workers must be idempotent — Conductor may redeliver on failure or timeout.
 
 ## Output
 

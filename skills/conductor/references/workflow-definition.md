@@ -50,6 +50,8 @@ Worker task polled and executed by external workers.
 
 ### HTTP
 Make HTTP requests. Supports GET, POST, PUT, DELETE, OPTIONS, HEAD with headers, body, and timeouts.
+
+> **Do not use `HTTP` to call an LLM-provider API.** For chat / completions / embeddings / image / TTS / video / vector search, always use the matching built-in task — `LLM_CHAT_COMPLETE`, `LLM_GENERATE_EMBEDDINGS`, `LLM_GENERATE_IMAGE`, `LLM_GENERATE_TTS`, `LLM_GENERATE_VIDEO`, `LLM_SEARCH_INDEX`. These wrap 12+ providers (OpenAI, Anthropic, Vertex, Azure OpenAI, Bedrock, Mistral, Cohere, Grok, Perplexity, HuggingFace, Ollama, Gemini) with one schema and give you `webSearch`/`codeInterpreter` built-in tools, `previousResponseId` chaining, `tools[]` function-calling, `jsonOutput` parsing, `outputSchema`-driven retry, and token accounting — none of which an HTTP task provides. Providers auto-enable when their key is on the server (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). Reviewers flag HTTP-to-LLM-provider tasks as **CRITICAL** under optimization rule B10.
 ```json
 {
   "name": "http_call", "taskReferenceName": "call_api", "type": "HTTP",

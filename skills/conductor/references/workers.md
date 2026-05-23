@@ -2,6 +2,17 @@
 
 Workers execute SIMPLE tasks in a workflow. They poll the Conductor server for tasks, execute business logic, and report results back. Workers are stateless and idempotent.
 
+## Before you scaffold — check the built-ins first
+
+Most "I need a worker for X" requests are actually built-in tasks. Walk SKILL.md Rule 6's table before writing any worker code — if a built-in matches (LLM call, Kafka publish, PDF render, vector index/search, sub-workflow trigger, wait, human approval, JQ transform, fork/join, etc.), use it. A custom worker is the right answer only when no built-in covers the operation (e.g. an internal API, a proprietary system, business logic that doesn't fit a generic task).
+
+## Scaffolding flow (SKILL.md Rule 7)
+
+1. **Confirm no built-in fits.** Name the closest candidate and why it doesn't work.
+2. **Ask the language.** Supported officially: Java, Go, Python, TypeScript/JavaScript, .NET (C#), Rust, Ruby. Don't assume — defaults shift across teams.
+3. **WebFetch the SDK repo README** (table below) before writing code. The SDKs evolve fast — annotations, runner classes, package paths, and entry points have changed across major versions. Pin the version and install command from what the README currently says, not from memory.
+4. **Scaffold from the pattern below**, match the worker's task type to the SIMPLE task's `name` exactly, and include the idempotency note.
+
 ## How workers work
 
 1. Workflow reaches a SIMPLE task
@@ -11,19 +22,23 @@ Workers execute SIMPLE tasks in a workflow. They poll the Conductor server for t
 5. Worker returns result (COMPLETED or FAILED) with `outputData`
 6. Workflow continues to the next task
 
-## SDKs
+## SDKs — canonical repos (WebFetch these before scaffolding)
 
-| Language | Package | Install |
-|----------|---------|---------|
-| Python | `conductor-python` | `pip install conductor-python` |
-| JavaScript/TypeScript | `@io-orkes/conductor-javascript` | `npm install @io-orkes/conductor-javascript` |
-| Java | `org.conductoross:conductor-client` | Maven/Gradle (see below) |
-| Go | `github.com/conductor-sdk/conductor-go` | `go get github.com/conductor-sdk/conductor-go` |
-| C# | [conductor-oss/csharp-sdk](https://github.com/conductor-oss/csharp-sdk) | NuGet |
-| Ruby | [conductor-oss/ruby-sdk](https://github.com/conductor-oss/ruby-sdk) | Gem |
-| Rust | [conductor-oss/rust-sdk](https://github.com/conductor-oss/rust-sdk) | Cargo |
+All official SDKs live under the `conductor-oss` GitHub org with the `*-sdk` naming convention:
+
+| Language | Repo (WebFetch the README) | Package / Install |
+|----------|----------------------------|-------------------|
+| Python | [github.com/conductor-oss/python-sdk](https://github.com/conductor-oss/python-sdk) | PyPI: `conductor-python` — `pip install conductor-python` |
+| JavaScript / TypeScript | [github.com/conductor-oss/javascript-sdk](https://github.com/conductor-oss/javascript-sdk) | npm: `@io-orkes/conductor-javascript` — `npm install @io-orkes/conductor-javascript` |
+| Java | [github.com/conductor-oss/java-sdk](https://github.com/conductor-oss/java-sdk) | Maven: `org.conductoross:conductor-client` (and `conductor-client-spring` for Spring Boot) |
+| Go | [github.com/conductor-oss/go-sdk](https://github.com/conductor-oss/go-sdk) | Go module path: `go get github.com/conductor-sdk/conductor-go` (the source repo is at `conductor-oss/go-sdk` but the Go import path retains the historical `conductor-sdk/conductor-go` name) |
+| .NET (C#) | [github.com/conductor-oss/csharp-sdk](https://github.com/conductor-oss/csharp-sdk) | NuGet: `conductor-csharp` — `dotnet add package conductor-csharp` |
+| Ruby | [github.com/conductor-oss/ruby-sdk](https://github.com/conductor-oss/ruby-sdk) | Gem: `conductor_ruby` (early version — confirm patterns from the repo) |
+| Rust | [github.com/conductor-oss/rust-sdk](https://github.com/conductor-oss/rust-sdk) | crates.io: `conductor-rust` (early version — confirm patterns from the repo) |
 
 All SDKs connect via the same env vars: `CONDUCTOR_SERVER_URL`, `CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`.
+
+> **Why the WebFetch step matters.** The Python/JS/Java/Go patterns below are stable across recent versions but the API surface still drifts (e.g. Python switched runner classes; Java's `@WorkerTask` annotation gained options; Go module path moved org without changing the import). The .NET / Ruby / Rust SDKs are younger and their APIs shift more — fetch the README before scaffolding rather than trust an example below.
 
 ---
 
