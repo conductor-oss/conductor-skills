@@ -75,29 +75,21 @@
                 }
               },
               {
-                "name": "stringify_result",
-                "taskReferenceName": "stringify_result",
+                "name": "build_next_messages",
+                "taskReferenceName": "build_next_messages",
                 "type": "JSON_JQ_TRANSFORM",
                 "inputParameters": {
-                  "data": "${call_weather.output.response.body}",
-                  "queryExpression": ". | tojson"
+                  "current": "${workflow.variables.messages}",
+                  "tool_result": "${call_weather.output.response.body}",
+                  "queryExpression": ".current + [{\"role\": \"assistant\", \"message\": \"Called get_weather.\"}, {\"role\": \"user\", \"message\": (\"Tool result: \" + (.tool_result | tojson))}]"
                 }
               },
               {
-                "name": "append_messages",
-                "taskReferenceName": "append_messages",
+                "name": "update_messages",
+                "taskReferenceName": "update_messages",
                 "type": "SET_VARIABLE",
                 "inputParameters": {
-                  "messages": [
-                    {
-                      "role": "assistant",
-                      "message": "Called get_weather."
-                    },
-                    {
-                      "role": "user",
-                      "message": "Tool result: ${stringify_result.output.result}"
-                    }
-                  ]
+                  "messages": "${build_next_messages.output.result}"
                 }
               }
             ],

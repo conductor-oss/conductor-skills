@@ -24,9 +24,9 @@ Forgetting an entry produces a confusing `undefined`/`null` failure at runtime, 
 
 This is **the single most important rule** for every JS-evaluated task. If a `$.foo` is in your script and `foo` is not in `inputParameters`, the task will fail.
 
-## Rule 1: prefer `evaluatorType: "graaljs"` everywhere
+## Rule 1: prefer `evaluatorType: "graaljs"` — and set it explicitly on DO_WHILE
 
-Older docs and examples show `evaluatorType: "javascript"`. On recent Conductor clusters this binding may not be wired up — using it produces evaluation errors at runtime. Use `"graaljs"` for **INLINE**, **DO_WHILE** (at the top level of the DO_WHILE task), and **SWITCH** with a JavaScript expression.
+For **INLINE** tasks, the platform aliases `"javascript"` and `"graaljs"` to the same GraalJS engine (per `Inline.java`); either string works. For **DO_WHILE** `loopCondition` evaluation, that aliasing has been reported to fail on some cluster versions — set `evaluatorType: "graaljs"` explicitly at the top level of the DO_WHILE task. The older docs that omit `evaluatorType` on DO_WHILE are the most common source of "loop condition fails at runtime."
 
 ```json
 {
@@ -38,7 +38,7 @@ Older docs and examples show `evaluatorType: "javascript"`. On recent Conductor 
 }
 ```
 
-The DO_WHILE example in older docs omits `evaluatorType`. Add it.
+Same goes for **SWITCH** with a JavaScript expression — explicit `"graaljs"` is the safer default.
 
 ## Rule 2: task outputs are already parsed objects — do not `String()` then `JSON.parse`
 

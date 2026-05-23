@@ -41,10 +41,12 @@ Note the `=` separators — that is not JSON. Sending this into a `message` fiel
   "type": "JSON_JQ_TRANSFORM",
   "inputParameters": {
     "data": "${call_tool.output.content}",
-    "queryExpression": ". | tojson"
+    "queryExpression": ".data | tojson"
   }
 }
 ```
+
+> **JQ input shape.** Conductor's `JSON_JQ_TRANSFORM` passes the entire resolved `inputParameters` map (minus `queryExpression`) to JQ as the input value. To reference a single field, use `.data`, `.foo`, etc. — not bare `.`. Writing `". | tojson"` stringifies the whole wrapper (`{"data": ...}`), which is rarely what you want.
 
 Then interpolate `${stringify_tool_result.output.result}` into the string field.
 

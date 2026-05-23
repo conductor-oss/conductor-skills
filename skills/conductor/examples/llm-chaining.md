@@ -2,7 +2,7 @@
 
 OpenAI's Responses API stores the full conversation server-side, keyed by a `responseId`. By passing `previousResponseId` on the next `LLM_CHAT_COMPLETE` task, you reference the prior turn — and the new task's `messages` array only needs the **new** user message.
 
-For long agent loops or multi-turn dialogues this saves a substantial fraction of tokens (the system prompt + every prior turn no longer ride along on every call) and reduces latency.
+For long agent loops or multi-turn dialogues with a substantial system prompt or growing tool-call history, this saves a meaningful fraction of tokens (the system prompt + every prior turn no longer ride along on every call) and trims latency. For short two- or three-turn chats, the savings are marginal — choose the pattern that matches your portability needs first.
 
 > **OpenAI and Azure OpenAI only.** Other providers ignore `previousResponseId`. For portable chains, keep accumulating `messages` (see [ai-agent-loop.md](ai-agent-loop.md)).
 

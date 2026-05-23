@@ -9,17 +9,17 @@ Use this when the answer requires multiple tool calls in sequence — e.g., "loo
 ## Pipeline
 
 ```
-init_messages (SET_VARIABLE)                     ← seed system + user messages
+init_messages (SET_VARIABLE)                              ← seed system + user messages
 agent_loop (DO_WHILE, graaljs, IIFE, iter cap):
-    think (LLM_CHAT_COMPLETE, jsonOutput: true)  ← emits { action, ... }
+    think (LLM_CHAT_COMPLETE, jsonOutput: true)           ← emits { action, ... }
     route (SWITCH on action):
         case "call_tool":
-            call_tool (HTTP, optional: true)              ← external call
-            stringify (JSON_JQ_TRANSFORM, tojson)         ← obj → JSON string
-            append_messages (SET_VARIABLE)                ← grow chat history
+            call_tool (HTTP, optional: true)                          ← external call
+            build_next_messages (JSON_JQ_TRANSFORM, .current + [...])  ← append to chat history
+            update_messages (SET_VARIABLE)                            ← write merged array back
         case "answer":
             finalize (SET_VARIABLE final_response)
-        defaultCase: []                                   ← empty — see below
+        defaultCase: []                                               ← empty — see below
 until think says action == "answer", or iter cap
 ```
 
@@ -94,23 +94,21 @@ See [workflows/ai-agent-loop.json](workflows/ai-agent-loop.json) for the full fi
                 }
               },
               {
-                "name": "stringify_result",
-                "taskReferenceName": "stringify_result",
+                "name": "build_next_messages",
+                "taskReferenceName": "build_next_messages",
                 "type": "JSON_JQ_TRANSFORM",
                 "inputParameters": {
-                  "data": "${call_weather.output.response.body}",
-                  "queryExpression": ". | tojson"
+                  "current": "${workflow.variables.messages}",
+                  "tool_result": "${call_weather.output.response.body}",
+                  "queryExpression": ".current + [{\"role\": \"assistant\", \"message\": \"Called get_weather.\"}, {\"role\": \"user\", \"message\": (\"Tool result: \" + (.tool_result | tojson))}]"
                 }
               },
               {
-                "name": "append_messages",
-                "taskReferenceName": "append_messages",
+                "name": "update_messages",
+                "taskReferenceName": "update_messages",
                 "type": "SET_VARIABLE",
                 "inputParameters": {
-                  "messages": [
-                    {"role": "assistant", "message": "Called get_weather."},
-                    {"role": "user", "message": "Tool result: ${stringify_result.output.result}"}
-                  ]
+                  "messages": "${build_next_messages.output.result}"
                 }
               }
             ],
@@ -189,21 +187,27 @@ Without this the `loopCondition` fails at runtime on recent clusters with `"java
 
 Leave `defaultCase` empty unless you have a meaningful no-op handler. A `defaultCase` that calls `finalize` will fire whenever the LLM emits an unrecognized action, **overwriting `final_response` with garbage**. With an empty defaultCase, junk replies are silently skipped and the loop tries again next iteration.
 
-### 6. `JSON_JQ_TRANSFORM` with `tojson` to stringify tool output
+### 6. `JSON_JQ_TRANSFORM` to stringify AND accumulate in one step
 
 ```json
 {
   "type": "JSON_JQ_TRANSFORM",
   "inputParameters": {
-    "data": "${call_weather.output.response.body}",
-    "queryExpression": ". | tojson"
+    "current": "${workflow.variables.messages}",
+    "tool_result": "${call_weather.output.response.body}",
+    "queryExpression": ".current + [{\"role\": \"assistant\", \"message\": \"Called get_weather.\"}, {\"role\": \"user\", \"message\": (\"Tool result: \" + (.tool_result | tojson))}]"
   }
 }
 ```
 
-The HTTP response body is a parsed Java-Map-backed object. We need a **JSON string** to embed in the next chat message. The obvious "do this in INLINE" path fails — `JSON.stringify` on a Java-Map-backed proxy returns `"{}"`, and `String(...)` returns `{k=v}` (Java's `Map.toString`). JQ operates on JSON natively and bypasses the entire JS/Java-proxy stack.
+Two things happen in this single JQ task:
 
-This is the **single highest-impact** rule in this example. See [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) Rule 3.
+1. **The structured HTTP body is stringified** via `(.tool_result | tojson)`. This is essential — embedding the raw Java-Map-backed object in a `message` field would Java-`toString` it into `{key=value}` garbage. The obvious INLINE alternative also fails: `JSON.stringify` on a Java-Map-backed proxy returns `"{}"`, `String(...)` returns `{k=v}` (Java's `Map.toString`). JQ operates on JSON natively and bypasses the entire JS/Java-proxy stack.
+2. **The new messages are concatenated onto the existing chat history** via `.current + [...]`. This preserves the system prompt and prior turns. The naive `SET_VARIABLE` that writes a fresh two-entry array **replaces** the variable instead of appending — every iteration the LLM would lose its history and produce nonsense.
+
+The output (`${build_next_messages.output.result}`) is the full new messages array; `update_messages` (SET_VARIABLE) writes it back to `workflow.variables.messages`. Next iteration's `think` sees the complete grown history.
+
+JQ input semantics: the entire `inputParameters` map (minus `queryExpression`) is the JQ input — reference fields as `.current`, `.tool_result`. See [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) Rule 3 and [../references/template-resolution.md](../references/template-resolution.md) Pitfall 2.
 
 ### 7. HTTP tool task: `optional: true` + retry on the task def
 

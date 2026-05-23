@@ -111,8 +111,8 @@ These compose with `tools: [...]` — a single chat task can browse the web AND 
 
 | Field | What it does | Providers |
 |-------|--------------|-----------|
-| `thinkingTokenLimit` | budget (in tokens) for hidden reasoning BEFORE the answer is written | Anthropic (Claude 3.7+ / Sonnet 4), Gemini 2.5+ |
-| `reasoningEffort` | `low` / `medium` / `high` | OpenAI o-series / gpt-5+ (Responses API) |
+| `thinkingTokenLimit` | budget (in tokens) for hidden reasoning BEFORE the answer is written | Anthropic, Gemini (thinking-capable models only) |
+| `reasoningEffort` | `low` / `medium` / `high` | OpenAI (Responses API) |
 | `reasoningSummary` | surface the chain-of-thought in `output.reasoning` and `output.reasoningTokens` | OpenAI (`auto`/`concise`/`detailed`), Anthropic, Gemini (any non-blank value) |
 
 Use `thinkingTokenLimit` or `reasoningEffort` when the problem benefits from deliberation — multi-step planning, math, complex code. The token cost is real (you pay for thinking tokens) but the answer quality jumps. Add `reasoningSummary` if you want to display or audit the reasoning text.
@@ -133,7 +133,7 @@ Use `thinkingTokenLimit` or `reasoningEffort` when the problem benefits from del
 
 ## Chaining turns without resending history (OpenAI / Azure)
 
-OpenAI's Responses API stores the full conversation server-side. Pass `previousResponseId` to reference the prior turn — your `messages` array only needs the **new** user turn. This dramatically reduces token cost and latency on long chains.
+OpenAI's Responses API stores the full conversation server-side. Pass `previousResponseId` to reference the prior turn — your `messages` array only needs the **new** user turn. For long chains or chats with a substantial system prompt, the per-turn token saving is noticeable; for short chats, it's marginal.
 
 See [llm-chaining.md](llm-chaining.md) for the full pattern. Caveats: **OpenAI and Azure OpenAI only** (silently ignored on other providers), and server-side state expires per OpenAI's retention policy.
 
