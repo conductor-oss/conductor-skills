@@ -1,0 +1,27 @@
+{
+  "name": "OpenAI Multi-Turn Chaining via previousResponseId",
+  "skills": ["conductor"],
+  "query": "Build me a 3-turn OpenAI conversation workflow where each turn is a separate LLM_CHAT_COMPLETE task. I don't want to resend the message history on every turn — make it efficient. Walk me through what's happening and any provider lock-in I should be aware of.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (LLM_CHAT_COMPLETE), examples/llm-chaining.md, and examples/llm-chat.md",
+    "Step 2: Recognize that this is the OpenAI Responses API pattern — use `previousResponseId` on turns 2 and 3 to chain without resending history",
+    "Step 3: Turn 1 includes the full system prompt + first user message in `messages` and does NOT have `previousResponseId`",
+    "Step 4: Turn 2's `messages` contains only the new user message; `previousResponseId: ${turn1.output.responseId}` references turn 1",
+    "Step 5: Turn 3's `messages` contains only the new user message; `previousResponseId: ${turn2.output.responseId}` references turn 2 (NOT turn 1 — each turn references the immediately preceding one)",
+    "Step 6: Use `{role, message}` schema (NOT `{role, content}`) on every message",
+    "Step 7: Explicitly warn about provider lock-in — previousResponseId is OpenAI/Azure-only, other providers silently ignore it; mid-chain provider switches break the chain",
+    "Step 8: Mention the responseId retention bound (~30 days per OpenAI's documented policy) and recommend accumulated-messages pattern for long-lived workflows",
+    "Step 9: Write the workflow JSON to a file before registration"
+  ],
+  "success_criteria": [
+    "Turn 1 contains the full initial system + user messages and does NOT set `previousResponseId`",
+    "Turns 2 and 3 each contain ONLY the new user message in `messages` — NOT the accumulated history",
+    "Turn 2 references `${turn1.output.responseId}` (or equivalent) as `previousResponseId`",
+    "Turn 3 references `${turn2.output.responseId}` (the immediately preceding turn) as `previousResponseId` — NOT turn1's responseId",
+    "Every `messages` entry uses Conductor's `{role, message}` schema — NOT `{role, content}`",
+    "Agent explicitly states that `previousResponseId` is OpenAI/Azure-only (Responses API) and other providers ignore it",
+    "Agent mentions at least one of: the ~30-day responseId retention window, the no-provider-switch constraint, or the trade-off vs accumulated messages for portability",
+    "Both turns use the SAME `llmProvider` (`openai` or `azureopenai`) — agent does not mix providers mid-chain",
+    "Workflow JSON is written to a file before registration"
+  ]
+}

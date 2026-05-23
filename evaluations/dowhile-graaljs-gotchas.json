@@ -1,0 +1,26 @@
+{
+  "name": "DO_WHILE GraalJS Gotchas — IIFE, evaluatorType, scope rules",
+  "skills": ["conductor"],
+  "query": "I need a DO_WHILE loop that runs until either iteration hits max_retries (from workflow input) OR the previous attempt's `success` field is true. The body is a single HTTP call. Show me the JSON.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (DO_WHILE), references/graaljs-gotchas.md, and references/template-resolution.md",
+    "Step 2: The DO_WHILE task has `evaluatorType: \"graaljs\"` at the top level (alongside `loopCondition`), NOT just on inner tasks",
+    "Step 3: `loopCondition` is written as an IIFE that returns a clean boolean: `(function(){ return ...; })();`. NOT `if (X) { true; } else { false; }`, NOT a named function, NOT `if (X) return true; return false;`",
+    "Step 4: The condition references both the iteration counter (via the self-reference pattern: `$.<loopRef>['iteration']`) AND the previous attempt's success field (e.g. `$.<loopRef>[$.<loopRef>['iteration']].<bodyRef>.output.response.body.success`)",
+    "Step 5: The DO_WHILE's `inputParameters` declares: (a) the loop task's own ref pointing at `${<loopRef>.output}` (self-reference), (b) `max_retries: ${workflow.input.max_retries}` — workflow inputs are NOT in scope inside the script, they must be plumbed in",
+    "Step 6: Agent explicitly notes that `$.workflow.input.*` and `$.workflow.variables.*` are NOT accessible inside loopCondition and would throw TypeError",
+    "Step 7: Agent notes that every `$.x` referenced in the loopCondition must appear as a key in `inputParameters`",
+    "Step 8: Agent notes that `${<loopRef>.output.iteration}` is the correct access path from outside the loop (NOT `${<loopRef>.iteration}` — iteration lives inside outputData)",
+    "Step 9: Write the workflow JSON to a file"
+  ],
+  "success_criteria": [
+    "DO_WHILE task includes `evaluatorType: \"graaljs\"` at the top level",
+    "`loopCondition` is an IIFE form: `(function(){ return ...; })();` — not the `if (...) { true; } else { false; }` statement form, not a named-function form, not `if (...) return true; return false;`",
+    "`loopCondition` accesses workflow input via a declared key (e.g. `$.max_retries`), NOT via `$.workflow.input.max_retries`",
+    "DO_WHILE's `inputParameters` includes the self-reference (`<loopRef>: ${<loopRef>.output}`) AND the workflow input alias (`max_retries: ${workflow.input.max_retries}`)",
+    "Agent explicitly states or otherwise demonstrates that `$.workflow.*` is NOT in scope inside JS-evaluated tasks",
+    "Agent explicitly states the `$.varName` rule: every $.x in the script needs an inputParameters key with that name",
+    "outputParameters or downstream task references to the iteration counter use `${<loopRef>.output.iteration}` (with `.output`) — not `${<loopRef>.iteration}`",
+    "Final workflow JSON is written to a file (not inline) before registration"
+  ]
+}

@@ -61,6 +61,11 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
   - `rateLimitPerFrequency` + `rateLimitFrequencyInSeconds` — token-bucket rate limit. Use for tasks calling external APIs with quotas (Stripe, Slack, third-party LLMs). Without this, a spike in workflow starts blows your quota.
   - `concurrentExecLimit` — caps simultaneous executions of this task across all workflows. Use for resource-bound tasks: heavy DB writes, GPU-bound model calls, memory-hungry transforms.
   - Severity: WARN on tasks calling external rate-limited APIs without `rateLimitPerFrequency`. WARN on resource-bound tasks without `concurrentExecLimit`.
+- **B8. `jsonOutput: true` without "JSON" in the prompt.** Conductor's `@Documented` on `jsonOutput` notes: "Depending on the model you MUST include JSON word as part of the prompt." Anthropic Claude in particular silently degrades to prose when this cue is missing.
+  - Severity: WARN when an `LLM_CHAT_COMPLETE` sets `jsonOutput: true` and neither the system nor user messages contain the substring `JSON` (case-insensitive). Also recommend pairing with `outputSchema` for stricter contracts (Conductor retries on schema-validation failure).
+- **B9. `previousResponseId` provider lock-in / chain breakage.** The OpenAI Responses-API chaining field is silently ignored on other providers, and a mid-chain provider switch breaks the chain.
+  - Severity: WARN when any task uses `previousResponseId` and either (a) `llmProvider` is not `openai`/`azureopenai`, or (b) a chained task's provider differs from the task whose `responseId` it references.
+  - For long-running workflows where chain lifetime exceeds OpenAI's ~30-day `responseId` retention, recommend the accumulated-messages fallback ([../examples/ai-agent-loop.md](../examples/ai-agent-loop.md)) and downgrade to INFO when an explicit fallback path is present.
 
 ### C. Performance & complexity
 
@@ -88,6 +93,8 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
   - Severity: WARN.
 - **D3. `outputParameters` is a public API.** Other workflows, services, and dashboards depend on the workflow's output shape. Treat changes the way you'd treat function-signature changes: additions are usually safe, removals and renames are breaking. Bump `version` on breaking output changes; never reshape outputs in place.
   - Severity: WARN if a workflow with active consumers had outputs renamed or removed in place.
+- **D4. LLM outputs that route control flow need defensive handling.** When a SWITCH branches on `${chat.output.result.action}` (or any LLM-emitted field), an unparseable or unexpected emission can silently flow into the wrong branch.
+  - Severity: WARN when a SWITCH whose `expression` reads `output.result.<x>` from an `LLM_CHAT_COMPLETE` task has a non-empty `defaultCase` that performs business logic (writes, finalize, etc.). Recommend either an empty `defaultCase: []` or a sentinel/no-op handler. See [template-resolution.md](template-resolution.md) Pitfall 1.
 
 ### E. Wrong tool
 

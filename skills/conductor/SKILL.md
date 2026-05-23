@@ -18,7 +18,7 @@ When asked what you can help with, enumerate these nine areas — every one is c
 6. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
 7. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
 8. **Visualize** — render any workflow as a Mermaid flowchart + UI link
-9. **Review & optimize** — walk the 19-rule checklist in [references/optimization.md](references/optimization.md) and report CRITICAL / WARN / INFO
+9. **Review & optimize** — walk the 22-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas) and report CRITICAL / WARN / INFO
 
 Plus Orkes-only: **secrets** and **webhooks**.
 
@@ -63,8 +63,10 @@ Full verb-to-CLI lookup is in **[references/cli-index.md](references/cli-index.m
 ## Creating workflows
 
 1. Consult **[references/workflow-definition.md](references/workflow-definition.md)** for task types, the `${...}` expression syntax, and the `$.var` rule for JS-evaluated tasks (INLINE, DO_WHILE, SWITCH/javascript).
-2. Write the JSON to a file with the Write tool, then `conductor workflow create file.json`.
-3. **Run the worker gate** (Rule 1).
+2. For any workflow using INLINE / DO_WHILE / SWITCH-javascript, also skim **[references/graaljs-gotchas.md](references/graaljs-gotchas.md)** — Java-Map-backed proxies, `$.workflow.*` scope, and the IIFE `loopCondition` convention catch most first-time authors.
+3. For workflows that interpolate task output into string fields (LLM messages, HTTP bodies), see **[references/template-resolution.md](references/template-resolution.md)** for the missing-field-returns-parent and object-to-string-toString pitfalls.
+4. Write the JSON to a file with the Write tool, then `conductor workflow create file.json`.
+5. **Run the worker gate** (Rule 1).
 
 For inputs to workflow start: use `-i '{"...":"..."}'` for small inline JSON, `-f input.json` for larger payloads.
 
@@ -85,7 +87,8 @@ Design patterns:
 
 AI / LLM patterns:
 
-- [Minimum LLM workflow](examples/llm-chat.md) — single `LLM_CHAT_COMPLETE` task.
+- [Minimum LLM workflow](examples/llm-chat.md) — single `LLM_CHAT_COMPLETE` task; also covers built-in tools (`webSearch`, `codeInterpreter`, `fileSearchVectorStoreIds`), extended thinking/reasoning, `jsonOutput`/`outputSchema`.
+- [Multi-turn chaining via `previousResponseId`](examples/llm-chaining.md) — OpenAI/Azure Responses API: chain turns without resending message history.
 - [AI agent with MCP tools](examples/ai-agent-mcp.md) — `LIST_MCP_TOOLS` → plan → `CALL_MCP_TOOL` → summarize.
 - [Autonomous agent loop (ReAct)](examples/ai-agent-loop.md) — `DO_WHILE` think/act/observe until done.
 - [RAG — retrieval-augmented Q&A](examples/llm-rag.md) — `LLM_SEARCH_INDEX` then grounded `LLM_CHAT_COMPLETE`.
@@ -102,6 +105,7 @@ Raw definitions in [examples/workflows/](examples/workflows/) — pass any direc
 | `llm-chat.json` | Single LLM_CHAT_COMPLETE — summarize text |
 | `ai-agent-mcp.json` | 4-task AI agent: list tools → plan → call → summarize |
 | `ai-agent-loop.json` | DO_WHILE agent loop, ReAct pattern |
+| `llm-chaining.json` | OpenAI multi-turn chain via `previousResponseId` (no message-history resend) |
 | `llm-rag.json` | RAG: vector search + grounded LLM answer |
 
 ## Reviewing workflows
@@ -142,6 +146,8 @@ When the user asks to write a worker:
 | [cli-index.md](references/cli-index.md) | Verb → CLI command lookup |
 | [fallback-cli.md](references/fallback-cli.md) | Python fallback equivalents (subset of CLI) |
 | [workflow-definition.md](references/workflow-definition.md) | JSON schema, all task types, expression syntax |
+| [graaljs-gotchas.md](references/graaljs-gotchas.md) | JS-evaluated task pitfalls (INLINE, DO_WHILE, SWITCH/js) — Java-Map proxies, `$.varName` rule, scope, IIFE convention |
+| [template-resolution.md](references/template-resolution.md) | `${...}` resolution pitfalls — missing-field-returns-parent, object→string `toString`, iteration paths |
 | [workers.md](references/workers.md) | SDK examples in 7 languages |
 | [api-reference.md](references/api-reference.md) | REST endpoints |
 | [visualization.md](references/visualization.md) | Mermaid mappings + UI link |

@@ -1,0 +1,22 @@
+{
+  "name": "Stringify Structured Task Output For Embedding in a Prompt",
+  "skills": ["conductor"],
+  "query": "I have an HTTP task that returns a JSON object. I need to embed that whole object as a string inside the next LLM_CHAT_COMPLETE's `message` field so the model can reason over it. What's the right way to do this in Conductor?",
+  "expected_behavior": [
+    "Step 1: Consult references/graaljs-gotchas.md and references/template-resolution.md",
+    "Step 2: Recognize that interpolating `${http.output.response.body}` directly into a string field would invoke Java's Map.toString() and produce `{k=v, k2=v2}` garbage, NOT JSON",
+    "Step 3: Recognize that doing this in an INLINE task with `String($.body)` or `JSON.stringify($.body)` ALSO fails — Conductor task outputs are Java-Map-backed JS proxies, so `String()` calls Java toString (the same `{k=v}` issue), `JSON.stringify` returns `\"{}\"`, and `Object.keys` returns `[]`",
+    "Step 4: Recommend a JSON_JQ_TRANSFORM task between the HTTP task and the LLM task, with `queryExpression` that pipes the body field through `tojson` (e.g. `.data | tojson` when the input is wired as `data`). Note that Conductor's JQ task passes the full `inputParameters` map as the JQ input — `.data | tojson` is the correct reference; `. | tojson` would wrap in a `{data: ...}` envelope.",
+    "Step 5: The JSON_JQ_TRANSFORM `inputParameters` includes `data: ${http.output.response.body}`",
+    "Step 6: Downstream LLM task interpolates the stringified JSON via `${stringify.output.result}` into the message field, using Conductor's `{role, message}` schema",
+    "Step 7: Write the workflow JSON to a file"
+  ],
+  "success_criteria": [
+    "Solution uses JSON_JQ_TRANSFORM with a `tojson` pipe to serialize the structured object — NOT INLINE",
+    "Agent explicitly rejects or warns against doing this in INLINE (citing the Java-Map-backed proxy behavior: String() → toString, JSON.stringify → \"{}\", Object.keys → [])",
+    "Agent explicitly rejects or warns against interpolating the raw object into the string field (since that also yields Java Map.toString `{k=v}` output, not JSON)",
+    "JSON_JQ_TRANSFORM `inputParameters` includes a `data` key pointing at the HTTP task output via `${...}`",
+    "Downstream LLM_CHAT_COMPLETE uses Conductor's `{role, message}` schema (NOT `{role, content}`) and interpolates `${<jqRef>.output.result}` into the message field",
+    "Workflow JSON is written to a file before registration"
+  ]
+}

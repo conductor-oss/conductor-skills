@@ -101,50 +101,70 @@ Make HTTP requests. Supports GET, POST, PUT, DELETE, OPTIONS, HEAD with headers,
 To reference in subsequent tasks: `${call_api.output.response.body.fieldName}`, `${call_api.output.response.statusCode}`.
 
 ### JSON_JQ_TRANSFORM
-Transform data using jq expressions. Powerful for reshaping, filtering, and aggregating JSON.
+Transform data using jq expressions. Powerful for reshaping, filtering, aggregating, and stringifying JSON.
+
 ```json
 {
   "name": "transform", "taskReferenceName": "jq_ref", "type": "JSON_JQ_TRANSFORM",
   "inputParameters": {
     "data": "${workflow.input.items}",
-    "queryExpression": "[.[] | {name: .name, id: .id}]"
+    "queryExpression": "[.data[] | {name: .name, id: .id}]"
   }
 }
 ```
-Common jq patterns:
-- Filter: `[.[] | select(.status == "active")]`
-- Map: `[.[] | {id: .id, label: .name}]`
-- Aggregate: `{total: ([.[].amount] | add), count: length}`
-- Flatten: `[.[][] | .field]`
 
-> **Rule for all JavaScript-evaluated tasks (INLINE, DO_WHILE, SWITCH with `javascript` evaluator):**
-> Every variable referenced as `$.varName` inside a script or condition **must** be declared as an `inputParameters` key on that task. The `$` object in the script is the task's resolved `inputParameters` map.
+**JQ input shape.** The entire resolved `inputParameters` map (minus `queryExpression`) is the JQ input. Reference fields by name — `.data`, `.foo`, etc. A bare `.` refers to the whole `{data: ..., foo: ...}` wrapper, **not** the value of `data`. Multiple input fields are allowed; you can pass several values and combine them inside the query.
+
+The task output is `output.result` (the first JQ result) and `output.resultList` (the full list, when JQ yields multiple).
+
+Common jq patterns (assume `data` is an array of objects):
+- Filter: `[.data[] | select(.status == "active")]`
+- Map / project: `[.data[] | {id: .id, label: .name}]`
+- Aggregate: `{total: ([.data[].amount] | add), count: (.data | length)}`
+- Flatten: `[.data[][] | .field]`
+- Stringify (object → JSON string): `.data | tojson` — essential when serializing structured task output into an LLM `message` or other string field.
+- Concatenate arrays: `.current + .additions` (with two input fields).
+
+> **The `$.varName` rule — applies to every JavaScript-evaluated task (INLINE, DO_WHILE `loopCondition`, SWITCH with `javascript`/`graaljs` evaluator):**
+> Every variable referenced as `$.varName` inside a script or condition **must** be declared as an `inputParameters` key on that task. The `$` object in the script is the task's resolved `inputParameters` map (excluding `evaluatorType` and `expression`).
+>
+> `$.workflow.input.*` and `$.workflow.variables.*` are **NOT** in scope inside a script — they throw `TypeError: Cannot read property "input"/"variables" from undefined`. To use a workflow input or variable in a script, plumb it through `inputParameters`.
+>
+> For INLINE the platform aliases `"javascript"` and `"graaljs"` to the same engine, but DO_WHILE's `loopCondition` evaluator has been reported to fail without an explicit `"graaljs"` on some cluster versions. Set `evaluatorType: "graaljs"` explicitly — especially on DO_WHILE. See [graaljs-gotchas.md](graaljs-gotchas.md) for full rules.
 
 ### INLINE
 Execute lightweight scripts (JavaScript via GraalVM).
+
+**The `$.varName` rule applies — every `$.x` in the script must be declared as an `inputParameters` key.**
+
 ```json
 {
   "name": "inline_task", "taskReferenceName": "compute", "type": "INLINE",
   "inputParameters": {
     "evaluatorType": "graaljs",
-    "expression": "function e() { return $.value * 2; } e();",
+    "expression": "(function(){ return $.value * 2; })();",
     "value": "${workflow.input.number}"
   }
 }
 ```
-**Important**: Every variable referenced as `$.varName` inside the script **must** be declared as an `inputParameters` key. For example, if the script uses `$.value` and `$.name`, both `value` and `name` must be present in `inputParameters`:
+
+Example with multiple inputs — every `$.x` referenced in the script needs a matching key:
 ```json
 {
   "name": "inline_task", "taskReferenceName": "compute", "type": "INLINE",
   "inputParameters": {
     "evaluatorType": "graaljs",
-    "expression": "function e() { return $.name + ' is ' + $.age; } e();",
+    "expression": "(function(){ return $.name + ' is ' + $.age; })();",
     "name": "${workflow.input.name}",
     "age": "${workflow.input.age}"
   }
 }
 ```
-The `$` object inside the script is the task's resolved `inputParameters` map (excluding `evaluatorType` and `expression`).
+
+**Important gotchas (see [graaljs-gotchas.md](graaljs-gotchas.md) for full rules):**
+- Task outputs (HTTP, LLM, MCP) are already parsed objects. Don't `String()` then `JSON.parse` — `String()` on a Java-Map-backed proxy yields `{k=v}`, not JSON.
+- `JSON.stringify` and `Object.keys` return `"{}"` / `[]` on those proxies. To serialize structured output into a string field, use `JSON_JQ_TRANSFORM` with `tojson`, not INLINE.
+- Avoid `input` and `messages` as INLINE input-parameter names — observed obscure failures; rename to `inputMessages` etc.
 
 ### SWITCH
 Conditional branching based on a value or JavaScript expression.
@@ -161,11 +181,11 @@ Conditional branching based on a value or JavaScript expression.
   "defaultCase": [{"...default task...": ""}]
 }
 ```
-When using `evaluatorType: "javascript"`, the same `$.varName` rule applies — all variables referenced in the expression must be declared in `inputParameters`:
+**When using JavaScript evaluation, the `$.varName` rule applies** — every variable referenced in the expression must be declared in `inputParameters`. Prefer `evaluatorType: "graaljs"`:
 ```json
 {
   "name": "switch_task", "taskReferenceName": "js_route", "type": "SWITCH",
-  "evaluatorType": "javascript",
+  "evaluatorType": "graaljs",
   "expression": "$.priority > 5 ? 'high' : 'low'",
   "inputParameters": {"priority": "${workflow.input.priority}"},
   "decisionCases": {
@@ -175,6 +195,8 @@ When using `evaluatorType: "javascript"`, the same `$.varName` rule applies — 
   "defaultCase": [{"...default task...": ""}]
 }
 ```
+
+**Keep `defaultCase` empty (or a single `NOOP`) unless you have a meaningful no-op handler** — a `defaultCase` that performs a finalize/cleanup step will fire on every unrecognized value and overwrite downstream state with garbage. See [template-resolution.md](template-resolution.md) Pitfall 1.
 
 ### FORK_JOIN / JOIN
 Execute tasks in parallel. Always pair FORK_JOIN with a JOIN task.
@@ -186,11 +208,17 @@ Execute tasks in parallel. Always pair FORK_JOIN with a JOIN task.
 ```
 
 ### DO_WHILE
-Loop until a condition is met.
+Loop until a JavaScript condition returns false.
+
+**The `$.varName` rule applies — every variable in `loopCondition` must be declared in `inputParameters`. Always set `evaluatorType: "graaljs"` at the top level of the DO_WHILE task.**
+
 ```json
 {
-  "name": "loop", "taskReferenceName": "loop_ref", "type": "DO_WHILE",
-  "loopCondition": "if ($.loop_ref['iteration'] < $.value) true; else false;",
+  "name": "loop",
+  "taskReferenceName": "loop_ref",
+  "type": "DO_WHILE",
+  "evaluatorType": "graaljs",
+  "loopCondition": "(function(){ return $.loop_ref['iteration'] < $.value; })();",
   "loopOver": [{"...task...": ""}],
   "inputParameters": {
     "value": "${workflow.input.count}",
@@ -198,9 +226,27 @@ Loop until a condition is met.
   }
 }
 ```
-**Important**: The `loopCondition` is evaluated as JavaScript. The same `$.varName` rule applies — every variable referenced as `$.varName` must be declared in `inputParameters`. Here, `$.loop_ref['iteration']` requires `loop_ref` to be declared.
 
-The mapping `"loop_ref": "${loop_ref.output}"` looks like a typo — referencing a task before it has output — but **it is the canonical pattern**, not a mistake. Conductor resolves the reference lazily on each iteration, exposing the running `iteration` counter (and prior iterations' task outputs) inside the script. See [examples/do-while-loop.md](../examples/do-while-loop.md) for a runnable workflow.
+**The self-reference pattern.** `"loop_ref": "${loop_ref.output}"` looks like a typo — referencing a task before it has output — but it is the canonical pattern. Conductor resolves the reference lazily on each iteration, exposing the running `iteration` counter (and prior iterations' task outputs) inside the script. See [examples/do-while-loop.md](../examples/do-while-loop.md) for a runnable workflow.
+
+**Use an IIFE for `loopCondition`.** Conductor reads the final value of the script. The IIFE form returns a clean boolean across cluster versions; the older `if (...) { true; } else { false; }` statement form is fragile, and named functions or `return true; return false;` patterns produce confusing failures. See [graaljs-gotchas.md](graaljs-gotchas.md) Rule 6.
+
+**Scope inside `loopCondition`:**
+
+- `$.<key>` for every key in `inputParameters` (after `${...}` resolution).
+- **Not** in scope: `$.workflow.input.*`, `$.workflow.variables.*`. Plumb workflow inputs/variables through `inputParameters` if you need them.
+
+**Reading the iteration counter from outside the loop:**
+
+| Where | Expression |
+|-------|------------|
+| `workflow.outputParameters` | `${loop_ref.output.iteration}` |
+| Another task's `inputParameters` | `${loop_ref.output.iteration}` |
+| Inside `loopCondition` (after wiring `loop_ref: ${loop_ref.output}`) | `$.loop_ref['iteration']` |
+
+`${loop_ref.iteration}` (no `.output`) is wrong — `iteration` lives inside `outputData`, not on the task. See [template-resolution.md](template-resolution.md) Pitfall 3.
+
+**Always cap the loop.** Even when the body has a result-driven exit, include an iteration cap in the condition (`$.loop_ref['iteration'] < N`). An unbounded loop is flagged CRITICAL by the optimization checklist.
 
 ### WAIT
 Pause execution until a signal, a duration elapses, or a specific date/time is reached. Use `conductor task signal` to resume a signal-based wait.
@@ -354,6 +400,9 @@ Conductor has built-in AI tasks supporting 12 LLM providers (OpenAI, Anthropic, 
 
 ### LLM_CHAT_COMPLETE
 Multi-turn conversational AI with optional tool calling. Supports all LLM providers.
+
+> **Message schema is `{role, message}`, NOT `{role, content}`.** This contradicts the native Anthropic, OpenAI, and most other LLM-provider schemas (which use `content`). Conductor's field is `message`. Using `content` produces `Content must not be null for SYSTEM or USER messages`.
+
 ```json
 {
   "name": "chat_task", "taskReferenceName": "chat", "type": "LLM_CHAT_COMPLETE",
@@ -365,12 +414,153 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
       {"role": "user", "message": "${workflow.input.question}"}
     ],
     "temperature": 0.7,
-    "maxTokens": 500
+    "maxTokens": 500,
+    "jsonOutput": false
   }
 }
 ```
-**Inputs**: `llmProvider` (required), `model` (required), `messages` (required, array of `{role, message}`), `temperature`, `maxTokens`, `topP`, `stopSequences`, `tools` (for function calling).
-**Outputs**: `result` (response text), `finishReason` (`STOP`, `TOOL_CALLS`, `LENGTH`), `tokenUsed`, `promptTokens`, `completionTokens`, `toolCalls`.
+**Inputs** (full list — see [examples/llm-chat.md](../examples/llm-chat.md) for usage patterns):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `llmProvider` | string (required) | e.g. `openai`, `anthropic`, `google_gemini`, `vertex_ai`, `azureopenai`, `bedrock`, `mistral`, `cohere`, `grok`, `perplexity`, `huggingface`, `ollama` |
+| `model` | string (required) | provider-specific model ID |
+| `messages` | array (required) | `[{role, message}]` — note `message`, not `content` |
+| `instructions` | string | optional system instructions (alias for the legacy `prompt` field) |
+| `temperature` | number | sampling temperature (0.0–2.0) |
+| `maxTokens` | integer | hard cap on completion length (default `8192`) |
+| `topP` | number | nucleus sampling |
+| `topK` | integer | top-k sampling (where supported) |
+| `frequencyPenalty` | number | OpenAI-style frequency penalty |
+| `presencePenalty` | number | OpenAI-style presence penalty |
+| `stopSequences` | array | stop tokens (also accepted: `stopWords`) |
+| `tools` | array | function-calling tool definitions. **Each tool is a registered Conductor worker** (default `type: SIMPLE`) or a supported integration — when the LLM emits a tool call, the resolved invocations land on `output.toolCalls`. See below. |
+| `jsonOutput` | boolean | parse the raw text as JSON into `output.result`. **For some models (notably Anthropic Claude), you MUST include the word `JSON` somewhere in the prompt** — otherwise the model emits prose. Conductor parses via Jackson and fails hard on markdown fences. |
+| `inputSchema` | object | `SchemaDef` — validates the inputs before calling the model |
+| `outputSchema` | object | `SchemaDef` — validates the parsed output. On schema failure the task is **retried up to the task definition's `retryCount`** (defaults to 3 if no `retryCount` is set) with no backoff. Useful with `jsonOutput: true`. |
+| `webSearch` | boolean | enable provider-native web search. Supported by **OpenAI, Anthropic, Google Gemini**. |
+| `codeInterpreter` | boolean | enable sandboxed code execution. Supported by **OpenAI (`code_interpreter`), Anthropic (`code_execution`), Google Gemini (`codeExecution`)**. |
+| `fileSearchVectorStoreIds` | array\<string\> | vector store IDs for file search. **OpenAI only.** |
+| `googleSearchRetrieval` | boolean | enable Google Search grounding. **Gemini only.** |
+| `thinkingTokenLimit` | integer | token budget for extended reasoning **before** the model writes its answer. Supported by **Anthropic** and **Google Gemini** (where the model is a thinking/reasoning-capable model). |
+| `reasoningEffort` | string | `low`, `medium`, or `high`. **OpenAI only**, via the Responses API. |
+| `reasoningSummary` | string | surface chain-of-thought reasoning on the task output. Values: OpenAI accepts `auto` / `concise` / `detailed`; Anthropic and Gemini accept any non-blank value to opt in. When set, `output.reasoning` and `output.reasoningTokens` are populated. |
+| `previousResponseId` | string | **chain multi-turn conversations without resending message history**. The output `responseId` of a prior `LLM_CHAT_COMPLETE` task is referenced here, e.g. `${turn1.output.responseId}`. **OpenAI and Azure OpenAI only** (uses the Responses API). The new task's `messages` array is treated as the next turn appended to the chain. |
+| `outputMimeType` | string | HTTP-style content type for the output (media generation flows) |
+| `outputLocation` | string | URI where results should be stored (e.g., audio/video output paths) |
+| `voice` | string | audio output voice (when the model supports speech) |
+| `promptVersion` / `promptVariables` / `allowRawPrompts` | — | Orkes prompt-template integration (named prompts stored on the server, with versioning and variable interpolation). Pair with the legacy `prompt` field on the task. |
+| `integrationName` | string | named Orkes integration override (per-environment auth) |
+| `maxResults` | integer | when the provider returns N choices, how many to keep (default `1`) |
+
+**Outputs** — `output.result` is an `Object` whose runtime type depends on `jsonOutput` and the provider's reply:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result` | string or object | response text (default) or parsed object (when `jsonOutput: true` AND the model emitted parseable JSON) |
+| `finishReason` | string | `STOP`, `TOOL_CALLS`, `LENGTH` |
+| `tokenUsed`, `promptTokens`, `completionTokens` | integer | token accounting |
+| `toolCalls` | array | present when `finishReason == "TOOL_CALLS"` |
+| `responseId` | string | provider-side response ID. **Pass into the next task's `previousResponseId` to chain (OpenAI/Azure).** |
+| `reasoning` | string | chain-of-thought text when `reasoningSummary` was set (OpenAI/Anthropic/Gemini) |
+| `reasoningTokens` | integer | tokens spent on reasoning (where supported) |
+| `media` | array | generated media items (`location`, `mimeType`) for audio/video output |
+| `jobId` | string | provider's async job ID for long-running operations |
+
+**Built-in tools — when to use which.**
+
+| Need | Use |
+|------|-----|
+| Real-time / fresh-from-the-web answers | `webSearch: true` (no MCP needed) |
+| Run Python/JS to compute, analyze, generate charts | `codeInterpreter: true` |
+| Search through pre-uploaded files (OpenAI Vector Stores) | `fileSearchVectorStoreIds: ["vs_..."]` |
+| Ground a Gemini answer in Google Search results | `googleSearchRetrieval: true` (Gemini only) |
+| Deeper reasoning before the final answer | `thinkingTokenLimit: 10000` (Anthropic/Gemini) or `reasoningEffort: "high"` (OpenAI) |
+| Surface the reasoning text in the task output | `reasoningSummary: "detailed"` |
+| Custom tools / your own workflows / external APIs | `tools: [...]` (function calling) or `CALL_MCP_TOOL` |
+
+These are mutually compatible — a single task can combine `webSearch: true` with `tools: [...]` for a custom-tool agent that can also browse the web.
+
+**Custom tools dispatched to Conductor workers.**
+
+The `tools` array is Conductor-distinctive. Each entry is a `ToolSpec`:
+
+```json
+"tools": [
+  {
+    "name": "lookup_customer",
+    "type": "SIMPLE",
+    "description": "Look up a customer by ID. Returns name, email, and account status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "customer_id": { "type": "string" } },
+      "required": ["customer_id"]
+    }
+  }
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Tool name the LLM sees. Must match a registered Conductor worker `taskDefName` (when `type` is `SIMPLE`). |
+| `type` | Task type. Defaults to `SIMPLE`. Other values dispatch through the corresponding Conductor task. |
+| `description` | What the LLM reads to decide whether to call this tool. Be specific — this is the only signal the model has. |
+| `inputSchema` | JSON Schema for the tool's inputs. The LLM-emitted arguments are validated against this. |
+| `outputSchema` | JSON Schema for the tool's outputs (informational). |
+| `configParams` / `integrationNames` | Per-tool config and integration overrides. |
+
+When the LLM emits a tool call, `output.finishReason` is `TOOL_CALLS` and `output.toolCalls` contains the resolved invocations — each `ToolCall` carries `name` (the tool/worker name the LLM chose), `inputParameters` (the resolved arguments), and `type` (the matched Conductor task type, defaulting to `SIMPLE`). How those resolved tool calls are then executed depends on your workflow shape — for an MCP-style flow use `CALL_MCP_TOOL`; for a Conductor-worker flow, a SWITCH/DYNAMIC follow-up dispatches by `type` and `name`; the [ai-agent-loop example](../examples/ai-agent-loop.md) shows one wiring.
+
+The "registered Conductor worker is a tool" pattern lets the LLM pick from your task definitions; the tool schema (`name`, `description`, `inputSchema`) is the only contract. Combine with `previousResponseId` (OpenAI) to chain tool-call turns without resending history.
+
+**Multi-turn chaining without resending history (OpenAI/Azure).**
+
+The Responses API stores the entire conversation server-side. `previousResponseId` references the prior turn; you only need to send the new user turn in `messages`. For long agent loops or multi-turn dialogues with a substantial system prompt or prior context, this cuts per-turn token cost noticeably; for short chats the savings are small.
+
+```json
+{
+  "tasks": [
+    {
+      "taskReferenceName": "turn1",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o",
+        "messages": [
+          {"role": "system", "message": "You are a technical architect."},
+          {"role": "user", "message": "Design X."}
+        ]
+      }
+    },
+    {
+      "taskReferenceName": "turn2",
+      "type": "LLM_CHAT_COMPLETE",
+      "inputParameters": {
+        "llmProvider": "openai",
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "message": "Now list the key risks."}],
+        "previousResponseId": "${turn1.output.responseId}"
+      }
+    }
+  ]
+}
+```
+
+**Caveats:**
+- `previousResponseId` is **OpenAI- and Azure-OpenAI-only**. Other providers ignore it. For portable chains, accumulate the full `messages` array (see [../examples/ai-agent-loop.md](../examples/ai-agent-loop.md)).
+- Server-side state expires per OpenAI's Responses retention policy (currently ~30 days). For long-lived agent state, persist messages yourself.
+- You cannot mix providers mid-chain — every turn must point to the same provider that produced the original `responseId`.
+
+See [../examples/llm-chaining.md](../examples/llm-chaining.md) for the full pattern.
+
+**The `result` type is `jsonOutput`-dependent.** With `jsonOutput: true`, `result` is a **parsed object** and you access fields as `${chat.output.result.action}`. With `jsonOutput: false`, `result` is a **string** and you have to parse it yourself (or branch on it as text). Downstream SWITCH cases that route on `output.result.action` should always have an empty `defaultCase` or a sentinel branch, since a malformed LLM emission falls through as a string.
+
+**`jsonOutput: true` is strict.** Conductor parses the raw model text via Jackson. If the model emits markdown fences (```` ```json ... ``` ````) — which Claude frequently does regardless of system-prompt instructions — the parse fails hard and the task errors. There is no "tolerant" mode that strips fences. Workarounds:
+- Use the provider's native structured-output mode (Anthropic tool-use, OpenAI JSON mode) via `tools`.
+- Keep `jsonOutput: false` and parse defensively downstream (substring-extract the JSON between `{` and the matching `}`).
+- Use a SIMPLE worker that calls the provider directly when you need strict structured output.
+
+**Object-typed `message` fields are dangerous.** If a `messages[].message` value is a structured object rather than a string (e.g. you accidentally interpolate `${some_task.output}` without stringifying), Conductor Java-`toString`s it to `{key=value}` on the way to the provider — producing garbage in the chat history and nonsense responses. Always serialize structured data into a string first using `JSON_JQ_TRANSFORM` with `tojson` (not INLINE — see [graaljs-gotchas.md](graaljs-gotchas.md) Rule 3).
 
 ### LLM_TEXT_COMPLETE
 Single prompt text completion.
@@ -517,6 +707,48 @@ Retrieve stored embeddings by document ID.
 **Inputs**: `vectorDB`, `namespace`, `index`, `docId` (all required).
 **Outputs**: `result` (array of floats).
 
+### GENERATE_PDF
+Convert markdown text to a PDF document. Built-in (Apache PDFBox); no external API key required. Supports full GitHub-Flavored Markdown — headings, tables, code blocks, lists, task lists, blockquotes, images (HTTP/HTTPS, `file://`, `data:`, relative paths), links, footnotes, strikethrough, inline formatting.
+
+```json
+{
+  "name": "gen_pdf", "taskReferenceName": "pdf", "type": "GENERATE_PDF",
+  "inputParameters": {
+    "markdown": "${report.output.result}",
+    "pageSize": "A4",
+    "theme": "default",
+    "baseFontSize": 11,
+    "pdfMetadata": {
+      "title": "${workflow.input.topic}",
+      "author": "Conductor",
+      "subject": "Auto-generated report"
+    }
+  }
+}
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|:--------:|---------|-------------|
+| `markdown` | string | ✅ | — | Markdown text to render |
+| `pageSize` | string | ❌ | `A4` | `A4`, `LETTER`, `LEGAL`, `A3`, `A5` |
+| `marginTop` / `marginRight` / `marginBottom` / `marginLeft` | number | ❌ | `72` | Margins in points (72 = 1 inch) |
+| `theme` | string | ❌ | `default` | `default` or `compact` |
+| `baseFontSize` | number | ❌ | `11` | Base font size in points |
+| `outputLocation` | string | ❌ | auto | Output URI (e.g., `file:///tmp/report.pdf`). Defaults to payload store. |
+| `pdfMetadata` | object | ❌ | — | `{title, author, subject, keywords}` |
+| `imageBaseUrl` | string | ❌ | — | Base URL for resolving relative image paths in markdown |
+
+**Outputs:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result.location` | string | URI of the generated PDF |
+| `result.sizeBytes` | integer | Size of the generated PDF in bytes |
+| `media` | array | `[{location, mimeType: "application/pdf"}]` |
+| `finishReason` | string | `COMPLETED` on success |
+
+Common pattern is LLM → PDF: an `LLM_CHAT_COMPLETE` task emits markdown into `output.result`, then `GENERATE_PDF` consumes `${report.output.result}` and writes the binary out.
+
 ### LIST_MCP_TOOLS
 List available tools from an MCP (Model Context Protocol) server.
 ```json
@@ -579,7 +811,7 @@ Call a specific tool on an MCP server. All extra inputParameters are passed as t
       "type": "JSON_JQ_TRANSFORM",
       "inputParameters": {
         "data": "${fetch.output.response.body.items}",
-        "queryExpression": "[.[] | {id: .id, name: .name, status: .status}]"
+        "queryExpression": "[.data[] | {id: .id, name: .name, status: .status}]"
       }
     },
     {
