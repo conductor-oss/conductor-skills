@@ -86,6 +86,101 @@ assert "all four versions agree" \
   "[ '$PKG_VERSION' = '$FILE_VERSION' ] && [ '$FILE_VERSION' = '$INSTALL_SH_VERSION' ] && [ '$INSTALL_SH_VERSION' = '$PLUGIN_VERSION' ]"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 0a. Marketplace.json schema validation
+#
+# This block catches runtime errors that JSON-parse validation alone misses.
+# History: we shipped 1.6.1 with `source: "."` — JSON-valid, schema-shaped, but
+# Claude Code rejected it with "source type your Claude Code version does not
+# support". This step would have caught that before publish.
+#
+# Valid source values (based on the schema used by claude-plugins-official):
+#   - String relative path STARTING WITH "./"  (e.g. "./", "./plugins/foo")
+#   - Object with discriminator: {"source": "github"|"git-subdir"|"url", ...}
+# ─────────────────────────────────────────────────────────────────────────────
+step "Marketplace.json schema validation"
+
+market_check=$(python3 - "$REPO_ROOT/.claude-plugin/marketplace.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path) as f:
+    m = json.load(f)
+
+errors = []
+warnings = []
+
+if 'name' not in m:
+    errors.append("missing top-level 'name'")
+if 'plugins' not in m or not isinstance(m['plugins'], list):
+    errors.append("missing or non-list 'plugins'")
+    print("\n".join(errors)); sys.exit(1)
+
+VALID_OBJECT_SOURCES = {"github", "git-subdir", "url", "git", "local"}
+for i, p in enumerate(m.get('plugins', [])):
+    label = f"plugins[{i}] (name={p.get('name','<missing>')!r})"
+    if 'name' not in p:
+        errors.append(f"{label}: missing 'name'")
+    if 'source' not in p:
+        errors.append(f"{label}: missing 'source'")
+        continue
+    src = p['source']
+    if isinstance(src, str):
+        # String form must begin with './' to be recognized as a relative path.
+        # The exact bug we hit in 1.6.1: source="." (no slash) caused
+        # "source type your Claude Code version does not support".
+        if not src.startswith('./'):
+            errors.append(
+                f"{label}: source string {src!r} must start with './' "
+                f"(use './' for marketplace root, or './subdir' for subdirectory). "
+                f"Bare strings like '.' or 'plugin' are NOT recognized by Claude Code."
+            )
+    elif isinstance(src, dict):
+        kind = src.get('source')
+        if kind not in VALID_OBJECT_SOURCES:
+            errors.append(
+                f"{label}: source object .source={kind!r} must be one of {sorted(VALID_OBJECT_SOURCES)}"
+            )
+    else:
+        errors.append(f"{label}: source must be string or object, got {type(src).__name__}")
+    if 'version' in p:
+        warnings.append(f"{label}: 'version' in marketplace.json plugin entry — schema says version lives in plugin.json")
+
+if errors:
+    print("ERRORS:")
+    for e in errors:
+        print(f"  {e}")
+    sys.exit(1)
+if warnings:
+    for w in warnings:
+        print(f"  WARN: {w}", file=sys.stderr)
+PY
+)
+market_rc=$?
+if [ $market_rc -eq 0 ]; then
+  pass "marketplace.json source format is recognized by Claude Code"
+else
+  fail "marketplace.json schema check"
+  echo "$market_check" | sed 's/^/    /'
+fi
+
+# Cross-check against a known-good marketplace if we have one cached locally —
+# protects against drift if Anthropic adds new source types in the future.
+if [ -f "$HOME/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json" ]; then
+  known_good=$(python3 -c "
+import json
+m = json.load(open('$HOME/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json'))
+seen = set()
+for p in m['plugins']:
+    s = p.get('source')
+    if isinstance(s, str):
+        seen.add('string-./*' if s.startswith('./') else f'string-{s!r}')
+    elif isinstance(s, dict):
+        seen.add(f\"object-{s.get('source')}\")
+print(' '.join(sorted(seen)))
+")
+  info "known-good source formats observed upstream: $known_good"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 1. Lint shell scripts
 # ─────────────────────────────────────────────────────────────────────────────
 step "Lint install.sh"

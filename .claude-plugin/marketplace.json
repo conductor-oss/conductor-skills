@@ -14,9 +14,14 @@
         "name": "Conductor OSS"
       },
       "category": "devops",
-      "source": ".",
+      "source": "./",
       "homepage": "https://github.com/conductor-oss/conductor-skills",
-      "tags": ["conductor", "workflow", "orchestration", "microservices"]
+      "tags": [
+        "conductor",
+        "workflow",
+        "orchestration",
+        "microservices"
+      ]
     }
   ]
 }
