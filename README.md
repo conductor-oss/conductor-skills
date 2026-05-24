@@ -87,7 +87,7 @@ conductor-skills --all --upgrade
 conductor-skills --agent cline --uninstall
 ```
 
-The npm package bundles all skill content, so it works offline once installed.
+The npm package bundles all skill content, so it works offline once installed. For Claude Code, just restart your session after install to pick up the plugin.
 
 ### Install for all detected agents
 

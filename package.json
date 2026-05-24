@@ -21,7 +21,9 @@
   },
   "scripts": {
     "validate": "python3 scripts/validate_plugin.py",
-    "test": "python3 scripts/validate_plugin.py"
+    "test": "python3 scripts/validate_plugin.py",
+    "verify": "bash scripts/verify-package.sh",
+    "verify:quick": "bash scripts/verify-package.sh --quick"
   },
   "repository": {
     "type": "git",

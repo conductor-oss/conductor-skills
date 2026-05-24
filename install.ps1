@@ -297,7 +297,7 @@ function Get-GlobalPath {
     param([string]$AgentName)
     $installDir = $env:USERPROFILE
     switch ($AgentName) {
-        "claude"   { return "__claude__" }
+        "claude"   { return Join-Path $installDir ".claude\settings.json" }
         "codex"    { $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $installDir ".codex" }; return Join-Path $codexHome "AGENTS.md" }
         "cursor"   { return Join-Path $installDir ".cursor\skills\conductor\SKILL.md" }
         "gemini"   { return Join-Path $installDir ".gemini\GEMINI.md" }
@@ -312,7 +312,7 @@ function Get-GlobalPath {
 function Get-TargetPath {
     param([string]$AgentName, [string]$ProjDir)
     switch ($AgentName) {
-        "claude"   { return "__claude__" }
+        "claude"   { return Join-Path $ProjDir ".claude\settings.json" }
         "codex"    { return Join-Path $ProjDir "AGENTS.md" }
         "gemini"   { return Join-Path $ProjDir "GEMINI.md" }
         "cursor"   { return Join-Path $ProjDir ".cursor\rules\conductor.mdc" }
@@ -331,20 +331,153 @@ function Get-TargetPath {
 # Per-agent install logic
 # ─────────────────────────────────────────────────────────────────────────────
 
-function Install-Claude {
-    # Claude Code installs plugins via in-session /plugin commands, not a
-    # shell subcommand. Print clear instructions.
-    if (!(Get-Command claude -ErrorAction SilentlyContinue)) {
-        Write-Warn "'claude' CLI not found, but the Claude install is in-session anyway."
+# Bust caches so existing Claude installs actually pick up new content.
+# Without this, a user with an old plugin cache will see a silent no-op:
+# settings.json keys are already present, the old version cache keeps
+# loading, and nothing changes. Always called on install and uninstall.
+function Clear-ClaudeLegacyAndCaches {
+    # We do NOT delete ~/.claude/skills/conductor — that's the user-skill
+    # install location, populated by Install-ClaudeSkill. Re-installs
+    # *overwrite* it instead.
+    $cache    = Join-Path $env:USERPROFILE ".claude\plugins\cache\conductor-skills"
+    $market   = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces\conductor-skills"
+    $registry = Join-Path $env:USERPROFILE ".claude\plugins\installed_plugins.json"
+
+    if (Test-Path $cache) {
+        Remove-Item -Recurse -Force $cache
+        Write-Ok "Cleared plugin cache: $cache (will re-fetch on next session)"
     }
-    Write-Info "Conductor Skills is a Claude Code plugin. Run these in your Claude Code session:"
+    if (Test-Path $market) {
+        Remove-Item -Recurse -Force $market
+        Write-Ok "Cleared marketplace clone: $market (will re-clone on next session)"
+    }
+
+    # Surgically remove our entry from Claude's plugin registry — a stale
+    # "installed at v1.0.0" record pointing to a deleted cache dir would
+    # make Claude Code skip re-fetching on next session start.
+    if (Test-Path $registry) {
+        try {
+            $raw = Get-Content $registry -Raw
+            $r = $raw | ConvertFrom-Json
+            if ($r.plugins.PSObject.Properties.Name -contains 'conductor@conductor-skills') {
+                $r.plugins.PSObject.Properties.Remove('conductor@conductor-skills')
+                ($r | ConvertTo-Json -Depth 10) | Set-Content -Path $registry -Encoding UTF8
+                Write-Ok "Cleared stale registry entry in $registry"
+            }
+        } catch {
+            # Non-fatal: registry could be missing keys or in a format we don't recognize.
+        }
+    }
+}
+
+function Install-ClaudeSkill {
+    param([string]$TmpDir)
+
+    $skillDest = Join-Path $env:USERPROFILE ".claude\skills\conductor"
+    if ($LOCAL_DIR) {
+        $srcDir = Join-Path $LOCAL_DIR "skills\conductor"
+    } else {
+        $srcDir = Join-Path $TmpDir "skills\conductor"
+    }
+
+    if (-not (Test-Path $srcDir)) {
+        Write-Err "Skill source not found at $srcDir"
+        return $false
+    }
+
+    # Mirror — replace, don't merge
+    if (Test-Path $skillDest) {
+        Remove-Item -Recurse -Force $skillDest
+    }
+    New-Item -ItemType Directory -Path $skillDest -Force | Out-Null
+    Copy-Item -Recurse -Force "$srcDir\*" $skillDest
+    Write-Ok "Installed skill files: $skillDest"
+    return $true
+}
+
+function Install-Claude {
+    param([bool]$IsGlobal, [string]$ProjDir, [string]$TmpDir)
+
+    # Claude Code reads `extraKnownMarketplaces` and `enabledPlugins` from
+    # settings.json on session start — writing both there is equivalent to
+    # running the in-session `/plugin marketplace add` + `/plugin install`
+    # commands. There is no `claude plugin install` subcommand.
+    if ($IsGlobal) {
+        $settingsPath = Join-Path $env:USERPROFILE ".claude\settings.json"
+    } else {
+        $settingsPath = Join-Path $ProjDir ".claude\settings.json"
+    }
+
+    $settingsDir = Split-Path -Parent $settingsPath
+    New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+
+    Clear-ClaudeLegacyAndCaches
+
+    Install-ClaudeSkill -TmpDir $TmpDir | Out-Null
+
+    Write-Info "Enabling Conductor plugin in $settingsPath ..."
+
+    if (Test-Path $settingsPath) {
+        try {
+            $raw = Get-Content $settingsPath -Raw
+            if ([string]::IsNullOrWhiteSpace($raw)) {
+                $settings = [PSCustomObject]@{}
+            } else {
+                $settings = $raw | ConvertFrom-Json
+            }
+        } catch {
+            Write-Err "Failed to parse $settingsPath as JSON: $_"
+            return $false
+        }
+    } else {
+        $settings = [PSCustomObject]@{}
+    }
+
+    $marketplaceEntry = [PSCustomObject]@{
+        source = [PSCustomObject]@{
+            source = 'github'
+            repo   = 'conductor-oss/conductor-skills'
+        }
+    }
+
+    if (-not ($settings.PSObject.Properties.Name -contains 'extraKnownMarketplaces')) {
+        $settings | Add-Member -NotePropertyName 'extraKnownMarketplaces' -NotePropertyValue ([PSCustomObject]@{})
+    }
+    if ($settings.extraKnownMarketplaces.PSObject.Properties.Name -contains 'conductor-skills') {
+        $settings.extraKnownMarketplaces.PSObject.Properties.Remove('conductor-skills')
+    }
+    $settings.extraKnownMarketplaces | Add-Member -NotePropertyName 'conductor-skills' -NotePropertyValue $marketplaceEntry
+
+    if (-not ($settings.PSObject.Properties.Name -contains 'enabledPlugins')) {
+        $settings | Add-Member -NotePropertyName 'enabledPlugins' -NotePropertyValue ([PSCustomObject]@{})
+    }
+    if ($settings.enabledPlugins.PSObject.Properties.Name -contains 'conductor@conductor-skills') {
+        $settings.enabledPlugins.PSObject.Properties.Remove('conductor@conductor-skills')
+    }
+    $settings.enabledPlugins | Add-Member -NotePropertyName 'conductor@conductor-skills' -NotePropertyValue $true
+
+    try {
+        ($settings | ConvertTo-Json -Depth 10) | Set-Content -Path $settingsPath -Encoding UTF8
+    } catch {
+        Write-Err "Failed to write $settingsPath : $_"
+        return $false
+    }
+
+    Write-Ok "Configured: $settingsPath"
     Write-Host ""
-    Write-Host "  /plugin marketplace add conductor-oss/conductor-skills"
-    Write-Host "  /plugin install conductor@conductor-skills"
+    Write-Host "Conductor installed two ways:" -ForegroundColor Green
     Write-Host ""
-    Write-Info "Once installed, slash commands like /conductor, /conductor-setup,"
-    Write-Info "/conductor-optimize, and /conductor-scaffold-worker become available."
-    Write-Ok "Claude Code install instructions printed above."
+    Write-Host "  1. Skill at ~\.claude\skills\conductor\"
+    Write-Host "     Files are there NOW. Skill auto-loads on next session start."
+    Write-Host ""
+    Write-Host "  2. Plugin via settings.json (extraKnownMarketplaces + enabledPlugins)"
+    Write-Host "     Claude Code fetches plugin v$SCRIPT_VERSION on next session start."
+    Write-Host "     Provides slash commands: /conductor, /conductor-setup, /conductor-optimize, /conductor-scaffold-worker"
+    Write-Host ""
+    Write-Host "⚠ Restart Claude Code to activate." -ForegroundColor Yellow
+    Write-Host "    * claude CLI:           exit (Ctrl+D) and start a new session"
+    Write-Host "    * VS Code extension:    Ctrl+Shift+P -> ""Reload Window"""
+    Write-Host "    * Desktop app:          quit and reopen"
     return $true
 }
 
@@ -403,7 +536,7 @@ function Install-ForAgent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [bool]$ForceWrite, [string]$TmpDir, [string]$Assembled)
 
     if ($AgentName -eq "claude") {
-        return Install-Claude
+        return Install-Claude -IsGlobal $IsGlobal -ProjDir $ProjDir -TmpDir $TmpDir
     }
 
     if ($IsGlobal) {
@@ -447,8 +580,51 @@ function Uninstall-Agent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal)
 
     if ($AgentName -eq "claude") {
-        Write-Info "To remove the Conductor skill from Claude Code, run:"
-        Write-Host "  /plugin uninstall conductor@conductor-skills   (in your Claude Code session)"
+        if ($IsGlobal) {
+            $settingsPath = Join-Path $env:USERPROFILE ".claude\settings.json"
+        } else {
+            $settingsPath = Join-Path $ProjDir ".claude\settings.json"
+        }
+        if (-not (Test-Path $settingsPath)) {
+            Write-Warn "Nothing to uninstall: $settingsPath not found"
+            return
+        }
+        try {
+            $raw = Get-Content $settingsPath -Raw
+            $settings = $raw | ConvertFrom-Json
+        } catch {
+            Write-Err "Failed to parse $settingsPath : $_"
+            return
+        }
+        $changed = $false
+        if (($settings.PSObject.Properties.Name -contains 'extraKnownMarketplaces') -and
+            ($settings.extraKnownMarketplaces.PSObject.Properties.Name -contains 'conductor-skills')) {
+            $settings.extraKnownMarketplaces.PSObject.Properties.Remove('conductor-skills')
+            if (-not $settings.extraKnownMarketplaces.PSObject.Properties.Name) {
+                $settings.PSObject.Properties.Remove('extraKnownMarketplaces')
+            }
+            $changed = $true
+        }
+        if (($settings.PSObject.Properties.Name -contains 'enabledPlugins') -and
+            ($settings.enabledPlugins.PSObject.Properties.Name -contains 'conductor@conductor-skills')) {
+            $settings.enabledPlugins.PSObject.Properties.Remove('conductor@conductor-skills')
+            if (-not $settings.enabledPlugins.PSObject.Properties.Name) {
+                $settings.PSObject.Properties.Remove('enabledPlugins')
+            }
+            $changed = $true
+        }
+        if ($changed) {
+            ($settings | ConvertTo-Json -Depth 10) | Set-Content -Path $settingsPath -Encoding UTF8
+            Write-Ok "Removed Conductor entries from $settingsPath"
+        } else {
+            Write-Warn "No Conductor entries found in $settingsPath"
+        }
+        $skillDir = Join-Path $env:USERPROFILE ".claude\skills\conductor"
+        if (Test-Path $skillDir) {
+            Remove-Item -Recurse -Force $skillDir
+            Write-Ok "Removed skill dir: $skillDir"
+        }
+        Clear-ClaudeLegacyAndCaches
         return
     }
 
@@ -643,8 +819,13 @@ try {
         }
 
         # Idempotency check. -Force re-installs; -Upgrade does not (matches -Check).
+        # Exception: claude always re-runs. Its "installed state" lives in two
+        # places — our manifest AND Claude Code's plugin cache. The cache can
+        # drift independently (user installed v1.0.0 via /plugin install, then
+        # we publish v1.6.0 — manifest matches but cache is stale). Always
+        # re-running keeps upgrades honest.
         $installedVer = Read-ManifestVersion -ManifestPath $manifest -AgentName $a
-        if ($installedVer -and ($installedVer -eq $targetVersion) -and !$Force) {
+        if ($a -ne 'claude' -and $installedVer -and ($installedVer -eq $targetVersion) -and !$Force) {
             Write-Ok "$a already at v$installedVer, skipping."
             $skippedCount++
             continue

@@ -1,3 +1,6 @@
+# OpenAI Codex agent declaration. Lived at agents/openai.yaml originally;
+# moved to .openai/ to keep it out of Claude Code's agents/ scan path
+# (Claude Code expects *.md subagent files there, not OpenAI YAML).
 interface:
   display_name: "Conductor OSS Workflows"
   short_description: "Create, run, and manage Conductor workflows"

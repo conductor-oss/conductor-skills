@@ -388,7 +388,7 @@ supports_global() {
 get_global_path() {
   local agent="$1"
   case "$agent" in
-    claude)   echo "__claude__" ;;
+    claude)   echo "$HOME/.claude/settings.json" ;;
     codex)    echo "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" ;;
     cursor)   echo "$HOME/.cursor/skills/conductor/SKILL.md" ;;
     gemini)   echo "$HOME/.gemini/GEMINI.md" ;;
@@ -405,7 +405,7 @@ get_target_path() {
   local project_dir="$2"
 
   case "$agent" in
-    claude)   echo "__claude__" ;;
+    claude)   echo "$project_dir/.claude/settings.json" ;;
     codex)    echo "$project_dir/AGENTS.md" ;;
     gemini)   echo "$project_dir/GEMINI.md" ;;
     cursor)   echo "$project_dir/.cursor/rules/conductor.mdc" ;;
@@ -424,22 +424,150 @@ get_target_path() {
 # Per-agent install logic
 # ─────────────────────────────────────────────────────────────────────────────
 
-install_claude() {
-  # Claude Code installs plugins via the in-session `/plugin` commands, not a
-  # shell subcommand. Print clear instructions; do not try to invoke a CLI
-  # subcommand that does not exist.
-  if ! command -v claude &>/dev/null; then
-    warn "'claude' CLI not found, but the Claude install is in-session anyway."
+# Bust plugin caches so existing Claude installs actually pick up new content.
+# Note: we do NOT delete ~/.claude/skills/conductor — that's the user-skill
+# install location, populated by install_claude_skill below. We *overwrite*
+# it with fresh content on each install instead.
+clean_claude_legacy_and_caches() {
+  local cache="$HOME/.claude/plugins/cache/conductor-skills"
+  local market="$HOME/.claude/plugins/marketplaces/conductor-skills"
+  local registry="$HOME/.claude/plugins/installed_plugins.json"
+
+  if [ -d "$cache" ]; then
+    rm -rf "$cache"
+    ok "Cleared plugin cache: $cache (will re-fetch on next session)"
+  fi
+  if [ -d "$market" ]; then
+    rm -rf "$market"
+    ok "Cleared marketplace clone: $market (will re-clone on next session)"
   fi
 
-  info "Conductor Skills is a Claude Code plugin. Run these in your Claude Code session:"
+  # Surgically remove our entry from Claude's plugin registry — if we leave
+  # a stale "installed at v1.0.0" record pointing to a now-deleted cache dir,
+  # Claude Code may skip re-fetching on next session start.
+  if [ -f "$registry" ]; then
+    if python3 - "$registry" <<'PY' 2>/dev/null
+import json, os, sys
+path = sys.argv[1]
+with open(path) as f:
+    r = json.load(f)
+plugins = r.get('plugins') or {}
+if 'conductor@conductor-skills' not in plugins:
+    sys.exit(2)  # nothing to do
+plugins.pop('conductor@conductor-skills')
+tmp = path + '.tmp'
+with open(tmp, 'w') as f:
+    json.dump(r, f, indent=2)
+    f.write('\n')
+os.replace(tmp, path)
+PY
+    then
+      ok "Cleared stale registry entry in $registry"
+    fi
+  fi
+}
+
+# Install Conductor as a user-skill at ~/.claude/skills/conductor — the
+# "good old" skill location that's visible to the user immediately and
+# auto-loaded by Claude Code at session start (no marketplace fetch needed).
+# Source files come from $tmp_dir (downloaded from GitHub) or $LOCAL_DIR
+# (bundled with the npm package).
+install_claude_skill() {
+  local tmp_dir="$1"
+  local skill_dest="$HOME/.claude/skills/conductor"
+  local src_dir
+
+  if [ -n "$LOCAL_DIR" ]; then
+    src_dir="$LOCAL_DIR/skills/conductor"
+  else
+    src_dir="$tmp_dir/skills/conductor"
+  fi
+
+  if [ ! -d "$src_dir" ]; then
+    error "Skill source not found at $src_dir"
+    return 1
+  fi
+
+  mkdir -p "$skill_dest"
+  # Mirror the skill contents — replace, don't merge, so removed files vanish.
+  rm -rf "$skill_dest"
+  mkdir -p "$skill_dest"
+  cp -R "$src_dir/." "$skill_dest/"
+  ok "Installed skill files: $skill_dest"
+}
+
+install_claude() {
+  # Dual install for Claude Code:
+  #   1. Plugin via settings.json (slash commands, auto-updates from marketplace)
+  #   2. User skill at ~/.claude/skills/conductor (visible files, immediate)
+  # Both coexist — Claude Code dedupes on skill name at load time.
+  local is_global="$1"
+  local project_dir="$2"
+  local tmp_dir="$3"
+  local settings_path
+
+  if [ "$is_global" = "true" ]; then
+    settings_path="$HOME/.claude/settings.json"
+  else
+    settings_path="$project_dir/.claude/settings.json"
+  fi
+
+  mkdir -p "$(dirname "$settings_path")"
+
+  clean_claude_legacy_and_caches
+
+  install_claude_skill "$tmp_dir"
+
+  info "Enabling Conductor plugin in $settings_path ..."
+  if ! python3 - "$settings_path" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        s = json.load(f)
+except FileNotFoundError:
+    s = {}
+except json.JSONDecodeError as e:
+    print(f"error: {path} is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+mkts = s.setdefault('extraKnownMarketplaces', {})
+mkts['conductor-skills'] = {
+    'source': {'source': 'github', 'repo': 'conductor-oss/conductor-skills'}
+}
+enabled = s.setdefault('enabledPlugins', {})
+enabled['conductor@conductor-skills'] = True
+
+tmp = path + '.tmp'
+with open(tmp, 'w') as f:
+    json.dump(s, f, indent=2)
+    f.write('\n')
+os.replace(tmp, path)
+PY
+  then
+    error "Failed to update $settings_path"
+    return 1
+  fi
+
+  ok "Configured: $settings_path"
   echo ""
-  echo "  /plugin marketplace add conductor-oss/conductor-skills"
-  echo "  /plugin install conductor@conductor-skills"
+  echo -e "${GREEN}${BOLD}Conductor installed two ways:${NC}"
   echo ""
-  info "Once installed, slash commands like /conductor, /conductor-setup,"
-  info "/conductor-optimize, and /conductor-scaffold-worker become available."
-  ok "Claude Code install instructions printed above."
+  echo "  1. ${BOLD}Skill${NC} at ~/.claude/skills/conductor/"
+  echo "     Files are there NOW. Skill auto-loads on next session start."
+  echo ""
+  echo "  2. ${BOLD}Plugin${NC} via settings.json (extraKnownMarketplaces + enabledPlugins)"
+  echo "     Claude Code fetches plugin v${VERSION} on next session start."
+  echo "     Provides slash commands: /conductor, /conductor-setup, /conductor-optimize, /conductor-scaffold-worker"
+  echo ""
+  echo -e "${YELLOW}${BOLD}⚠ Restart Claude Code to activate.${NC}"
+  echo "    • claude CLI:           exit (Ctrl+D) and start a new session"
+  echo "    • VS Code extension:    Cmd+Shift+P → \"Reload Window\""
+  echo "    • Desktop app:          quit and reopen"
+  echo ""
+  echo "  Verify after restart:"
+  echo "    ls ~/.claude/skills/conductor/                                   # skill files"
+  echo "    ls ~/.claude/plugins/cache/conductor-skills/conductor/${VERSION}/  # plugin files"
 }
 
 install_to_file() {
@@ -510,9 +638,9 @@ install_for_agent() {
   local tmp_dir="$5"
   local assembled="$6"
 
-  # Claude has its own install path
+  # Claude has its own install path (writes to settings.json + skill dir)
   if [ "$agent" = "claude" ]; then
-    install_claude
+    install_claude "$is_global" "$project_dir" "$tmp_dir"
     return $?
   fi
 
@@ -584,8 +712,52 @@ uninstall_agent() {
   local is_global="$3"
 
   if [ "$agent" = "claude" ]; then
-    info "To remove the Conductor skill from Claude Code, run:"
-    echo "  /plugin uninstall conductor@conductor-skills   (in your Claude Code session)"
+    local settings_path
+    if [ "$is_global" = "true" ]; then
+      settings_path="$HOME/.claude/settings.json"
+    else
+      settings_path="$project_dir/.claude/settings.json"
+    fi
+    if [ ! -f "$settings_path" ]; then
+      warn "Nothing to uninstall: $settings_path not found"
+      return
+    fi
+    if python3 - "$settings_path" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+with open(path) as f:
+    s = json.load(f)
+changed = False
+mkts = s.get('extraKnownMarketplaces') or {}
+if 'conductor-skills' in mkts:
+    mkts.pop('conductor-skills')
+    if not mkts:
+        s.pop('extraKnownMarketplaces', None)
+    changed = True
+enabled = s.get('enabledPlugins') or {}
+if 'conductor@conductor-skills' in enabled:
+    enabled.pop('conductor@conductor-skills')
+    if not enabled:
+        s.pop('enabledPlugins', None)
+    changed = True
+if changed:
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(s, f, indent=2)
+        f.write('\n')
+    os.replace(tmp, path)
+PY
+    then
+      ok "Removed Conductor entries from $settings_path"
+      # Also remove the user-skill copy
+      if [ -d "$HOME/.claude/skills/conductor" ]; then
+        rm -rf "$HOME/.claude/skills/conductor"
+        ok "Removed skill dir: $HOME/.claude/skills/conductor"
+      fi
+      clean_claude_legacy_and_caches
+    else
+      error "Failed to update $settings_path"
+    fi
     return
   fi
 
@@ -817,9 +989,16 @@ main() {
 
     # Idempotency check. --force re-installs anyway; --upgrade does not (matches
     # --check semantics: "already at latest" should be a no-op).
+    #
+    # Exception: claude always re-runs. Its "installed state" lives in two
+    # places — our manifest AND Claude Code's plugin cache. The manifest alone
+    # isn't authoritative; the cache can drift (e.g. user installed v1.0.0 via
+    # /plugin install, then we publish v1.6.0 — manifest matches but cache is
+    # stale). Always re-running the cache bust + settings.json upsert keeps
+    # upgrades honest. Cost: ~3 seconds added to next session start.
     local installed_ver
     installed_ver=$(read_manifest_version "$manifest" "$a")
-    if [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
+    if [ "$a" != "claude" ] && [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
       ok "${a} already at v${installed_ver}, skipping."
       skipped_count=$((skipped_count + 1))
       continue
@@ -854,10 +1033,19 @@ main() {
   done
 
   echo ""
-  echo -e "${GREEN}${BOLD}Done!${NC} Installed: ${installed_count}, Skipped: ${skipped_count}"
+  echo -e "${GREEN}${BOLD}Done!${NC} ${installed_count} configured, ${skipped_count} skipped (already up to date)."
   echo ""
   echo "Next steps:"
-  echo "  Ask your agent to connect to your Conductor server, e.g.:"
+  # If claude was among the agents, the in-place messaging from install_claude
+  # already covered the restart instructions. For non-claude agents, just point
+  # the user at connecting to their server.
+  local agents_str="${agents[*]}"
+  if [[ " $agents_str " == *" claude "* ]]; then
+    echo "  1. Restart Claude Code to load the plugin (see ACTION REQUIRED above)"
+    echo "  2. In the new session, ask your agent to connect to your Conductor server, e.g.:"
+  else
+    echo "  Ask your agent to connect to your Conductor server, e.g.:"
+  fi
   echo ""
   echo '     "Connect to my Conductor server at http://localhost:8080/api"'
   echo ""
