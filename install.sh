@@ -7,7 +7,7 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.6.3"
+VERSION="1.6.4"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging — the install scripts ride
 # along with whatever main is serving.
@@ -1010,11 +1010,19 @@ main() {
       info "Installing for ${BOLD}${a}${NC} ..."
     fi
 
-    # --upgrade implies force-overwrite at write-time (no `read -r` prompt,
-    # which breaks under `curl | bash`). The idempotency check above already
-    # gates whether we even reach this point.
+    # Write-time force semantics:
+    #   --force / --upgrade   → always force
+    #   manifest shows older  → force (clear upgrade; file is OURS, user
+    #     already consented to this install path on the original install).
+    # Without the third condition: `bash install.sh --all` against a v1.5.0
+    # install silently skipped every file because safe_write's `Overwrite? [y/N]`
+    # prompt got an empty answer from non-interactive stdin. That's the
+    # 1.5.0→1.6.x upgrade-no-op bug.
     local install_force="$force"
     [ "$upgrade" = "true" ] && install_force="true"
+    if [ -n "$installed_ver" ] && [ "$installed_ver" != "$target_version" ]; then
+      install_force="true"
+    fi
 
     # Perform install
     if install_for_agent "$a" "$project_dir" "$use_global" "$install_force" "$tmp_dir" "$assembled"; then

@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.6.3"
+$SCRIPT_VERSION = "1.6.4"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
@@ -837,10 +837,15 @@ try {
             Write-Info "Installing for $a ..."
         }
 
-        # -Upgrade implies force-overwrite at write-time so the upgrade flow
-        # doesn't strand on a Read-Host prompt under non-interactive shells.
+        # Write-time force semantics:
+        #   -Force / -Upgrade  → always
+        #   manifest shows older version → force (clear upgrade; file is OURS)
+        # Mirrors install.sh — the 1.5.0->1.6.x upgrade no-op happened because
+        # safe_write's Read-Host prompt got an empty answer on non-interactive
+        # stdin and silently skipped every file.
         $installForce = [bool]$Force
         if ($Upgrade) { $installForce = $true }
+        if ($installedVer -and ($installedVer -ne $targetVersion)) { $installForce = $true }
 
         # Perform install
         $result = Install-ForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal -ForceWrite $installForce -TmpDir $tmpDir -Assembled $assembled

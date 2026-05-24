@@ -347,6 +347,61 @@ for spec in "${SPECS[@]}"; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 3b. Upgrade-from-older-version path — file-based agents (the 1.5.0→1.6.x bug)
+#
+# Historical bug: `bash install.sh --all` against a v1.5.0 install ran the
+# "Upgrading codex from v1.5.0 to v1.6.3" log line but silently skipped the
+# actual file write — because safe_write's `Overwrite? [y/N]` prompt got an
+# empty answer from non-interactive stdin. Fix: when manifest says older
+# version, force-overwrite (file is ours, user already consented on install).
+# ─────────────────────────────────────────────────────────────────────────────
+step "Upgrade-from-older-version (file-based agents must actually overwrite)"
+
+for agent in codex gemini windsurf; do
+  UPGHOME="$SANDBOX/upg-$agent"
+  mkdir -p "$UPGHOME"
+
+  # Seed: manifest claims agent is at v1.5.0, AGENTS.md contains old marker text.
+  manifest="$UPGHOME/.conductor-skills/manifest.json"
+  mkdir -p "$(dirname "$manifest")"
+  cat > "$manifest" <<EOF
+{
+  "schema_version": 1,
+  "installations": {
+    "$agent": {
+      "version": "1.5.0",
+      "installed_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z",
+      "mode": "global",
+      "target_path": "/PLACEHOLDER"
+    }
+  }
+}
+EOF
+
+  case "$agent" in
+    codex)    target="$UPGHOME/.codex/AGENTS.md" ;;
+    gemini)   target="$UPGHOME/.gemini/GEMINI.md" ;;
+    windsurf) target="$UPGHOME/.codeium/windsurf/memories/global_rules.md" ;;
+  esac
+  mkdir -p "$(dirname "$target")"
+  echo "STALE-1.5.0-MARKER" > "$target"
+
+  # Run install WITHOUT --upgrade, WITHOUT --force — simulating real user
+  # running `npx ... --all` on an old install.
+  HOME="$UPGHOME" CONDUCTOR_SKILLS_LOCAL_DIR="$PKG_DIR" \
+    bash "$PKG_DIR/install.sh" --agent "$agent" --global </dev/null \
+    >"$UPGHOME/upgrade.log" 2>&1
+
+  assert "[$agent upgrade] file overwritten (no STALE-1.5.0-MARKER remains)" \
+    "! grep -q 'STALE-1.5.0-MARKER' '$target'"
+  assert "[$agent upgrade] file contains fresh skill content" \
+    "grep -q 'name: conductor' '$target'"
+  assert "[$agent upgrade] manifest now records new version" \
+    "grep -q '\"version\": \"$PKG_VERSION\"' '$manifest'"
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 3a. Claude upgrade path — stale legacy dir + old plugin cache must be busted
 # ─────────────────────────────────────────────────────────────────────────────
 step "Claude upgrade path (legacy skill dir + old cache must be cleaned)"
