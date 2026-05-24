@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.6.2"
+$SCRIPT_VERSION = "1.6.3"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"

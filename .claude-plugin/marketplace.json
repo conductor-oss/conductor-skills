@@ -14,7 +14,10 @@
         "name": "Conductor OSS"
       },
       "category": "devops",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "conductor-oss/conductor-skills"
+      },
       "homepage": "https://github.com/conductor-oss/conductor-skills",
       "tags": [
         "conductor",
