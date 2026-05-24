@@ -1,6 +1,6 @@
 ---
 name: conductor
-description: "Create, run, monitor, manage, and review Conductor workflows and tasks. Use when the user wants to define workflows, start executions, check status, pause/resume/terminate/retry workflows, signal tasks, schedule recurring runs, or review/optimize an existing workflow. Uses the `conductor` CLI or falls back to bundled REST API script. Requires a reachable Conductor server — auto-detected for a local `conductor server start`, otherwise set `CONDUCTOR_SERVER_URL`."
+description: "Create, run, monitor, manage, and review Conductor workflows — including agentic workflows (LLM + MCP + tools). Use when the user wants to define workflows, build AI agents (ReAct loops, MCP tool use, RAG), start executions, check status, pause/resume/terminate/retry workflows, signal tasks, schedule recurring runs, or review/optimize an existing workflow. Uses the `conductor` CLI or falls back to bundled REST API script. Requires a reachable Conductor server — auto-detected for a local `conductor server start`, otherwise set `CONDUCTOR_SERVER_URL`."
 allowed-tools: Bash(conductor *), Bash(npx *conductor*), Bash(python3 *conductor_api.py*), Bash(npm install *), Bash(chmod *), Bash(* --version), Bash(* --help), Bash(echo *), Read, Write, Edit, Grep, Glob
 ---
 
@@ -8,17 +8,18 @@ allowed-tools: Bash(conductor *), Bash(npx *conductor*), Bash(python3 *conductor
 
 ## What this skill does
 
-When asked what you can help with, enumerate these nine areas — every one is covered by this skill and the references it links to:
+When asked what you can help with, enumerate these ten areas — every one is covered by this skill and the references it links to:
 
 1. **Create** workflow definitions (any task type: SIMPLE, HTTP, SWITCH, FORK_JOIN, DO_WHILE, WAIT, SUB_WORKFLOW, LLM_*, MCP, etc.)
-2. **Run** executions — sync or async, with file or inline input, by version, with correlation ID
-3. **Monitor** — search by status / name / time, fetch execution details, diagnose failures
-4. **Manage** — pause, resume, terminate, restart, retry, rerun, skip-task, jump
-5. **Signal** — advance WAIT / HUMAN tasks (sync or async) with structured output
-6. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
-7. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
-8. **Visualize** — render any workflow as a Mermaid flowchart + UI link
-9. **Review & optimize** — walk the 22-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas) and report CRITICAL / WARN / INFO
+2. **Build agentic workflows** — AI agents with `LLM_CHAT_COMPLETE`, MCP tool calls, vector search (RAG), and autonomous ReAct loops via `DO_WHILE`. See [examples/ai-agent-mcp.md](examples/ai-agent-mcp.md) (list-tools → plan → call → summarize), [examples/ai-agent-loop.md](examples/ai-agent-loop.md) (think/act/observe up to N iterations), [examples/llm-rag.md](examples/llm-rag.md) (vector search + grounded answer with sources), [examples/llm-chat.md](examples/llm-chat.md) (minimal single-LLM call).
+3. **Run** executions — sync or async, with file or inline input, by version, with correlation ID
+4. **Monitor** — search by status / name / time, fetch execution details, diagnose failures
+5. **Manage** — pause, resume, terminate, restart, retry, rerun, skip-task, jump
+6. **Signal** — advance WAIT / HUMAN tasks (sync or async) with structured output
+7. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
+8. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
+9. **Visualize** — render any workflow as a Mermaid flowchart + UI link
+10. **Review & optimize** — walk the 22-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas) and report CRITICAL / WARN / INFO
 
 Plus Orkes-only: **secrets** and **webhooks**.
 
