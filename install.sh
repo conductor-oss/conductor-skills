@@ -7,7 +7,7 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.6.4"
+VERSION="1.6.5"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging — the install scripts ride
 # along with whatever main is serving.
@@ -136,7 +136,7 @@ EOF
 detect_agents() {
   local detected=()
 
-  command -v claude &>/dev/null && detected+=(claude)
+  { command -v claude &>/dev/null || [ -d "$HOME/.claude" ]; } && detected+=(claude)
   { command -v codex &>/dev/null || [ -d "$HOME/.codex" ]; } && detected+=(codex)
   { command -v gemini &>/dev/null || [ -d "$HOME/.gemini" ]; } && detected+=(gemini)
   [ -d "$HOME/.cursor" ] && detected+=(cursor)
@@ -149,7 +149,7 @@ detect_agents() {
   [ -d "$HOME/.roo" ] && detected+=(roo)
   { command -v amp &>/dev/null || [ -d "$HOME/.config/amp" ]; } && detected+=(amp)
 
-  echo "${detected[@]}"
+  echo "${detected[@]:-}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
