@@ -2,3 +2,11 @@
 .idea/
 *.tgz
 node_modules/
+
+# Local Claude Code settings (machine-specific paths, per-developer permissions)
+.claude/
+
+# Artifacts left behind when install.sh is run from the repo root during testing
+# (single-agent project install defaults to the current directory)
+AGENTS.md
+.conductor-skills/

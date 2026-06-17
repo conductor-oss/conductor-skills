@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.6.5"
+$SCRIPT_VERSION = "1.6.6"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
@@ -83,7 +83,7 @@ function Detect-Agents {
     $detected = @()
     $installDir = $env:USERPROFILE
 
-    if (Get-Command claude -ErrorAction SilentlyContinue) { $detected += "claude" }
+    if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".claude"))) { $detected += "claude" }
     if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".codex"))) { $detected += "codex" }
     if ((Get-Command gemini -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".gemini"))) { $detected += "gemini" }
     if (Test-Path (Join-Path $installDir ".cursor")) { $detected += "cursor" }

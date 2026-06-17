@@ -546,6 +546,10 @@ else
   USER_HOME="$SANDBOX/user-home"
   PREFIX="$SANDBOX/npm-prefix"
   mkdir -p "$USER_HOME" "$PREFIX"
+  # Seed ~/.claude so `--all` detects claude via the directory fallback rather
+  # than relying on a `claude` binary being on the host PATH. Without this the
+  # smoke test only passes on machines where the Claude CLI is installed.
+  mkdir -p "$USER_HOME/.claude"
 
   info "npm install -g --prefix=$PREFIX $TARBALL_NAME"
   npm install -g --prefix="$PREFIX" "$TARBALL" >"$SANDBOX/npm-install.log" 2>&1
