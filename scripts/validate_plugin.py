@@ -120,7 +120,7 @@ def main() -> int:
             fail("marketplace.json: a plugin entry has no 'name'")
             continue
 
-        # `source` is a relative path string ("./" means the repo itself).
+        # `source` is relative to the marketplace root. "./" means the repo itself.
         source_dir = (ROOT / source).resolve() if source else ROOT
         if not source_dir.exists() or not source_dir.is_dir():
             fail(f"plugin {name!r}: source {source!r} does not resolve to a directory")
