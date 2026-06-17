@@ -127,23 +127,16 @@ for i, p in enumerate(m.get('plugins', [])):
         # String form must begin with './' to be recognized as a relative path.
         # The exact bug we hit in 1.6.1: source="." (no slash) caused
         # "source type your Claude Code version does not support".
-        # Empirically: bare './' is accepted as JSON-valid but rejected by Claude
-        # Code's plugin loader as "Plugin not found in marketplace". String sources
-        # MUST point to a subdirectory (./<name>). For a single-plugin repo where
-        # the plugin IS the marketplace root, use object form with source='github'.
+        # Bare './' (the marketplace root) IS valid: for a single-plugin repo
+        # where the plugin IS the marketplace root, './' is the canonical form
+        # (verified installing on Claude Code 2.1.179; same form used by other
+        # single-plugin marketplaces). It also avoids a redundant network clone
+        # that the object 'github' form triggers — and the SSH-rewrite failures
+        # that clone causes for users with url.insteadOf git configs.
         if not src.startswith('./'):
             errors.append(
-                f"{label}: source string {src!r} must start with './' (e.g. './plugins/foo')"
-            )
-        elif src in ('./', './.'):
-            errors.append(
-                f"{label}: source {src!r} is bare-root — Claude Code rejects this as "
-                f"'Plugin not found in marketplace'. Use a subdirectory path like "
-                f"'./plugin' OR object form {{'source':'github','repo':'OWNER/REPO'}}."
-            )
-        elif not re.match(r'^\./[A-Za-z0-9_.-]+', src):
-            errors.append(
-                f"{label}: source {src!r} must be './<name>' with a path component"
+                f"{label}: source string {src!r} must start with './' "
+                f"(e.g. './' for the repo root, or './plugins/foo' for a subdir)"
             )
     elif isinstance(src, dict):
         kind = src.get('source')
