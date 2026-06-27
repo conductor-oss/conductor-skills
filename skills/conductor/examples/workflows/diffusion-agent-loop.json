@@ -1,0 +1,105 @@
+{
+  "name": "diffusion_agent",
+  "schemaVersion": 2,
+  "inputParameters": ["question", "max_iterations"],
+  "variables": { "messages": [], "final_response": "" },
+  "tasks": [
+    {
+      "name": "init_messages",
+      "taskReferenceName": "init_messages",
+      "type": "SET_VARIABLE",
+      "inputParameters": {
+        "messages": [
+          {"role": "system", "message": "You are an agent powered by a diffusion LLM. Tools available: get_weather(city). Respond ONLY as JSON: {\"action\": \"call_tool\", \"tool\": \"get_weather\", \"args\": {...}} OR {\"action\": \"answer\", \"answer\": \"...\"}. Emit raw JSON with no markdown fences."},
+          {"role": "user", "message": "${workflow.input.question}"}
+        ]
+      }
+    },
+    {
+      "name": "agent_loop",
+      "taskReferenceName": "agent_loop",
+      "type": "DO_WHILE",
+      "evaluatorType": "graaljs",
+      "loopCondition": "(function(){ return $.agent_loop['iteration'] < $.max_iterations && $.final_response === ''; })();",
+      "inputParameters": {
+        "agent_loop": "${agent_loop.output}",
+        "max_iterations": "${workflow.input.max_iterations}",
+        "final_response": "${workflow.variables.final_response}"
+      },
+      "loopOver": [
+        {
+          "name": "think",
+          "taskReferenceName": "think",
+          "type": "LLM_CHAT_COMPLETE",
+          "inputParameters": {
+            "llmProvider": "inception",
+            "model": "mercury-2",
+            "messages": "${workflow.variables.messages}",
+            "temperature": 0.1,
+            "maxTokens": 500,
+            "jsonOutput": true
+          }
+        },
+        {
+          "name": "route",
+          "taskReferenceName": "route",
+          "type": "SWITCH",
+          "evaluatorType": "graaljs",
+          "expression": "$.action",
+          "inputParameters": { "action": "${think.output.result.action}" },
+          "decisionCases": {
+            "call_tool": [
+              {
+                "name": "call_weather",
+                "taskReferenceName": "call_weather",
+                "type": "HTTP",
+                "optional": true,
+                "inputParameters": {
+                  "http_request": {
+                    "uri": "https://wttr.in/${think.output.result.args.city}?format=j1",
+                    "method": "GET"
+                  }
+                }
+              },
+              {
+                "name": "build_next_messages",
+                "taskReferenceName": "build_next_messages",
+                "type": "JSON_JQ_TRANSFORM",
+                "inputParameters": {
+                  "current": "${workflow.variables.messages}",
+                  "tool_result": "${call_weather.output.response.body}",
+                  "queryExpression": ".current + [{\"role\": \"assistant\", \"message\": \"Called get_weather.\"}, {\"role\": \"user\", \"message\": (\"Tool result: \" + (.tool_result | tojson))}]"
+                }
+              },
+              {
+                "name": "update_messages",
+                "taskReferenceName": "update_messages",
+                "type": "SET_VARIABLE",
+                "inputParameters": {
+                  "messages": "${build_next_messages.output.result}"
+                }
+              }
+            ],
+            "answer": [
+              {
+                "name": "finalize",
+                "taskReferenceName": "finalize",
+                "type": "SET_VARIABLE",
+                "inputParameters": {
+                  "final_response": "${think.output.result.answer}"
+                }
+              }
+            ]
+          },
+          "defaultCase": []
+        }
+      ]
+    }
+  ],
+  "outputParameters": {
+    "answer": "${workflow.variables.final_response}",
+    "iterations": "${agent_loop.output.iteration}"
+  },
+  "timeoutSeconds": 600,
+  "timeoutPolicy": "TIME_OUT_WF"
+}
