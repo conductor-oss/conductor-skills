@@ -11,7 +11,7 @@ allowed-tools: Bash(conductor *), Bash(npx *conductor*), Bash(python3 *conductor
 When asked what you can help with, enumerate these ten areas — every one is covered by this skill and the references it links to:
 
 1. **Create** workflow definitions (any task type: SIMPLE, HTTP, SWITCH, FORK_JOIN, DO_WHILE, WAIT, SUB_WORKFLOW, LLM_*, MCP, etc.)
-2. **Build agentic workflows** — AI agents with `LLM_CHAT_COMPLETE`, MCP tool calls, vector search (RAG), and autonomous ReAct loops via `DO_WHILE`. See [examples/ai-agent-mcp.md](examples/ai-agent-mcp.md) (list-tools → plan → call → summarize), [examples/ai-agent-loop.md](examples/ai-agent-loop.md) (think/act/observe up to N iterations), [examples/llm-rag.md](examples/llm-rag.md) (vector search + grounded answer with sources), [examples/llm-chat.md](examples/llm-chat.md) (minimal single-LLM call).
+2. **Build agentic workflows** — AI agents with `LLM_CHAT_COMPLETE`, MCP tool calls, vector search (RAG), and autonomous ReAct loops via `DO_WHILE`. See [examples/ai-agent-mcp.md](examples/ai-agent-mcp.md) (list-tools → plan → call → summarize), [examples/ai-agent-loop.md](examples/ai-agent-loop.md) (think/act/observe up to N iterations), [examples/diffusion-agent-loop.md](examples/diffusion-agent-loop.md) (same loop driven by a diffusion LLM — Inception Mercury), [examples/llm-rag.md](examples/llm-rag.md) (vector search + grounded answer with sources), [examples/llm-chat.md](examples/llm-chat.md) (minimal single-LLM call).
 3. **Run** executions — sync or async, with file or inline input, by version, with correlation ID
 4. **Monitor** — search by status / name / time, fetch execution details, diagnose failures
 5. **Manage** — pause, resume, terminate, restart, retry, rerun, skip-task, jump
