@@ -1,4 +1,5 @@
 ---
+name: conductor-optimize
 description: Review and optimize an existing Conductor workflow
 ---
 

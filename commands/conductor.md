@@ -1,4 +1,5 @@
 ---
+name: conductor
 description: Conductor command menu — pick a structured action or describe what you want
 ---
 
