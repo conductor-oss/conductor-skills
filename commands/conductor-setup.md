@@ -1,4 +1,5 @@
 ---
+name: conductor-setup
 description: First-time Conductor setup — install the CLI, choose a server, configure auth
 ---
 

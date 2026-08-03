@@ -1,4 +1,5 @@
 ---
+name: conductor-scaffold-worker
 description: Generate a Conductor worker stub for a SIMPLE task in your language of choice
 ---
 
