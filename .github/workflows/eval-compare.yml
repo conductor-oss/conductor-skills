@@ -25,7 +25,7 @@ on:
       judge:
         description: 'Judge model'
         required: false
-        default: 'claude-sonnet-4-20250514'
+        default: 'claude-sonnet-5'
 
   pull_request:
     types: [labeled]
@@ -49,7 +49,7 @@ jobs:
             JUDGE="${{ inputs.judge }}"
           else
             MODELS="claude-sonnet-4-6,gpt-5.4,gemini-3-flash-preview"
-            JUDGE="claude-sonnet-4-20250514"
+            JUDGE="claude-sonnet-5"
           fi
           # Convert "a,b,c" → '["a","b","c"]' for matrix consumption
           JSON=$(echo "$MODELS" | python3 -c "import sys,json; print(json.dumps([m.strip() for m in sys.stdin.read().split(',') if m.strip()]))")
