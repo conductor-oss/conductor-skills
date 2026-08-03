@@ -21,7 +21,7 @@
       "keywords": ["conductor", "workflow", "orchestration", "microservices"],
       "author": {
         "name": "Conductor OSS",
-        "email": "conductor-oss@users.noreply.github.com"
+        "email": "developers@orkes.io"
       }
     }
   ]

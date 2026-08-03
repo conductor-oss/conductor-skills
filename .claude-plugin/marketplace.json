@@ -4,7 +4,7 @@
   "description": "Skills for orchestrating workflows with Conductor",
   "owner": {
     "name": "Conductor OSS",
-    "email": "conductor-oss@users.noreply.github.com"
+    "email": "developers@orkes.io"
   },
   "plugins": [
     {
