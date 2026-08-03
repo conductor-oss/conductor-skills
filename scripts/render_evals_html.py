@@ -225,7 +225,7 @@ def render(reports, title="Conductor Skill — Eval Report"):
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-  <div class="sub">Generated {now} · Models: {metas} · Judge: <code>{html.escape(reports[0]['judge'] or 'claude-sonnet-4-20250514')}</code></div>
+  <div class="sub">Generated {now} · Models: {metas} · Judge: <code>{html.escape(reports[0]['judge'] or 'claude-sonnet-5')}</code></div>
 
   <h2>Summary</h2>
   <div class="cards">{''.join(cards)}</div>

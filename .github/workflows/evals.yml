@@ -21,7 +21,7 @@ on:
       judge:
         description: 'Judge model'
         required: false
-        default: 'claude-sonnet-4-20250514'
+        default: 'claude-sonnet-5'
 
   schedule:
     # Sundays 08:00 UTC — weekly regression check
@@ -63,7 +63,7 @@ jobs:
             echo "judge=${{ inputs.judge }}"   >> "$GITHUB_OUTPUT"
           else
             echo "model=claude-sonnet-4-6"               >> "$GITHUB_OUTPUT"
-            echo "judge=claude-sonnet-4-20250514"        >> "$GITHUB_OUTPUT"
+            echo "judge=claude-sonnet-5"        >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate plugin (must pass before spending API tokens)

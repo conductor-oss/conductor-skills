@@ -17,7 +17,7 @@ Usage:
     python3 scripts/run_evals.py --provider openai --model ft:gpt-4o:my-org
 
     # Use a different provider for the judge
-    python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-4-20250514
+    python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-5
 
     # Run specific eval(s)
     python3 scripts/run_evals.py evaluations/install-and-connect.json
@@ -42,8 +42,8 @@ from pathlib import Path
 # Config
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
-JUDGE_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-5"
+JUDGE_MODEL = "claude-sonnet-5"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = PROJECT_ROOT / "skills" / "conductor"
 EVAL_DIR = PROJECT_ROOT / "evaluations"
