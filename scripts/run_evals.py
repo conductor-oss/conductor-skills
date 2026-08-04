@@ -153,7 +153,19 @@ def call_anthropic(api_key, model, system, user_message, max_tokens=4096):
         "messages": [{"role": "user", "content": user_message}],
     }).encode()
     data = _api_call(PROVIDER_URLS["anthropic"], headers, body)
-    return data["content"][0]["text"]
+    text_blocks = [
+        block.get("text", "")
+        for block in data.get("content", [])
+        if block.get("type") == "text"
+    ]
+    if not text_blocks:
+        print(
+            f"  [WARN] Anthropic returned no text block. "
+            f"stop_reason={data.get('stop_reason')!r}, content_types="
+            f"{[b.get('type') for b in data.get('content', [])]!r}",
+            file=sys.stderr,
+        )
+    return "".join(text_blocks)
 
 
 def call_openai(api_key, model, system, user_message, max_tokens=4096):
@@ -342,7 +354,7 @@ Evaluate each success criterion. Return JSON only."""
     if verbose:
         print(f"  [JUDGE] Evaluating with {judge_provider}:{judge_model}...")
 
-    raw = call_llm(judge_provider, api_key, judge_model, system, user_msg)
+    raw = call_llm(judge_provider, api_key, judge_model, system, user_msg, max_tokens=8192)
 
     # Extract JSON from response (handle markdown code blocks)
     text = raw.strip()
