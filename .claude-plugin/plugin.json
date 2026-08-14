@@ -4,9 +4,10 @@
   "version": "1.6.6",
   "author": {
     "name": "Conductor OSS",
-    "email": "developers@orkes.io"
+    "email": "developers@orkes.io",
+    "url": "https://orkes.io"
   },
-  "homepage": "https://github.com/conductor-oss/conductor-skills",
+  "homepage": "https://conductor-oss.org/",
   "repository": "https://github.com/conductor-oss/conductor-skills",
   "license": "Apache-2.0",
   "keywords": ["conductor", "workflow", "orchestration", "microservices"]
