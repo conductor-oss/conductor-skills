@@ -864,10 +864,86 @@ PY
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Grouped install summary
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Physical install locations recorded during a run. Several agents can share
+# one location (.agents/skills). Parallel indexed arrays — macOS ships bash
+# 3.2, which has no associative arrays.
+GROUP_PATHS=()
+GROUP_AGENTS=()
+COVERED_AGENTS=""
+
+record_group() {
+  local path="$1"
+  local agent="$2"
+
+  # copilot / amp have no location of their own — they ride the shared dir
+  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+    if [ -z "$COVERED_AGENTS" ]; then
+      COVERED_AGENTS="$agent"
+    else
+      COVERED_AGENTS="$COVERED_AGENTS, $agent"
+    fi
+    return
+  fi
+
+  local i
+  if [ "${#GROUP_PATHS[@]}" -gt 0 ]; then
+    for i in "${!GROUP_PATHS[@]}"; do
+      if [ "${GROUP_PATHS[$i]}" = "$path" ]; then
+        GROUP_AGENTS[$i]="${GROUP_AGENTS[$i]}, $agent"
+        return
+      fi
+    done
+  fi
+  GROUP_PATHS+=("$path")
+  GROUP_AGENTS+=("$agent")
+}
+
+print_group_summary() {
+  if [ "${#GROUP_PATHS[@]}" -eq 0 ]; then
+    return
+  fi
+  echo -e "${BOLD}Install locations:${NC}"
+  local i line
+  for i in "${!GROUP_PATHS[@]}"; do
+    line="  ${GROUP_PATHS[$i]} → ${GROUP_AGENTS[$i]}"
+    case "${GROUP_PATHS[$i]}" in
+      */.agents/skills/conductor)
+        [ -n "$COVERED_AGENTS" ] && line="$line (+ ${COVERED_AGENTS})"
+        ;;
+    esac
+    echo "$line"
+  done
+}
+
+# The location an agent's install lands at, mirroring install_for_agent's
+# routing. Used for the grouped summary — claude shows its skill dir, not
+# the settings.json the manifest tracks.
+display_path_for_agent() {
+  local agent="$1"
+  local project_dir="$2"
+  local is_global="$3"
+
+  if [ "$agent" = "claude" ]; then
+    echo "$HOME/.claude/skills/conductor"
+  elif [ "$is_global" = "true" ]; then
+    get_global_path "$agent"
+  else
+    get_target_path "$agent" "$project_dir"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Check mode (dry run)
 # ─────────────────────────────────────────────────────────────────────────────
 
 do_check() {
+  local global="$1"
+  local all="$2"
+  local project_dir="$3"
+  shift 3
   local agents=("$@")
 
   local manifest
@@ -896,6 +972,28 @@ do_check() {
       echo -e "  ${BLUE}●${NC} $agent  (not installed)  global: $global_support"
     fi
   done
+  echo ""
+
+  # Same grouped view the real install prints at the end
+  for agent in "${agents[@]}"; do
+    if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+      record_group "" "$agent"
+      continue
+    fi
+    local use_global="$global"
+    if [ "$all" = "true" ]; then
+      if supports_global "$agent"; then
+        use_global="true"
+      else
+        continue
+      fi
+    fi
+    if [ "$use_global" = "true" ] && ! supports_global "$agent"; then
+      continue
+    fi
+    record_group "$(display_path_for_agent "$agent" "$project_dir" "$use_global")" "$agent"
+  done
+  print_group_summary
   echo ""
 }
 
@@ -972,7 +1070,7 @@ main() {
 
   # Check mode — dry run
   if [ "$check" = "true" ]; then
-    do_check "${agents[@]}"
+    do_check "$global" "$all" "$project_dir" "${agents[@]}"
     exit 0
   fi
 
@@ -1039,6 +1137,7 @@ main() {
     # shared skill dir covers them, nothing agent-specific to write.
     if [ "$a" = "copilot" ] || [ "$a" = "amp" ]; then
       ok "${a}: covered by the .agents/skills install — nothing to write."
+      record_group "" "$a"
       skipped_count=$((skipped_count + 1))
       continue
     fi
@@ -1074,6 +1173,7 @@ main() {
     installed_ver=$(read_manifest_version "$manifest" "$a")
     if [ "$a" != "claude" ] && [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
       ok "${a} already at v${installed_ver}, skipping."
+      record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       skipped_count=$((skipped_count + 1))
       continue
     fi
@@ -1110,10 +1210,13 @@ main() {
       local mode
       if [ "$use_global" = "true" ]; then mode="global"; else mode="project"; fi
       write_manifest_entry "$manifest" "$a" "$target_version" "$mode" "$target_path"
+      record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       installed_count=$((installed_count + 1))
     fi
   done
 
+  echo ""
+  print_group_summary
   echo ""
   echo -e "${GREEN}${BOLD}Done!${NC} ${installed_count} configured, ${skipped_count} skipped (already up to date)."
   echo ""
