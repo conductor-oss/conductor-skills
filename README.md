@@ -314,7 +314,7 @@ Or upgrade a single agent: `--agent <name> --upgrade`
 | [Amp](https://ampcode.com) | `amp` | covered via `~/.agents/skills/` | covered via `.agents/skills/` |
 | [OpenCode](https://opencode.ai) | `opencode` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 
-Codex, Gemini, Cursor, and OpenCode all read the cross-agent `.agents/skills/` standard directory — one shared install covers all four. GitHub Copilot and Amp read the same directory natively, so they need no install of their own. The skill ships as an intact directory (SKILL.md + `references/` + `examples/` + `scripts/`), loaded on demand instead of injected into every session.
+Codex, Gemini, Cursor, and OpenCode share one `.agents/skills/` install; GitHub Copilot and Amp read the same directory, so they need no install of their own.
 
 ---
 ## Uninstall

@@ -166,8 +166,6 @@ function Remove-ManifestEntry {
     } catch {}
 }
 
-# Agents in the manifest (other than $AgentName) whose target_path is $Path —
-# the refcount behind shared skill-dir uninstalls.
 function Get-ManifestAgentsForPath {
     param([string]$ManifestPath, [string]$AgentName, [string]$Path)
     if (!(Test-Path $ManifestPath)) { return @() }
@@ -311,8 +309,6 @@ function Get-GlobalPath {
     $installDir = $env:USERPROFILE
     switch ($AgentName) {
         "claude"   { return Join-Path $installDir ".claude\settings.json" }
-        # Cross-agent skills standard dir — codex (canonical), gemini (alias),
-        # cursor and opencode (both read it). One install covers all four.
         {$_ -in @("codex","gemini","cursor","opencode")} { return Join-Path $installDir ".agents\skills\conductor" }
         "cline"    { return Join-Path $installDir ".cline\skills\conductor" }
         "windsurf" { return Join-Path $installDir ".codeium\windsurf\memories\global_rules.md" }
@@ -377,9 +373,6 @@ function Clear-ClaudeLegacyAndCaches {
     }
 }
 
-# Install the intact skill directory (SKILL.md + references/ + examples/ +
-# scripts/) to a destination directory. Source files come from $TmpDir
-# (downloaded from GitHub) or $LOCAL_DIR (bundled with the npm package).
 function Install-SkillDir {
     param([string]$DestDir, [string]$TmpDir)
 
@@ -404,9 +397,6 @@ function Install-SkillDir {
     return $true
 }
 
-# Dest dirs already mirrored during this run. Several agents share
-# .agents/skills — the dir is written once, later agents only get their
-# manifest entry.
 $script:MirroredDirs = @()
 
 function Install-SkillDirOnce {
@@ -439,8 +429,6 @@ function Install-Claude {
 
     Clear-ClaudeLegacyAndCaches
 
-    # User-skill at ~/.claude/skills/conductor — visible to the user
-    # immediately and auto-loaded by Claude Code at session start.
     Install-SkillDir -DestDir (Join-Path $env:USERPROFILE ".claude\skills\conductor") -TmpDir $TmpDir | Out-Null
 
     Write-Info "Enabling Conductor plugin in $settingsPath ..."
@@ -567,13 +555,11 @@ function Install-ForAgent {
         return Install-Claude -IsGlobal $IsGlobal -ProjDir $ProjDir -TmpDir $TmpDir
     }
 
-    # Skill-dir agents get the intact skill directory at their native location.
     if ($AgentName -in @("codex","gemini","cursor","opencode","cline")) {
         $dest = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
         return Install-SkillDirOnce -DestDir $dest -TmpDir $TmpDir
     }
-    # Project installs get the skill dir. Global keeps the memories blob —
-    # windsurf has no global skills dir.
+    # windsurf has no global skills dir — global keeps the memories blob
     if ($AgentName -eq "windsurf" -and -not $IsGlobal) {
         return Install-SkillDirOnce -DestDir (Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir) -TmpDir $TmpDir
     }
@@ -607,16 +593,11 @@ function Install-ForAgent {
 function Uninstall-Agent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [string]$ManifestPath)
 
-    # copilot and amp never get their own install — the .agents/skills dir
-    # covers them. Blob files from older installer versions are left untouched.
     if ($AgentName -in @("copilot","amp")) {
         Write-Info "${AgentName}: nothing to uninstall — covered by the .agents/skills install."
         return
     }
 
-    # Skill-dir agents: several agents can share one dir (.agents/skills).
-    # Remove the dir only when no other manifest entry still references it;
-    # otherwise only this agent's manifest entry goes.
     $skillDir = ""
     if ($AgentName -in @("codex","gemini","cursor","opencode","cline")) {
         $skillDir = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
@@ -724,8 +705,6 @@ function Uninstall-Agent {
 # Grouped install summary
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Physical install locations recorded during a run. Several agents can share
-# one location (.agents/skills).
 $script:GroupPaths = @()
 $script:GroupAgents = @()
 $script:CoveredAgents = @()
@@ -733,7 +712,6 @@ $script:CoveredAgents = @()
 function Record-Group {
     param([string]$Path, [string]$AgentName)
 
-    # copilot / amp have no location of their own — they ride the shared dir
     if ($AgentName -in @("copilot","amp")) {
         $script:CoveredAgents += $AgentName
         return
@@ -762,9 +740,6 @@ function Print-GroupSummary {
     }
 }
 
-# The location an agent's install lands at, mirroring Install-ForAgent's
-# routing. Claude shows its skill dir, not the settings.json the manifest
-# tracks.
 function Get-DisplayPathForAgent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal)
     if ($AgentName -eq "claude") { return Join-Path $env:USERPROFILE ".claude\skills\conductor" }
@@ -804,7 +779,6 @@ function Do-Check {
     }
     Write-Host ""
 
-    # Same grouped view the real install prints at the end
     foreach ($a in $Agents) {
         if ($a -in @("copilot","amp")) {
             Record-Group -Path "" -AgentName $a
@@ -925,8 +899,6 @@ try {
     foreach ($a in $agentList) {
         Write-Host ""
 
-        # copilot and amp read .agents/skills natively in both scopes — the
-        # shared skill dir covers them, nothing agent-specific to write.
         if ($a -in @("copilot","amp")) {
             Write-Ok "${a}: covered by the .agents/skills install — nothing to write."
             Record-Group -Path "" -AgentName $a

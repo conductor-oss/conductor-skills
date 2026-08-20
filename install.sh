@@ -237,8 +237,6 @@ json.dump(m, open('$manifest','w'), indent=2)
 " 2>/dev/null
 }
 
-# Agents in the manifest (other than $agent) whose target_path is $path —
-# the refcount behind shared skill-dir uninstalls.
 list_manifest_agents_for_path() {
   local manifest="$1"
   local agent="$2"
@@ -412,8 +410,6 @@ get_global_path() {
   local agent="$1"
   case "$agent" in
     claude)   echo "$HOME/.claude/settings.json" ;;
-    # Cross-agent skills standard dir — codex (canonical), gemini (alias),
-    # cursor and opencode (both read it). One install covers all four.
     codex|gemini|cursor|opencode) echo "$HOME/.agents/skills/conductor" ;;
     cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
@@ -484,9 +480,6 @@ PY
   fi
 }
 
-# Install the intact skill directory (SKILL.md + references/ + examples/ +
-# scripts/) to a destination directory. Source files come from $tmp_dir
-# (downloaded from GitHub) or $LOCAL_DIR (bundled with the npm package).
 install_skill_dir() {
   local dest_dir="$1"
   local tmp_dir="$2"
@@ -531,9 +524,6 @@ install_claude() {
 
   clean_claude_legacy_and_caches
 
-  # User-skill at ~/.claude/skills/conductor — the "good old" skill location
-  # that's visible to the user immediately and auto-loaded by Claude Code at
-  # session start (no marketplace fetch needed).
   install_skill_dir "$HOME/.claude/skills/conductor" "$tmp_dir"
 
   info "Enabling Conductor plugin in $settings_path ..."
@@ -647,9 +637,6 @@ install_aider_to_dir() {
   fi
 }
 
-# Dest dirs already mirrored during this run. Several agents share
-# .agents/skills — the dir is written once, later agents only get their
-# manifest entry.
 MIRRORED_DIRS=""
 
 install_skill_dir_once() {
@@ -682,7 +669,6 @@ install_for_agent() {
     return $?
   fi
 
-  # Skill-dir agents get the intact skill directory at their native location.
   case "$agent" in
     codex|gemini|cursor|opencode|cline)
       local dest
@@ -695,8 +681,7 @@ install_for_agent() {
       return $?
       ;;
     windsurf)
-      # Project installs get the skill dir. Global keeps the memories blob —
-      # windsurf has no global skills dir.
+      # windsurf has no global skills dir — global keeps the memories blob
       if [ "$is_global" != "true" ]; then
         install_skill_dir_once "$(get_target_path "$agent" "$project_dir")" "$tmp_dir"
         return $?
@@ -738,16 +723,11 @@ uninstall_agent() {
   local is_global="$3"
   local manifest="$4"
 
-  # copilot and amp never get their own install — the .agents/skills dir
-  # covers them. Blob files from older installer versions are left untouched.
   if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
     info "${agent}: nothing to uninstall — covered by the .agents/skills install."
     return
   fi
 
-  # Skill-dir agents: several agents can share one dir (.agents/skills).
-  # Remove the dir only when no other manifest entry still references it;
-  # otherwise only this agent's manifest entry goes.
   local skill_dir=""
   case "$agent" in
     codex|gemini|cursor|opencode|cline)
@@ -867,9 +847,7 @@ PY
 # Grouped install summary
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Physical install locations recorded during a run. Several agents can share
-# one location (.agents/skills). Parallel indexed arrays — macOS ships bash
-# 3.2, which has no associative arrays.
+# Parallel arrays — macOS ships bash 3.2, no associative arrays
 GROUP_PATHS=()
 GROUP_AGENTS=()
 COVERED_AGENTS=""
@@ -878,7 +856,6 @@ record_group() {
   local path="$1"
   local agent="$2"
 
-  # copilot / amp have no location of their own — they ride the shared dir
   if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
     if [ -z "$COVERED_AGENTS" ]; then
       COVERED_AGENTS="$agent"
@@ -918,9 +895,6 @@ print_group_summary() {
   done
 }
 
-# The location an agent's install lands at, mirroring install_for_agent's
-# routing. Used for the grouped summary — claude shows its skill dir, not
-# the settings.json the manifest tracks.
 display_path_for_agent() {
   local agent="$1"
   local project_dir="$2"
@@ -974,7 +948,6 @@ do_check() {
   done
   echo ""
 
-  # Same grouped view the real install prints at the end
   for agent in "${agents[@]}"; do
     if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
       record_group "" "$agent"
@@ -1133,8 +1106,6 @@ main() {
   for a in "${agents[@]}"; do
     echo ""
 
-    # copilot and amp read .agents/skills natively in both scopes — the
-    # shared skill dir covers them, nothing agent-specific to write.
     if [ "$a" = "copilot" ] || [ "$a" = "amp" ]; then
       ok "${a}: covered by the .agents/skills install — nothing to write."
       record_group "" "$a"
