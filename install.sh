@@ -395,7 +395,6 @@ get_global_path() {
     cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
-    amp)      echo "$HOME/.config/AGENTS.md" ;;
     aider)    echo "$HOME/.aider.conf.yml" ;;
   esac
 }
@@ -410,10 +409,8 @@ get_target_path() {
     windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
     cline)    echo "$project_dir/.cline/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
-    copilot)  echo "$project_dir/.github/copilot-instructions.md" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
     roo)      echo "$project_dir/.roo/rules/conductor.md" ;;
-    amp)      echo "$project_dir/.amp/instructions.md" ;;
   esac
 }
 
@@ -698,17 +695,11 @@ install_for_agent() {
       aider)
         install_aider_to_dir "$project_dir/.conductor-skills" "$tmp_dir" "$project_dir/.aider.conf.yml" ".conductor-skills/"
         ;;
-      copilot)
-        install_to_file "$project_dir/.github/copilot-instructions.md" "$assembled" "$force"
-        ;;
       amazonq)
         install_to_file "$project_dir/.amazonq/rules/conductor.md" "$assembled" "$force"
         ;;
       roo)
         install_to_file "$project_dir/.roo/rules/conductor.md" "$assembled" "$force"
-        ;;
-      amp)
-        install_to_file "$project_dir/.amp/instructions.md" "$assembled" "$force"
         ;;
     esac
   fi
@@ -722,6 +713,13 @@ uninstall_agent() {
   local agent="$1"
   local project_dir="$2"
   local is_global="$3"
+
+  # copilot and amp never get their own install — the .agents/skills dir
+  # covers them. Blob files from older installer versions are left untouched.
+  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+    info "${agent}: nothing to uninstall — covered by the .agents/skills install."
+    return
+  fi
 
   if [ "$agent" = "claude" ]; then
     local settings_path
@@ -980,6 +978,14 @@ main() {
 
   for a in "${agents[@]}"; do
     echo ""
+
+    # copilot and amp read .agents/skills natively in both scopes — the
+    # shared skill dir covers them, nothing agent-specific to write.
+    if [ "$a" = "copilot" ] || [ "$a" = "amp" ]; then
+      ok "${a}: covered by the .agents/skills install — nothing to write."
+      skipped_count=$((skipped_count + 1))
+      continue
+    fi
 
     # Determine if global for this agent
     local use_global="$global"
