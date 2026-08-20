@@ -426,7 +426,7 @@ get_target_path() {
 
 # Bust plugin caches so existing Claude installs actually pick up new content.
 # Note: we do NOT delete ~/.claude/skills/conductor — that's the user-skill
-# install location, populated by install_claude_skill below. We *overwrite*
+# install location, populated by install_skill_dir below. We *overwrite*
 # it with fresh content on each install instead.
 clean_claude_legacy_and_caches() {
   local cache="$HOME/.claude/plugins/cache/conductor-skills"
@@ -467,14 +467,12 @@ PY
   fi
 }
 
-# Install Conductor as a user-skill at ~/.claude/skills/conductor — the
-# "good old" skill location that's visible to the user immediately and
-# auto-loaded by Claude Code at session start (no marketplace fetch needed).
-# Source files come from $tmp_dir (downloaded from GitHub) or $LOCAL_DIR
-# (bundled with the npm package).
-install_claude_skill() {
-  local tmp_dir="$1"
-  local skill_dest="$HOME/.claude/skills/conductor"
+# Install the intact skill directory (SKILL.md + references/ + examples/ +
+# scripts/) to a destination directory. Source files come from $tmp_dir
+# (downloaded from GitHub) or $LOCAL_DIR (bundled with the npm package).
+install_skill_dir() {
+  local dest_dir="$1"
+  local tmp_dir="$2"
   local src_dir
 
   if [ -n "$LOCAL_DIR" ]; then
@@ -488,12 +486,12 @@ install_claude_skill() {
     return 1
   fi
 
-  mkdir -p "$skill_dest"
+  mkdir -p "$dest_dir"
   # Mirror the skill contents — replace, don't merge, so removed files vanish.
-  rm -rf "$skill_dest"
-  mkdir -p "$skill_dest"
-  cp -R "$src_dir/." "$skill_dest/"
-  ok "Installed skill files: $skill_dest"
+  rm -rf "$dest_dir"
+  mkdir -p "$dest_dir"
+  cp -R "$src_dir/." "$dest_dir/"
+  ok "Installed skill files: $dest_dir"
 }
 
 install_claude() {
@@ -516,7 +514,10 @@ install_claude() {
 
   clean_claude_legacy_and_caches
 
-  install_claude_skill "$tmp_dir"
+  # User-skill at ~/.claude/skills/conductor — the "good old" skill location
+  # that's visible to the user immediately and auto-loaded by Claude Code at
+  # session start (no marketplace fetch needed).
+  install_skill_dir "$HOME/.claude/skills/conductor" "$tmp_dir"
 
   info "Enabling Conductor plugin in $settings_path ..."
   if ! python3 - "$settings_path" <<'PY'
