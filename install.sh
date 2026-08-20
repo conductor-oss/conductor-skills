@@ -389,14 +389,13 @@ get_global_path() {
   local agent="$1"
   case "$agent" in
     claude)   echo "$HOME/.claude/settings.json" ;;
-    codex)    echo "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" ;;
-    cursor)   echo "$HOME/.cursor/skills/conductor/SKILL.md" ;;
-    gemini)   echo "$HOME/.gemini/GEMINI.md" ;;
+    # Cross-agent skills standard dir — codex (canonical), gemini (alias),
+    # cursor and opencode (both read it). One install covers all four.
+    codex|gemini|cursor|opencode) echo "$HOME/.agents/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
     amp)      echo "$HOME/.config/AGENTS.md" ;;
     aider)    echo "$HOME/.aider.conf.yml" ;;
-    opencode) echo "$HOME/.config/opencode/skills/conductor/SKILL.md" ;;
   esac
 }
 
@@ -406,15 +405,12 @@ get_target_path() {
 
   case "$agent" in
     claude)   echo "$project_dir/.claude/settings.json" ;;
-    codex)    echo "$project_dir/AGENTS.md" ;;
-    gemini)   echo "$project_dir/GEMINI.md" ;;
-    cursor)   echo "$project_dir/.cursor/rules/conductor.mdc" ;;
+    codex|gemini|cursor|opencode) echo "$project_dir/.agents/skills/conductor" ;;
     windsurf) echo "$project_dir/.windsurfrules" ;;
     cline)    echo "$project_dir/.clinerules" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
     copilot)  echo "$project_dir/.github/copilot-instructions.md" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
-    opencode) echo "$project_dir/AGENTS.md" ;;
     roo)      echo "$project_dir/.roo/rules/conductor.md" ;;
     amp)      echo "$project_dir/.amp/instructions.md" ;;
   esac
@@ -630,6 +626,26 @@ install_aider_to_dir() {
   fi
 }
 
+# Dest dirs already mirrored during this run. Several agents share
+# .agents/skills — the dir is written once, later agents only get their
+# manifest entry.
+MIRRORED_DIRS=""
+
+install_skill_dir_once() {
+  local dest_dir="$1"
+  local tmp_dir="$2"
+
+  case " $MIRRORED_DIRS " in
+    *" $dest_dir "*)
+      ok "Shared skill dir already installed this run: $dest_dir"
+      return 0
+      ;;
+  esac
+
+  install_skill_dir "$dest_dir" "$tmp_dir" || return 1
+  MIRRORED_DIRS="$MIRRORED_DIRS $dest_dir"
+}
+
 # Install a single agent. Returns 0 on success, 1 on skip/failure.
 install_for_agent() {
   local agent="$1"
@@ -645,6 +661,20 @@ install_for_agent() {
     return $?
   fi
 
+  # Skill-dir agents get the intact skill directory at their native location.
+  case "$agent" in
+    codex|gemini|cursor|opencode)
+      local dest
+      if [ "$is_global" = "true" ]; then
+        dest=$(get_global_path "$agent")
+      else
+        dest=$(get_target_path "$agent" "$project_dir")
+      fi
+      install_skill_dir_once "$dest" "$tmp_dir"
+      return $?
+      ;;
+  esac
+
   if [ "$is_global" = "true" ]; then
     local target_path
     target_path=$(get_global_path "$agent")
@@ -656,25 +686,6 @@ install_for_agent() {
     fi
   else
     case "$agent" in
-      codex)
-        install_to_file "$project_dir/AGENTS.md" "$assembled" "$force"
-        ;;
-      gemini)
-        install_to_file "$project_dir/GEMINI.md" "$assembled" "$force"
-        ;;
-      cursor)
-        local frontmatter
-        frontmatter=$(cat <<'FRONT'
----
-description: Conductor workflow orchestration - create, run, monitor, and manage workflows
-globs: "**/*"
-alwaysApply: true
----
-
-FRONT
-)
-        install_to_file "$project_dir/.cursor/rules/conductor.mdc" "$assembled" "$force" "$frontmatter"
-        ;;
       windsurf)
         install_to_file "$project_dir/.windsurfrules" "$assembled" "$force"
         ;;
@@ -689,9 +700,6 @@ FRONT
         ;;
       amazonq)
         install_to_file "$project_dir/.amazonq/rules/conductor.md" "$assembled" "$force"
-        ;;
-      opencode)
-        install_to_file "$project_dir/AGENTS.md" "$assembled" "$force"
         ;;
       roo)
         install_to_file "$project_dir/.roo/rules/conductor.md" "$assembled" "$force"
