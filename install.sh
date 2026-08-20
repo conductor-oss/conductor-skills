@@ -237,6 +237,29 @@ json.dump(m, open('$manifest','w'), indent=2)
 " 2>/dev/null
 }
 
+# Agents in the manifest (other than $agent) whose target_path is $path —
+# the refcount behind shared skill-dir uninstalls.
+list_manifest_agents_for_path() {
+  local manifest="$1"
+  local agent="$2"
+  local path="$3"
+
+  if [ ! -f "$manifest" ]; then
+    echo ""
+    return
+  fi
+
+  python3 -c "
+import json
+try:
+    m = json.load(open('$manifest'))
+    agents = [a for a, e in m.get('installations',{}).items()
+              if a != '$agent' and e.get('target_path') == '$path']
+    print(' '.join(agents))
+except: pass
+" 2>/dev/null || echo ""
+}
+
 list_manifest_agents() {
   local manifest="$1"
 
@@ -713,11 +736,44 @@ uninstall_agent() {
   local agent="$1"
   local project_dir="$2"
   local is_global="$3"
+  local manifest="$4"
 
   # copilot and amp never get their own install — the .agents/skills dir
   # covers them. Blob files from older installer versions are left untouched.
   if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
     info "${agent}: nothing to uninstall — covered by the .agents/skills install."
+    return
+  fi
+
+  # Skill-dir agents: several agents can share one dir (.agents/skills).
+  # Remove the dir only when no other manifest entry still references it;
+  # otherwise only this agent's manifest entry goes.
+  local skill_dir=""
+  case "$agent" in
+    codex|gemini|cursor|opencode|cline)
+      if [ "$is_global" = "true" ]; then
+        skill_dir=$(get_global_path "$agent")
+      else
+        skill_dir=$(get_target_path "$agent" "$project_dir")
+      fi
+      ;;
+    windsurf)
+      if [ "$is_global" != "true" ]; then
+        skill_dir=$(get_target_path "$agent" "$project_dir")
+      fi
+      ;;
+  esac
+  if [ -n "$skill_dir" ]; then
+    local others
+    others=$(list_manifest_agents_for_path "$manifest" "$agent" "$skill_dir")
+    if [ -n "$others" ]; then
+      ok "Kept $skill_dir — still used by: $others"
+    elif [ -d "$skill_dir" ]; then
+      rm -rf "$skill_dir"
+      ok "Removed: $skill_dir"
+    else
+      warn "Nothing to uninstall: $skill_dir not found"
+    fi
     return
   fi
 
@@ -936,7 +992,7 @@ main() {
         use_global="true"
       fi
       info "Uninstalling ${BOLD}${a}${NC} ..."
-      uninstall_agent "$a" "$project_dir" "$use_global"
+      uninstall_agent "$a" "$project_dir" "$use_global" "$manifest"
       remove_manifest_entry "$manifest" "$a"
     done
     echo ""
