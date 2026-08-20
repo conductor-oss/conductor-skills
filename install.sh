@@ -56,12 +56,12 @@ SKILL_FILES=(
 
 # Colors (if terminal supports them)
 if [ -t 1 ]; then
-  RED='\033[0;31m'
-  GREEN='\033[0;32m'
-  YELLOW='\033[1;33m'
-  BLUE='\033[0;34m'
-  BOLD='\033[1m'
-  NC='\033[0m'
+  RED=$'\033[0;31m'
+  GREEN=$'\033[0;32m'
+  YELLOW=$'\033[1;33m'
+  BLUE=$'\033[0;34m'
+  BOLD=$'\033[1m'
+  NC=$'\033[0m'
 else
   RED='' GREEN='' YELLOW='' BLUE='' BOLD='' NC=''
 fi
@@ -237,6 +237,27 @@ json.dump(m, open('$manifest','w'), indent=2)
 " 2>/dev/null
 }
 
+list_manifest_agents_for_path() {
+  local manifest="$1"
+  local agent="$2"
+  local path="$3"
+
+  if [ ! -f "$manifest" ]; then
+    echo ""
+    return
+  fi
+
+  python3 -c "
+import json
+try:
+    m = json.load(open('$manifest'))
+    agents = [a for a, e in m.get('installations',{}).items()
+              if a != '$agent' and e.get('target_path') == '$path']
+    print(' '.join(agents))
+except: pass
+" 2>/dev/null || echo ""
+}
+
 list_manifest_agents() {
   local manifest="$1"
 
@@ -380,7 +401,7 @@ safe_write() {
 supports_global() {
   local agent="$1"
   case "$agent" in
-    claude|codex|gemini|cursor|windsurf|roo|amp|aider|opencode) return 0 ;;
+    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -389,14 +410,11 @@ get_global_path() {
   local agent="$1"
   case "$agent" in
     claude)   echo "$HOME/.claude/settings.json" ;;
-    codex)    echo "${CODEX_HOME:-$HOME/.codex}/AGENTS.md" ;;
-    cursor)   echo "$HOME/.cursor/skills/conductor/SKILL.md" ;;
-    gemini)   echo "$HOME/.gemini/GEMINI.md" ;;
+    codex|gemini|cursor|opencode) echo "$HOME/.agents/skills/conductor" ;;
+    cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
-    amp)      echo "$HOME/.config/AGENTS.md" ;;
     aider)    echo "$HOME/.aider.conf.yml" ;;
-    opencode) echo "$HOME/.config/opencode/skills/conductor/SKILL.md" ;;
   esac
 }
 
@@ -406,17 +424,12 @@ get_target_path() {
 
   case "$agent" in
     claude)   echo "$project_dir/.claude/settings.json" ;;
-    codex)    echo "$project_dir/AGENTS.md" ;;
-    gemini)   echo "$project_dir/GEMINI.md" ;;
-    cursor)   echo "$project_dir/.cursor/rules/conductor.mdc" ;;
-    windsurf) echo "$project_dir/.windsurfrules" ;;
-    cline)    echo "$project_dir/.clinerules" ;;
+    codex|gemini|cursor|opencode) echo "$project_dir/.agents/skills/conductor" ;;
+    windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
+    cline)    echo "$project_dir/.cline/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
-    copilot)  echo "$project_dir/.github/copilot-instructions.md" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
-    opencode) echo "$project_dir/AGENTS.md" ;;
     roo)      echo "$project_dir/.roo/rules/conductor.md" ;;
-    amp)      echo "$project_dir/.amp/instructions.md" ;;
   esac
 }
 
@@ -426,7 +439,7 @@ get_target_path() {
 
 # Bust plugin caches so existing Claude installs actually pick up new content.
 # Note: we do NOT delete ~/.claude/skills/conductor — that's the user-skill
-# install location, populated by install_claude_skill below. We *overwrite*
+# install location, populated by install_skill_dir below. We *overwrite*
 # it with fresh content on each install instead.
 clean_claude_legacy_and_caches() {
   local cache="$HOME/.claude/plugins/cache/conductor-skills"
@@ -467,14 +480,9 @@ PY
   fi
 }
 
-# Install Conductor as a user-skill at ~/.claude/skills/conductor — the
-# "good old" skill location that's visible to the user immediately and
-# auto-loaded by Claude Code at session start (no marketplace fetch needed).
-# Source files come from $tmp_dir (downloaded from GitHub) or $LOCAL_DIR
-# (bundled with the npm package).
-install_claude_skill() {
-  local tmp_dir="$1"
-  local skill_dest="$HOME/.claude/skills/conductor"
+install_skill_dir() {
+  local dest_dir="$1"
+  local tmp_dir="$2"
   local src_dir
 
   if [ -n "$LOCAL_DIR" ]; then
@@ -488,12 +496,12 @@ install_claude_skill() {
     return 1
   fi
 
-  mkdir -p "$skill_dest"
+  mkdir -p "$dest_dir"
   # Mirror the skill contents — replace, don't merge, so removed files vanish.
-  rm -rf "$skill_dest"
-  mkdir -p "$skill_dest"
-  cp -R "$src_dir/." "$skill_dest/"
-  ok "Installed skill files: $skill_dest"
+  rm -rf "$dest_dir"
+  mkdir -p "$dest_dir"
+  cp -R "$src_dir/." "$dest_dir/"
+  ok "Installed skill files: $dest_dir"
 }
 
 install_claude() {
@@ -516,7 +524,7 @@ install_claude() {
 
   clean_claude_legacy_and_caches
 
-  install_claude_skill "$tmp_dir"
+  install_skill_dir "$HOME/.claude/skills/conductor" "$tmp_dir"
 
   info "Enabling Conductor plugin in $settings_path ..."
   if ! python3 - "$settings_path" <<'PY'
@@ -629,6 +637,23 @@ install_aider_to_dir() {
   fi
 }
 
+MIRRORED_DIRS=""
+
+install_skill_dir_once() {
+  local dest_dir="$1"
+  local tmp_dir="$2"
+
+  case " $MIRRORED_DIRS " in
+    *" $dest_dir "*)
+      ok "Shared skill dir already installed this run: $dest_dir"
+      return 0
+      ;;
+  esac
+
+  install_skill_dir "$dest_dir" "$tmp_dir" || return 1
+  MIRRORED_DIRS="$MIRRORED_DIRS $dest_dir"
+}
+
 # Install a single agent. Returns 0 on success, 1 on skip/failure.
 install_for_agent() {
   local agent="$1"
@@ -644,6 +669,26 @@ install_for_agent() {
     return $?
   fi
 
+  case "$agent" in
+    codex|gemini|cursor|opencode|cline)
+      local dest
+      if [ "$is_global" = "true" ]; then
+        dest=$(get_global_path "$agent")
+      else
+        dest=$(get_target_path "$agent" "$project_dir")
+      fi
+      install_skill_dir_once "$dest" "$tmp_dir"
+      return $?
+      ;;
+    windsurf)
+      # windsurf has no global skills dir — global keeps the memories blob
+      if [ "$is_global" != "true" ]; then
+        install_skill_dir_once "$(get_target_path "$agent" "$project_dir")" "$tmp_dir"
+        return $?
+      fi
+      ;;
+  esac
+
   if [ "$is_global" = "true" ]; then
     local target_path
     target_path=$(get_global_path "$agent")
@@ -655,48 +700,14 @@ install_for_agent() {
     fi
   else
     case "$agent" in
-      codex)
-        install_to_file "$project_dir/AGENTS.md" "$assembled" "$force"
-        ;;
-      gemini)
-        install_to_file "$project_dir/GEMINI.md" "$assembled" "$force"
-        ;;
-      cursor)
-        local frontmatter
-        frontmatter=$(cat <<'FRONT'
----
-description: Conductor workflow orchestration - create, run, monitor, and manage workflows
-globs: "**/*"
-alwaysApply: true
----
-
-FRONT
-)
-        install_to_file "$project_dir/.cursor/rules/conductor.mdc" "$assembled" "$force" "$frontmatter"
-        ;;
-      windsurf)
-        install_to_file "$project_dir/.windsurfrules" "$assembled" "$force"
-        ;;
-      cline)
-        install_to_file "$project_dir/.clinerules" "$assembled" "$force"
-        ;;
       aider)
         install_aider_to_dir "$project_dir/.conductor-skills" "$tmp_dir" "$project_dir/.aider.conf.yml" ".conductor-skills/"
-        ;;
-      copilot)
-        install_to_file "$project_dir/.github/copilot-instructions.md" "$assembled" "$force"
         ;;
       amazonq)
         install_to_file "$project_dir/.amazonq/rules/conductor.md" "$assembled" "$force"
         ;;
-      opencode)
-        install_to_file "$project_dir/AGENTS.md" "$assembled" "$force"
-        ;;
       roo)
         install_to_file "$project_dir/.roo/rules/conductor.md" "$assembled" "$force"
-        ;;
-      amp)
-        install_to_file "$project_dir/.amp/instructions.md" "$assembled" "$force"
         ;;
     esac
   fi
@@ -710,6 +721,41 @@ uninstall_agent() {
   local agent="$1"
   local project_dir="$2"
   local is_global="$3"
+  local manifest="$4"
+
+  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+    info "${agent}: nothing to uninstall — covered by the .agents/skills install."
+    return
+  fi
+
+  local skill_dir=""
+  case "$agent" in
+    codex|gemini|cursor|opencode|cline)
+      if [ "$is_global" = "true" ]; then
+        skill_dir=$(get_global_path "$agent")
+      else
+        skill_dir=$(get_target_path "$agent" "$project_dir")
+      fi
+      ;;
+    windsurf)
+      if [ "$is_global" != "true" ]; then
+        skill_dir=$(get_target_path "$agent" "$project_dir")
+      fi
+      ;;
+  esac
+  if [ -n "$skill_dir" ]; then
+    local others
+    others=$(list_manifest_agents_for_path "$manifest" "$agent" "$skill_dir")
+    if [ -n "$others" ]; then
+      ok "Kept $skill_dir — still used by: $others"
+    elif [ -d "$skill_dir" ]; then
+      rm -rf "$skill_dir"
+      ok "Removed: $skill_dir"
+    else
+      warn "Nothing to uninstall: $skill_dir not found"
+    fi
+    return
+  fi
 
   if [ "$agent" = "claude" ]; then
     local settings_path
@@ -798,10 +844,80 @@ PY
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Grouped install summary
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Parallel arrays — macOS ships bash 3.2, no associative arrays
+GROUP_PATHS=()
+GROUP_AGENTS=()
+COVERED_AGENTS=""
+
+record_group() {
+  local path="$1"
+  local agent="$2"
+
+  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+    if [ -z "$COVERED_AGENTS" ]; then
+      COVERED_AGENTS="$agent"
+    else
+      COVERED_AGENTS="$COVERED_AGENTS, $agent"
+    fi
+    return
+  fi
+
+  local i
+  if [ "${#GROUP_PATHS[@]}" -gt 0 ]; then
+    for i in "${!GROUP_PATHS[@]}"; do
+      if [ "${GROUP_PATHS[$i]}" = "$path" ]; then
+        GROUP_AGENTS[$i]="${GROUP_AGENTS[$i]}, $agent"
+        return
+      fi
+    done
+  fi
+  GROUP_PATHS+=("$path")
+  GROUP_AGENTS+=("$agent")
+}
+
+print_group_summary() {
+  if [ "${#GROUP_PATHS[@]}" -eq 0 ]; then
+    return
+  fi
+  echo -e "${BOLD}Install locations:${NC}"
+  local i line
+  for i in "${!GROUP_PATHS[@]}"; do
+    line="  ${GROUP_PATHS[$i]} → ${GROUP_AGENTS[$i]}"
+    case "${GROUP_PATHS[$i]}" in
+      */.agents/skills/conductor)
+        [ -n "$COVERED_AGENTS" ] && line="$line (+ ${COVERED_AGENTS})"
+        ;;
+    esac
+    echo "$line"
+  done
+}
+
+display_path_for_agent() {
+  local agent="$1"
+  local project_dir="$2"
+  local is_global="$3"
+
+  if [ "$agent" = "claude" ]; then
+    echo "$HOME/.claude/skills/conductor"
+  elif [ "$is_global" = "true" ]; then
+    get_global_path "$agent"
+  else
+    get_target_path "$agent" "$project_dir"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Check mode (dry run)
 # ─────────────────────────────────────────────────────────────────────────────
 
 do_check() {
+  local global="$1"
+  local all="$2"
+  local project_dir="$3"
+  shift 3
   local agents=("$@")
 
   local manifest
@@ -830,6 +946,27 @@ do_check() {
       echo -e "  ${BLUE}●${NC} $agent  (not installed)  global: $global_support"
     fi
   done
+  echo ""
+
+  for agent in "${agents[@]}"; do
+    if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
+      record_group "" "$agent"
+      continue
+    fi
+    local use_global="$global"
+    if [ "$all" = "true" ]; then
+      if supports_global "$agent"; then
+        use_global="true"
+      else
+        continue
+      fi
+    fi
+    if [ "$use_global" = "true" ] && ! supports_global "$agent"; then
+      continue
+    fi
+    record_group "$(display_path_for_agent "$agent" "$project_dir" "$use_global")" "$agent"
+  done
+  print_group_summary
   echo ""
 }
 
@@ -906,7 +1043,7 @@ main() {
 
   # Check mode — dry run
   if [ "$check" = "true" ]; then
-    do_check "${agents[@]}"
+    do_check "$global" "$all" "$project_dir" "${agents[@]}"
     exit 0
   fi
 
@@ -926,7 +1063,7 @@ main() {
         use_global="true"
       fi
       info "Uninstalling ${BOLD}${a}${NC} ..."
-      uninstall_agent "$a" "$project_dir" "$use_global"
+      uninstall_agent "$a" "$project_dir" "$use_global" "$manifest"
       remove_manifest_entry "$manifest" "$a"
     done
     echo ""
@@ -969,6 +1106,13 @@ main() {
   for a in "${agents[@]}"; do
     echo ""
 
+    if [ "$a" = "copilot" ] || [ "$a" = "amp" ]; then
+      ok "${a}: covered by the .agents/skills install — nothing to write."
+      record_group "" "$a"
+      skipped_count=$((skipped_count + 1))
+      continue
+    fi
+
     # Determine if global for this agent
     local use_global="$global"
     if [ "$all" = "true" ]; then
@@ -1000,6 +1144,7 @@ main() {
     installed_ver=$(read_manifest_version "$manifest" "$a")
     if [ "$a" != "claude" ] && [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
       ok "${a} already at v${installed_ver}, skipping."
+      record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       skipped_count=$((skipped_count + 1))
       continue
     fi
@@ -1036,10 +1181,13 @@ main() {
       local mode
       if [ "$use_global" = "true" ]; then mode="global"; else mode="project"; fi
       write_manifest_entry "$manifest" "$a" "$target_version" "$mode" "$target_path"
+      record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       installed_count=$((installed_count + 1))
     fi
   done
 
+  echo ""
+  print_group_summary
   echo ""
   echo -e "${GREEN}${BOLD}Done!${NC} ${installed_count} configured, ${skipped_count} skipped (already up to date)."
   echo ""
