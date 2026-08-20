@@ -92,10 +92,17 @@ The GitHub Actions `validate-plugin` workflow runs on push to `main` and on any 
 | TC-PLG-05 | Skill activates from natural language | E2 | Ask: *"What can the conductor skill do?"* | Skill activates, lists capabilities consistent with SKILL.md |
 | TC-PLG-06 | Upgrade preserves config | E2 | Install vN-1, modify `~/.conductor-cli/config.yaml`, upgrade to vN | Config untouched; new version reported |
 | TC-PLG-07 | Uninstall is clean | E2 | `/plugin uninstall conductor@conductor-skills` | Slash commands gone; skill no longer activates |
-| TC-PLG-08 | install.sh works for non-Claude agents | E2 | `curl -sSL .../install.sh \| bash -s -- --agent codex` | Skill content installed at `~/.codex/AGENTS.md` (or path appropriate to the agent) |
-| TC-PLG-09 | install.ps1 (Windows) works | E2 (Windows) | `.\install.ps1 -Agent cline` | Skill installed at `.clinerules` |
+| TC-PLG-08 | install.sh works for non-Claude agents | E2 | `curl -sSL .../install.sh \| bash -s -- --agent codex --global` | Intact skill dir at `~/.agents/skills/conductor/` — SKILL.md, `references/`, `examples/`, `scripts/conductor_api.py` all present |
+| TC-PLG-09 | install.ps1 (Windows) works | E2 (Windows) | `.\install.ps1 -Agent cline` | Intact skill dir at `.cline\skills\conductor\` |
 | TC-PLG-10 | `--upgrade` upgrades each agent | E2 | `bash install.sh --all --upgrade` | All previously-installed agents upgraded |
-| TC-PLG-11 | `--uninstall` removes cleanly | E2 | `bash install.sh --agent cursor --uninstall` | Cursor agent's skill files removed; others untouched |
+| TC-PLG-11 | `--uninstall` removes cleanly | E2 | `bash install.sh --agent cursor --uninstall` | Cursor's manifest entry removed; `.agents/skills/conductor/` removed only if no other agent's manifest entry references it (see TC-PLG-13) |
+| TC-PLG-12 | Shared dir written once under `--all` | E2 | `bash install.sh --all` with codex + gemini + cursor + opencode detected | One mirror of `~/.agents/skills/conductor/`, one `Installed skill files` line, three `already installed this run` lines; manifest has one entry per agent, all pointing at the shared path |
+| TC-PLG-13 | Refcount uninstall keeps shared dir | E2 | Install all four, then `--agent codex --global --uninstall` | `Kept ... still used by: gemini cursor opencode`; dir survives. Uninstalling the remaining three removes the dir after the last one |
+| TC-PLG-14 | copilot / amp flags are no-ops | E2 | `--agent copilot`, `--agent amp --global` | `covered by the .agents/skills install` printed, exit 0, nothing written, no manifest entry |
+| TC-PLG-15 | windsurf split behavior | E2 | `--agent windsurf` in a project, then `--agent windsurf --global` | Project: intact dir at `.windsurf/skills/conductor/`. Global: `global_rules.md` file, no skill dir |
+| TC-PLG-16 | cline included in `--all` | E2 | `bash install.sh --all` with `~/.cline` present | Intact skill dir at `~/.cline/skills/conductor/` |
+| TC-PLG-17 | Legacy blobs untouched | E2 | Pre-create `~/.codex/AGENTS.md`, `~/.config/AGENTS.md` with custom content, install and uninstall all agents | Both files keep their custom content — installer never rewrites or deletes them |
+| TC-PLG-18 | Summary grouped by location | E2 | `bash install.sh --all`, also `--all --check` | `Install locations:` lists one line per physical dir with covered agents; shared line appends `(+ copilot, amp)` when detected |
 
 ---
 
