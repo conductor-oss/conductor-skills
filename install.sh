@@ -380,7 +380,7 @@ safe_write() {
 supports_global() {
   local agent="$1"
   case "$agent" in
-    claude|codex|gemini|cursor|windsurf|roo|amp|aider|opencode) return 0 ;;
+    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -392,6 +392,7 @@ get_global_path() {
     # Cross-agent skills standard dir — codex (canonical), gemini (alias),
     # cursor and opencode (both read it). One install covers all four.
     codex|gemini|cursor|opencode) echo "$HOME/.agents/skills/conductor" ;;
+    cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
     amp)      echo "$HOME/.config/AGENTS.md" ;;
@@ -406,8 +407,8 @@ get_target_path() {
   case "$agent" in
     claude)   echo "$project_dir/.claude/settings.json" ;;
     codex|gemini|cursor|opencode) echo "$project_dir/.agents/skills/conductor" ;;
-    windsurf) echo "$project_dir/.windsurfrules" ;;
-    cline)    echo "$project_dir/.clinerules" ;;
+    windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
+    cline)    echo "$project_dir/.cline/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
     copilot)  echo "$project_dir/.github/copilot-instructions.md" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
@@ -663,7 +664,7 @@ install_for_agent() {
 
   # Skill-dir agents get the intact skill directory at their native location.
   case "$agent" in
-    codex|gemini|cursor|opencode)
+    codex|gemini|cursor|opencode|cline)
       local dest
       if [ "$is_global" = "true" ]; then
         dest=$(get_global_path "$agent")
@@ -672,6 +673,14 @@ install_for_agent() {
       fi
       install_skill_dir_once "$dest" "$tmp_dir"
       return $?
+      ;;
+    windsurf)
+      # Project installs get the skill dir. Global keeps the memories blob —
+      # windsurf has no global skills dir.
+      if [ "$is_global" != "true" ]; then
+        install_skill_dir_once "$(get_target_path "$agent" "$project_dir")" "$tmp_dir"
+        return $?
+      fi
       ;;
   esac
 
@@ -686,12 +695,6 @@ install_for_agent() {
     fi
   else
     case "$agent" in
-      windsurf)
-        install_to_file "$project_dir/.windsurfrules" "$assembled" "$force"
-        ;;
-      cline)
-        install_to_file "$project_dir/.clinerules" "$assembled" "$force"
-        ;;
       aider)
         install_aider_to_dir "$project_dir/.conductor-skills" "$tmp_dir" "$project_dir/.aider.conf.yml" ".conductor-skills/"
         ;;
