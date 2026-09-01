@@ -131,7 +131,7 @@ These agents don't support global install — run the command from your project 
 | [Amazon Q](https://aws.amazon.com/q/developer/) | `powershell -c "irm https://conductor-oss.github.io/conductor-skills/install.ps1 -OutFile install.ps1; .\install.ps1 -Agent amazonq"` |
 
 > All other agents are installed globally via the [install all](#install-for-all-detected-agents) command above. You can also use `--agent <name>` for any agent to do a project-level install.
-> GitHub Copilot and Amp need no install of their own — both read the shared `.agents/skills/` directory installed for Codex/Gemini/Cursor/OpenCode.
+> GitHub Copilot and Amp share the same `.agents/skills/` directory as Codex/Gemini/Cursor/OpenCode — installing any one of them writes it.
 
 That's it — ask your agent to connect to your server (see [Try It](#try-it) below).
 
@@ -307,14 +307,14 @@ Or upgrade a single agent: `--agent <name> --upgrade`
 | [Cursor](https://cursor.com) | `cursor` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 | [Windsurf](https://codeium.com/windsurf) | `windsurf` | `~/.codeium/windsurf/memories/global_rules.md` | `.windsurf/skills/conductor/` |
 | [Cline](https://github.com/cline/cline) | `cline` | `~/.cline/skills/conductor/` | `.cline/skills/conductor/` |
-| [GitHub Copilot](https://github.com/features/copilot) | `copilot` | covered via `~/.agents/skills/` | covered via `.agents/skills/` |
+| [GitHub Copilot](https://github.com/features/copilot) | `copilot` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 | [Aider](https://aider.chat) | `aider` | `~/.conductor-skills/` + `~/.aider.conf.yml` | `.conductor-skills/` + `.aider.conf.yml` |
 | [Amazon Q](https://aws.amazon.com/q/developer/) | `amazonq` | — | `.amazonq/rules/conductor.md` |
 | [Roo Code](https://github.com/RooVetGit/Roo-Code) | `roo` | `~/.roo/rules/conductor.md` | `.roo/rules/conductor.md` |
-| [Amp](https://ampcode.com) | `amp` | covered via `~/.agents/skills/` | covered via `.agents/skills/` |
+| [Amp](https://ampcode.com) | `amp` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 | [OpenCode](https://opencode.ai) | `opencode` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 
-Codex, Gemini, Cursor, and OpenCode share one `.agents/skills/` install; GitHub Copilot and Amp read the same directory, so they need no install of their own.
+Codex, Gemini, Cursor, OpenCode, GitHub Copilot, and Amp share one `.agents/skills/` install — installing any one of them writes the shared directory; installing another just points at the same copy. Uninstalling only removes the shared directory once every agent using it has been uninstalled.
 
 ---
 ## Uninstall

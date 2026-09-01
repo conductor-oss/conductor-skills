@@ -7,7 +7,7 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.6.6"
+VERSION="1.7.0"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging — the install scripts ride
 # along with whatever main is serving.
@@ -192,6 +192,24 @@ import json, sys
 try:
     m = json.load(open('$manifest'))
     print(m.get('installations',{}).get('$agent',{}).get('version',''))
+except: pass
+" 2>/dev/null || echo ""
+}
+
+read_manifest_target_path() {
+  local manifest="$1"
+  local agent="$2"
+
+  if [ ! -f "$manifest" ]; then
+    echo ""
+    return
+  fi
+
+  python3 -c "
+import json, sys
+try:
+    m = json.load(open('$manifest'))
+    print(m.get('installations',{}).get('$agent',{}).get('target_path',''))
 except: pass
 " 2>/dev/null || echo ""
 }
@@ -401,7 +419,7 @@ safe_write() {
 supports_global() {
   local agent="$1"
   case "$agent" in
-    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode) return 0 ;;
+    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode|copilot) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -410,7 +428,7 @@ get_global_path() {
   local agent="$1"
   case "$agent" in
     claude)   echo "$HOME/.claude/settings.json" ;;
-    codex|gemini|cursor|opencode) echo "$HOME/.agents/skills/conductor" ;;
+    codex|gemini|cursor|opencode|copilot|amp) echo "$HOME/.agents/skills/conductor" ;;
     cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
@@ -424,7 +442,7 @@ get_target_path() {
 
   case "$agent" in
     claude)   echo "$project_dir/.claude/settings.json" ;;
-    codex|gemini|cursor|opencode) echo "$project_dir/.agents/skills/conductor" ;;
+    codex|gemini|cursor|opencode|copilot|amp) echo "$project_dir/.agents/skills/conductor" ;;
     windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
     cline)    echo "$project_dir/.cline/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
@@ -670,7 +688,7 @@ install_for_agent() {
   fi
 
   case "$agent" in
-    codex|gemini|cursor|opencode|cline)
+    codex|gemini|cursor|opencode|cline|copilot|amp)
       local dest
       if [ "$is_global" = "true" ]; then
         dest=$(get_global_path "$agent")
@@ -723,14 +741,9 @@ uninstall_agent() {
   local is_global="$3"
   local manifest="$4"
 
-  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
-    info "${agent}: nothing to uninstall — covered by the .agents/skills install."
-    return
-  fi
-
   local skill_dir=""
   case "$agent" in
-    codex|gemini|cursor|opencode|cline)
+    codex|gemini|cursor|opencode|cline|copilot|amp)
       if [ "$is_global" = "true" ]; then
         skill_dir=$(get_global_path "$agent")
       else
@@ -850,20 +863,10 @@ PY
 # Parallel arrays — macOS ships bash 3.2, no associative arrays
 GROUP_PATHS=()
 GROUP_AGENTS=()
-COVERED_AGENTS=""
 
 record_group() {
   local path="$1"
   local agent="$2"
-
-  if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
-    if [ -z "$COVERED_AGENTS" ]; then
-      COVERED_AGENTS="$agent"
-    else
-      COVERED_AGENTS="$COVERED_AGENTS, $agent"
-    fi
-    return
-  fi
 
   local i
   if [ "${#GROUP_PATHS[@]}" -gt 0 ]; then
@@ -883,15 +886,9 @@ print_group_summary() {
     return
   fi
   echo -e "${BOLD}Install locations:${NC}"
-  local i line
+  local i
   for i in "${!GROUP_PATHS[@]}"; do
-    line="  ${GROUP_PATHS[$i]} → ${GROUP_AGENTS[$i]}"
-    case "${GROUP_PATHS[$i]}" in
-      */.agents/skills/conductor)
-        [ -n "$COVERED_AGENTS" ] && line="$line (+ ${COVERED_AGENTS})"
-        ;;
-    esac
-    echo "$line"
+    echo "  ${GROUP_PATHS[$i]} → ${GROUP_AGENTS[$i]}"
   done
 }
 
@@ -914,14 +911,12 @@ display_path_for_agent() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 do_check() {
-  local global="$1"
-  local all="$2"
-  local project_dir="$3"
-  shift 3
+  local manifest="$1"
+  local global="$2"
+  local all="$3"
+  local project_dir="$4"
+  shift 4
   local agents=("$@")
-
-  local manifest
-  manifest=$(get_manifest_path "true" "")
 
   echo ""
   echo -e "${BOLD}Detected agents:${NC}"
@@ -949,10 +944,6 @@ do_check() {
   echo ""
 
   for agent in "${agents[@]}"; do
-    if [ "$agent" = "copilot" ] || [ "$agent" = "amp" ]; then
-      record_group "" "$agent"
-      continue
-    fi
     local use_global="$global"
     if [ "$all" = "true" ]; then
       if supports_global "$agent"; then
@@ -1014,12 +1005,38 @@ main() {
   echo -e "${BOLD}Conductor Skills Installer v${VERSION}${NC}"
   echo ""
 
+  # Determine manifest path
+  local manifest
+  if [ "$global" = "true" ] || [ "$all" = "true" ]; then
+    manifest=$(get_manifest_path "true" "")
+  else
+    manifest=$(get_manifest_path "false" "$project_dir")
+  fi
+
   # Build agent list
   local agents=()
   if [ "$all" = "true" ]; then
     local detected
     detected=$(detect_agents)
-    if [ -z "$detected" ]; then
+    # shellcheck disable=SC2206
+    agents=($detected)
+
+    # --all --uninstall should also remove agents whose CLI/config is gone
+    # but whose install manifest entry is still there (e.g. the tool was
+    # uninstalled outside this script) — otherwise those files are orphaned
+    # forever since detect_agents can no longer see them.
+    if [ "$uninstall" = "true" ]; then
+      local tracked t
+      tracked=$(list_manifest_agents "$manifest")
+      for t in $tracked; do
+        case " ${agents[*]:-} " in
+          *" $t "*) ;;
+          *) agents+=("$t") ;;
+        esac
+      done
+    fi
+
+    if [ ${#agents[@]} -eq 0 ]; then
       warn "No AI coding agents detected on this system."
       echo ""
       info "Supported agents: claude, codex, gemini, cursor, windsurf, cline,"
@@ -1028,8 +1045,6 @@ main() {
       info "Install one of the above, then re-run this command."
       exit 0
     fi
-    # shellcheck disable=SC2206
-    agents=($detected)
     info "Detected agents: ${agents[*]}"
     echo ""
   else
@@ -1043,16 +1058,8 @@ main() {
 
   # Check mode — dry run
   if [ "$check" = "true" ]; then
-    do_check "$global" "$all" "$project_dir" "${agents[@]}"
+    do_check "$manifest" "$global" "$all" "$project_dir" "${agents[@]}"
     exit 0
-  fi
-
-  # Determine manifest path
-  local manifest
-  if [ "$global" = "true" ] || [ "$all" = "true" ]; then
-    manifest=$(get_manifest_path "true" "")
-  else
-    manifest=$(get_manifest_path "false" "$project_dir")
   fi
 
   # Handle uninstall
@@ -1061,6 +1068,10 @@ main() {
       local use_global="$global"
       if [ "$all" = "true" ] && supports_global "$a"; then
         use_global="true"
+      fi
+      if [ "$use_global" = "true" ] && ! supports_global "$a"; then
+        error "Global uninstall is not supported for $a. Run from your project directory instead."
+        continue
       fi
       info "Uninstalling ${BOLD}${a}${NC} ..."
       uninstall_agent "$a" "$project_dir" "$use_global" "$manifest"
@@ -1102,16 +1113,10 @@ main() {
   # Install for each agent
   local installed_count=0
   local skipped_count=0
+  local legacy_warned=""
 
   for a in "${agents[@]}"; do
     echo ""
-
-    if [ "$a" = "copilot" ] || [ "$a" = "amp" ]; then
-      ok "${a}: covered by the .agents/skills install — nothing to write."
-      record_group "" "$a"
-      skipped_count=$((skipped_count + 1))
-      continue
-    fi
 
     # Determine if global for this agent
     local use_global="$global"
@@ -1142,6 +1147,8 @@ main() {
     # upgrades honest. Cost: ~3 seconds added to next session start.
     local installed_ver
     installed_ver=$(read_manifest_version "$manifest" "$a")
+    local old_target_path
+    old_target_path=$(read_manifest_target_path "$manifest" "$a")
     if [ "$a" != "claude" ] && [ -n "$installed_ver" ] && [ "$installed_ver" = "$target_version" ] && [ "$force" != "true" ]; then
       ok "${a} already at v${installed_ver}, skipping."
       record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
@@ -1180,6 +1187,22 @@ main() {
       fi
       local mode
       if [ "$use_global" = "true" ]; then mode="global"; else mode="project"; fi
+
+      # A prior version of this agent's install may have written somewhere
+      # else (e.g. the pre-1.6.6 single-file layout). We only know about it
+      # because our own manifest recorded where we last wrote — warn instead
+      # of deleting, since we can't tell whether the user has since edited
+      # that file by hand.
+      if [ -n "$old_target_path" ] && [ "$old_target_path" != "$target_path" ] && [ -e "$old_target_path" ]; then
+        case " $legacy_warned " in
+          *" $old_target_path "*) ;;
+          *)
+            warn "Legacy install found at $old_target_path (superseded by $target_path) — remove it manually if no longer needed."
+            legacy_warned="$legacy_warned $old_target_path"
+            ;;
+        esac
+      fi
+
       write_manifest_entry "$manifest" "$a" "$target_version" "$mode" "$target_path"
       record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       installed_count=$((installed_count + 1))

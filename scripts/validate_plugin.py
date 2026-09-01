@@ -4,7 +4,11 @@
 Checks:
   1. JSON syntax for plugin.json and marketplace.json.
   2. Required top-level fields present.
-  3. Plugin version matches between plugin.json, marketplace.json, and VERSION.
+  3. Plugin version matches VERSION across every file that duplicates it:
+     .claude-plugin/plugin.json, .claude-plugin/marketplace.json,
+     package.json, install.sh, install.ps1, root plugin.json,
+     .cursor-plugin/plugin.json, .cursor-plugin/marketplace.json,
+     .openai/plugin.json.
   4. Each plugin's `source` path resolves and contains a SKILL.md.
   5. Frontmatter `name` in SKILL.md matches the plugin entry name.
 
@@ -99,6 +103,45 @@ def main() -> int:
                 fail(f"version mismatch: package.json={npm_version} VERSION={file_version}")
         except json.JSONDecodeError as e:
             fail(f"invalid JSON in package.json: {e}")
+
+    # Other per-agent plugin/marketplace manifests that duplicate the version.
+    for rel_path in (
+        "plugin.json",
+        ".cursor-plugin/plugin.json",
+        ".openai/plugin.json",
+    ):
+        path = ROOT / rel_path
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as e:
+            fail(f"invalid JSON in {rel_path}: {e}")
+            continue
+        v = data.get("version")
+        if v and file_version and v != file_version:
+            fail(f"version mismatch: {rel_path}={v} VERSION={file_version}")
+
+    cursor_marketplace_path = ROOT / ".cursor-plugin" / "marketplace.json"
+    if cursor_marketplace_path.exists():
+        try:
+            cursor_marketplace = json.loads(cursor_marketplace_path.read_text())
+        except json.JSONDecodeError as e:
+            fail(f"invalid JSON in .cursor-plugin/marketplace.json: {e}")
+        else:
+            meta_version = cursor_marketplace.get("metadata", {}).get("version")
+            if meta_version and file_version and meta_version != file_version:
+                fail(
+                    f"version mismatch: .cursor-plugin/marketplace.json metadata.version="
+                    f"{meta_version} VERSION={file_version}"
+                )
+            for entry in cursor_marketplace.get("plugins", []) or []:
+                v = entry.get("version")
+                if v and file_version and v != file_version:
+                    fail(
+                        f"version mismatch: .cursor-plugin/marketplace.json plugin "
+                        f"{entry.get('name')!r}={v} VERSION={file_version}"
+                    )
 
     # install.sh / install.ps1 VERSION constants
     for script_name, pattern in (
