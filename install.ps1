@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.6.6"
+$SCRIPT_VERSION = "1.7.0"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
@@ -64,7 +64,7 @@ $SKILL_FILES = @(
 )
 
 $VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp")
-$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","aider","opencode")
+$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","aider","opencode","copilot")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -127,6 +127,17 @@ function Read-ManifestVersion {
         $m = Get-Content $ManifestPath -Raw | ConvertFrom-Json
         $entry = $m.installations.PSObject.Properties | Where-Object { $_.Name -eq $AgentName }
         if ($entry) { return $entry.Value.version }
+    } catch {}
+    return ""
+}
+
+function Read-ManifestTargetPath {
+    param([string]$ManifestPath, [string]$AgentName)
+    if (!(Test-Path $ManifestPath)) { return "" }
+    try {
+        $m = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+        $entry = $m.installations.PSObject.Properties | Where-Object { $_.Name -eq $AgentName }
+        if ($entry) { return $entry.Value.target_path }
     } catch {}
     return ""
 }
@@ -309,7 +320,7 @@ function Get-GlobalPath {
     $installDir = $env:USERPROFILE
     switch ($AgentName) {
         "claude"   { return Join-Path $installDir ".claude\settings.json" }
-        {$_ -in @("codex","gemini","cursor","opencode")} { return Join-Path $installDir ".agents\skills\conductor" }
+        {$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $installDir ".agents\skills\conductor" }
         "cline"    { return Join-Path $installDir ".cline\skills\conductor" }
         "windsurf" { return Join-Path $installDir ".codeium\windsurf\memories\global_rules.md" }
         "roo"      { return Join-Path $installDir ".roo\rules\conductor.md" }
@@ -321,7 +332,7 @@ function Get-TargetPath {
     param([string]$AgentName, [string]$ProjDir)
     switch ($AgentName) {
         "claude"   { return Join-Path $ProjDir ".claude\settings.json" }
-        {$_ -in @("codex","gemini","cursor","opencode")} { return Join-Path $ProjDir ".agents\skills\conductor" }
+        {$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $ProjDir ".agents\skills\conductor" }
         "windsurf" { return Join-Path $ProjDir ".windsurf\skills\conductor" }
         "cline"    { return Join-Path $ProjDir ".cline\skills\conductor" }
         "aider"    { return Join-Path $ProjDir ".conductor-skills" }
@@ -555,7 +566,7 @@ function Install-ForAgent {
         return Install-Claude -IsGlobal $IsGlobal -ProjDir $ProjDir -TmpDir $TmpDir
     }
 
-    if ($AgentName -in @("codex","gemini","cursor","opencode","cline")) {
+    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
         $dest = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
         return Install-SkillDirOnce -DestDir $dest -TmpDir $TmpDir
     }
@@ -593,13 +604,8 @@ function Install-ForAgent {
 function Uninstall-Agent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [string]$ManifestPath)
 
-    if ($AgentName -in @("copilot","amp")) {
-        Write-Info "${AgentName}: nothing to uninstall — covered by the .agents/skills install."
-        return
-    }
-
     $skillDir = ""
-    if ($AgentName -in @("codex","gemini","cursor","opencode","cline")) {
+    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
         $skillDir = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
     } elseif ($AgentName -eq "windsurf" -and -not $IsGlobal) {
         $skillDir = Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir
@@ -707,15 +713,9 @@ function Uninstall-Agent {
 
 $script:GroupPaths = @()
 $script:GroupAgents = @()
-$script:CoveredAgents = @()
 
 function Record-Group {
     param([string]$Path, [string]$AgentName)
-
-    if ($AgentName -in @("copilot","amp")) {
-        $script:CoveredAgents += $AgentName
-        return
-    }
 
     for ($i = 0; $i -lt $script:GroupPaths.Count; $i++) {
         if ($script:GroupPaths[$i] -eq $Path) {
@@ -731,12 +731,7 @@ function Print-GroupSummary {
     if ($script:GroupPaths.Count -eq 0) { return }
     Write-Host "Install locations:" -ForegroundColor White
     for ($i = 0; $i -lt $script:GroupPaths.Count; $i++) {
-        $line = "  $($script:GroupPaths[$i]) -> $($script:GroupAgents[$i])"
-        $norm = $script:GroupPaths[$i] -replace '\\','/'
-        if (($norm -like "*/.agents/skills/conductor") -and ($script:CoveredAgents.Count -gt 0)) {
-            $line += " (+ $($script:CoveredAgents -join ', '))"
-        }
-        Write-Host $line
+        Write-Host "  $($script:GroupPaths[$i]) -> $($script:GroupAgents[$i])"
     }
 }
 
@@ -752,9 +747,9 @@ function Get-DisplayPathForAgent {
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Do-Check {
-    param([string[]]$Agents, [bool]$GlobalFlag, [bool]$AllFlag, [string]$ProjDir)
+    param([string]$ManifestPath, [string[]]$Agents, [bool]$GlobalFlag, [bool]$AllFlag, [string]$ProjDir)
 
-    $manifest = Get-ManifestPath -IsGlobal $true
+    $manifest = $ManifestPath
 
     Write-Host ""
     Write-Host "Detected agents:" -ForegroundColor White
@@ -780,10 +775,6 @@ function Do-Check {
     Write-Host ""
 
     foreach ($a in $Agents) {
-        if ($a -in @("copilot","amp")) {
-            Record-Group -Path "" -AgentName $a
-            continue
-        }
         $useGlobal = $GlobalFlag
         if ($AllFlag) {
             if (Supports-Global -AgentName $a) { $useGlobal = $true } else { continue }
@@ -817,10 +808,25 @@ Write-Host ""
 Write-Host "Conductor Skills Installer v$SCRIPT_VERSION" -ForegroundColor White
 Write-Host ""
 
+# Determine manifest path
+$useGlobalManifest = $Global -or $All
+$manifest = Get-ManifestPath -IsGlobal $useGlobalManifest -ProjDir $ProjectDir
+
 # Build agent list
 $agentList = @()
 if ($All) {
     $agentList = @(Detect-Agents)
+
+    # -All -Uninstall should also remove agents whose CLI/config is gone but
+    # whose install manifest entry is still there (e.g. the tool was
+    # uninstalled outside this script) — otherwise those files are orphaned
+    # forever since Detect-Agents can no longer see them.
+    if ($Uninstall) {
+        foreach ($t in (Get-ManifestAgents -ManifestPath $manifest)) {
+            if ($agentList -notcontains $t) { $agentList += $t }
+        }
+    }
+
     if ($agentList.Count -eq 0) {
         Write-Warn "No AI coding agents detected on this system."
         Write-Host ""
@@ -843,19 +849,19 @@ if ($All) {
 
 # Check mode
 if ($Check) {
-    Do-Check -Agents $agentList -GlobalFlag ([bool]$Global) -AllFlag ([bool]$All) -ProjDir $ProjectDir
+    Do-Check -ManifestPath $manifest -Agents $agentList -GlobalFlag ([bool]$Global) -AllFlag ([bool]$All) -ProjDir $ProjectDir
     exit 0
 }
-
-# Determine manifest path
-$useGlobalManifest = $Global -or $All
-$manifest = Get-ManifestPath -IsGlobal $useGlobalManifest -ProjDir $ProjectDir
 
 # Handle uninstall
 if ($Uninstall) {
     foreach ($a in $agentList) {
         $useGlobal = [bool]$Global
         if ($All -and (Supports-Global -AgentName $a)) { $useGlobal = $true }
+        if ($useGlobal -and -not (Supports-Global -AgentName $a)) {
+            Write-Err "Global uninstall is not supported for $a. Run from your project directory instead."
+            continue
+        }
         Write-Info "Uninstalling $a ..."
         Uninstall-Agent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal -ManifestPath $manifest
         Remove-ManifestEntry -ManifestPath $manifest -AgentName $a
@@ -895,16 +901,10 @@ try {
 
     $installedCount = 0
     $skippedCount = 0
+    $legacyWarned = @()
 
     foreach ($a in $agentList) {
         Write-Host ""
-
-        if ($a -in @("copilot","amp")) {
-            Write-Ok "${a}: covered by the .agents/skills install — nothing to write."
-            Record-Group -Path "" -AgentName $a
-            $skippedCount++
-            continue
-        }
 
         # Determine if global for this agent
         $useGlobal = [bool]$Global
@@ -931,6 +931,7 @@ try {
         # we publish v1.6.0 — manifest matches but cache is stale). Always
         # re-running keeps upgrades honest.
         $installedVer = Read-ManifestVersion -ManifestPath $manifest -AgentName $a
+        $oldTargetPath = Read-ManifestTargetPath -ManifestPath $manifest -AgentName $a
         if ($a -ne 'claude' -and $installedVer -and ($installedVer -eq $targetVersion) -and !$Force) {
             Write-Ok "$a already at v$installedVer, skipping."
             Record-Group -Path (Get-DisplayPathForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal) -AgentName $a
@@ -959,6 +960,17 @@ try {
         if ($result -ne $false) {
             $targetPath = if ($useGlobal) { Get-GlobalPath -AgentName $a } else { Get-TargetPath -AgentName $a -ProjDir $ProjectDir }
             $mode = if ($useGlobal) { "global" } else { "project" }
+
+            # A prior version of this agent's install may have written
+            # somewhere else (e.g. the pre-1.6.6 single-file layout). We only
+            # know about it because our own manifest recorded where we last
+            # wrote — warn instead of deleting, since we can't tell whether
+            # the user has since edited that file by hand.
+            if ($oldTargetPath -and ($oldTargetPath -ne $targetPath) -and (Test-Path $oldTargetPath) -and ($legacyWarned -notcontains $oldTargetPath)) {
+                Write-Warn "Legacy install found at $oldTargetPath (superseded by $targetPath) - remove it manually if no longer needed."
+                $legacyWarned += $oldTargetPath
+            }
+
             Write-ManifestEntry -ManifestPath $manifest -AgentName $a -Ver $targetVersion -Mode $mode -TargetPath $targetPath
             Record-Group -Path (Get-DisplayPathForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal) -AgentName $a
             $installedCount++

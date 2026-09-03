@@ -10,7 +10,7 @@ The plugin ships through three channels:
 2. **install.sh / install.ps1** — `curl ... | bash` for any of the 12 supported AI agents (downloads from GitHub raw).
 3. **npm** — `npm install -g @conductor-oss/conductor-skills` then `conductor-skills --agent <name>`. The npm package bundles all the same files and invokes the bundled `install.sh` / `install.ps1` with `CONDUCTOR_SKILLS_LOCAL_DIR=<package-root>` so the install scripts copy from the bundle instead of downloading.
 
-All three channels share the same `VERSION` — bump it in one place; CI fails if any of `plugin.json`, `marketplace.json`, `package.json`, or the `VERSION` constants in the install scripts drift.
+All three channels share the same `VERSION` — bump it in one place; CI fails if any of the ten files listed in the release checklist below drift.
 
 ## Repo layout
 
@@ -47,13 +47,17 @@ A user installs via:
    - **Minor (1.1.0 → 1.2.0)** — new task-type docs, new examples, new reference files, additive command coverage.
    - **Major (1.1.0 → 2.0.0)** — restructured file paths users may have linked to, removed commands, breaking schema changes.
 
-2. **Bump the version in six places** (they must agree, and CI enforces it):
+2. **Bump the version in ten places** (they must agree, and CI enforces it):
    - `VERSION`
    - `.claude-plugin/plugin.json` → `version`
    - `.claude-plugin/marketplace.json` → `plugins[0].version`
    - `package.json` → `version`
    - `install.sh` → `VERSION="..."` constant near the top
    - `install.ps1` → `$SCRIPT_VERSION = "..."` constant near the top
+   - `plugin.json` (root, used by the OpenAI Apps SDK plugin manifest) → `version`
+   - `.cursor-plugin/plugin.json` → `version`
+   - `.cursor-plugin/marketplace.json` → `metadata.version` and `plugins[0].version`
+   - `.openai/plugin.json` → `version`
 
 3. **Run validation locally**:
    ```bash
@@ -109,9 +113,9 @@ A user installs via:
 
 `scripts/validate_plugin.py`, run by `.github/workflows/validate-plugin.yml`, checks:
 
-- `plugin.json` and `marketplace.json` parse as JSON.
+- `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` parse as JSON.
 - Both have required fields (`name`, `version`, `description`, `plugins`).
-- `VERSION`, `plugin.json:version`, every `marketplace.json:plugins[*].version`, `package.json:version`, and the `VERSION` constants in `install.sh` and `install.ps1` all agree.
+- `VERSION` agrees with `.claude-plugin/plugin.json:version`, every `.claude-plugin/marketplace.json:plugins[*].version`, `package.json:version`, the `VERSION`/`$SCRIPT_VERSION` constants in `install.sh` and `install.ps1`, root `plugin.json:version`, `.cursor-plugin/plugin.json:version`, `.cursor-plugin/marketplace.json:metadata.version` and `plugins[*].version`, and `.openai/plugin.json:version`.
 - Each marketplace plugin entry resolves to a directory containing `skills/<name>/SKILL.md`.
 - Each SKILL.md has YAML frontmatter with a `name:` matching the plugin entry.
 - Every file under `commands/` has YAML frontmatter with a `description:`.
