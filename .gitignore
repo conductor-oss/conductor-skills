@@ -16,5 +16,5 @@ htmlcov/
 
 # Artifacts left behind when install.sh is run from the repo root during testing
 # (single-agent project install defaults to the current directory)
-AGENTS.md
+/AGENTS.md
 .conductor-skills/

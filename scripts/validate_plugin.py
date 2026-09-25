@@ -25,6 +25,7 @@ Exits non-zero on any failure. No third-party dependencies.
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -145,6 +146,21 @@ def check_installer_parity() -> None:
             "install.sh and install.ps1 SKILL_FILES lists differ: "
             + ", ".join(sorted(set(sh) ^ set(ps1)))
         )
+
+    # On case-insensitive filesystems, a broad ignore such as AGENTS.md can
+    # silently hide a lowercase agents.md. Ensure every locally shipped file is
+    # actually committed so a clean Linux checkout sees the same package.
+    if (ROOT / ".git").exists():
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", "skills/conductor"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        tracked = {path for path in result.stdout.split("\0") if path}
+        for untracked in sorted(shipped - tracked):
+            fail(f"installer skill file is not tracked by git: {untracked}")
 
 
 # ---------------------------------------------------------------------------
