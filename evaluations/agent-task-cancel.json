@@ -1,0 +1,26 @@
+{
+  "name": "Cancel an Agent Run Three Ways: In-Workflow Deadline, CANCEL_AGENT from Another Workflow, Operator Cancel",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Three cancellation scenarios for my deployed `deep_research` agent: (1) inside a workflow, give the agent 20 minutes and cancel it if it hasn't finished; (2) a run is paused waiting on a human and we've decided to abandon it — cancel it from another workflow; (3) an operator needs to cancel a run right now from the terminal. What do I use for each?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT`, `### CANCEL_AGENT`), references/agents.md (operations section: cancel = `DELETE /api/agent/{id}/cancel?reason=` or `conductor workflow terminate <executionId>`; status mapping canceled → CANCELED), references/cli-index.md (agent verbs — no `agent cancel`), and examples/agent-deploy-and-invoke.md (`agent-cancel.json`).",
+    "Step 2: Scenario 1 — two options. (a) Passive bound: `AGENT` with `maxDurationSeconds: 1200` (default 86400 ≈ unbounded) → the task fails at the deadline with a best-effort cancel of the child run. (b) Active race: `FORK_JOIN` with branch A = the `AGENT` task and branch B = `WAIT` (`duration: \"20m\"`) → `TERMINATE`; explain that the parent's termination propagates cancellation to the child agent run (embedded runtime), with a `JOIN` on the agent branch.",
+    "Step 3: Scenario 2 — `CANCEL_AGENT` task: `{\"agentType\":\"conductor\",\"executionId\":\"${workflow.input.executionId}\",\"reason\":\"abandoned by reviewer\"}` → output `{executionId, canceled: true}`. Note the a2a shape differs (`agentUrl` + `taskId`).",
+    "Step 4: Scenario 3 — operator: `DELETE /api/agent/{executionId}/cancel?reason=...` (via `conductor_api.py agent-cancel --id <id> --reason ...` or REST) or, because the `executionId` is a workflow id, `conductor workflow terminate <executionId>`. State plainly that there is no `conductor agent cancel` / `conductor agent stop` CLI verb. Mention `POST /api/agent/{id}/stop` for a graceful stop and SDK `cancel(id, reason)` as equivalents.",
+    "Step 5: Resulting state: agent `state: canceled`; an `AGENT` task observing it ends `CANCELED` (not FAILED). Verify with `conductor agent status <id>` / `conductor agent execution --name deep_research --status CANCELED`.",
+    "Step 6: Write any workflow JSON to files before `conductor workflow create`."
+  ],
+  "success_criteria": [
+    "Scenario 1 is solved with a `FORK_JOIN` racing the `AGENT` task against a `WAIT` → `TERMINATE` branch, with an explanation that parent termination propagates cancellation to the child agent run — and/or with `maxDurationSeconds: 1200` on the AGENT task",
+    "`maxDurationSeconds` is mentioned as the passive deadline on the AGENT task (calling out the 86400-second default as effectively unbounded is a plus)",
+    "Scenario 2 uses a `CANCEL_AGENT` task with `agentType: \"conductor\"`, `executionId`, and `reason`, and describes its `canceled: true` output",
+    "Scenario 3 uses `DELETE /api/agent/{id}/cancel?reason=...` (REST or `conductor_api.py agent-cancel`) and/or `conductor workflow terminate <executionId>`",
+    "Does not invent a `conductor agent cancel` or `conductor agent stop` CLI command",
+    "States that the agent `executionId` is a workflow id, which is why workflow verbs (`workflow terminate`, `workflow get-execution`) apply to it",
+    "Describes the resulting state as `canceled` on the agent and `CANCELED` (not FAILED) on the observing AGENT task",
+    "Does not conflate the a2a cancel shape (`agentUrl` + `taskId`) with the conductor shape (`executionId`); N/A and passing when a2a agents are not discussed",
+    "Any workflow JSON is written to a file before registration"
+  ]
+}

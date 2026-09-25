@@ -1,0 +1,24 @@
+{
+  "name": "Hand-Wired DO_WHILE Agent Requested — Offer the SDK Agent as Default, Keep Hand-Wiring as Escape Hatch",
+  "skills": ["conductor"],
+  "query": "Build me a workflow: a DO_WHILE with an LLM_CHAT_COMPLETE, a SWITCH on the action, three HTTP tools (lookup_order, check_inventory, issue_refund), a SET_VARIABLE for chat history, max 10 turns. issue_refund must get human approval before it runs, and I want to watch the agent's reasoning live while it runs.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 8, references/agents.md (decision table: 'build an agent' + approval + live reasoning → path 2 Conductor Agent via SDK; path 5 hand-wired loop is the escape hatch), references/optimization.md rule F4, examples/ai-agent-loop.md (hand-wired loop, under the hood / manual control), and references/agent-sdks.md.",
+    "Step 2: Explain that the requested shape — DO_WHILE { LLM_CHAT_COMPLETE → SWITCH → tool → SET_VARIABLE history } — is exactly what the agent compiler emits for a Conductor Agent (`{name}_loop`, `{name}_llm`), plus approval gates, guardrails, streaming and token accounting that would otherwise be re-implemented by hand (F4).",
+    "Step 3: Present the SDK path as the default: `Agent(name=\"order_agent\", model=\"openai/gpt-4o-mini\", instructions=..., tools=[lookup_order, check_inventory, issue_refund], max_turns=10)`; the three HTTP tools become `http_tool(...)` (server-side, no `serve()` needed) or `@tool` functions; `issue_refund` gets `approval_required=True` → the run pauses with `waiting: true` + `pendingTool` and is approved with `conductor agent respond <id> --approve` (or `POST /api/agent/{id}/respond {\"approved\": true}`).",
+    "Step 4: Live reasoning: `conductor agent stream <executionId>` or `runtime.stream(agent, prompt)` (SSE events `thinking`, `tool_call`, `tool_result`, `waiting`, `done`); `conductor agent run --name order_agent \"...\"` streams by default.",
+    "Step 5: Ask which language, then `run()` locally → `deploy()` → optional `AGENT {agentType:\"conductor\", name:\"order_agent\"}` task if it must live inside a larger workflow.",
+    "Step 6: Keep the hand-wired loop available as the advanced path and name when it is legitimate: custom loop condition / non-LLM steps between turns, `previousResponseId` chaining, several models per iteration, or a server without the agent runtime. If the user insists, deliver it following examples/ai-agent-loop.md (graaljs IIFE, `{role, message}`, `jsonOutput`, empty `defaultCase`, JQ `tojson`), noting approval and streaming must then be hand-built (HUMAN task + polling).",
+    "Step 7: Never invent a task type; do not deliver only the hand-wired loop without offering the SDK path."
+  ],
+  "success_criteria": [
+    "Presents the SDK `Agent` path (deploy, optionally invoked via an `AGENT` task) as the default recommendation and explains that the compiler emits the same DO_WHILE / LLM / SWITCH / history loop",
+    "Maps the approval requirement to `approval_required=True` on `issue_refund` with approval via `conductor agent respond --approve` / `POST /api/agent/{id}/respond {\"approved\": true}` (the `waiting` + `pendingTool` contract)",
+    "Maps the live-reasoning requirement to `conductor agent stream <id>` / `runtime.stream(...)` (SSE events) rather than hand-built polling",
+    "Keeps the hand-wired loop as an advanced/escape-hatch option and names at least one legitimate reason to choose it (custom loop condition, non-LLM steps between turns, `previousResponseId`, multiple models per iteration, agent runtime disabled)",
+    "Cites F4 (or Rule 8) as the basis for preferring the compiled agent",
+    "The SDK agent is bounded (`max_turns=10`) and uses an explicit `provider/model` string",
+    "Does not invent a task type (e.g. AGENT_LOOP, REACT_LOOP) and the deliverable is not only the hand-wired loop",
+    "If a hand-wired version is also delivered, it follows the examples/ai-agent-loop.md rules (graaljs IIFE loopCondition, `{role, message}`, `jsonOutput: true`, empty `defaultCase`) — N/A and passing when no hand-wired version is produced"
+  ]
+}

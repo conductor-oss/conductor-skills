@@ -1,0 +1,29 @@
+{
+  "name": "Support Supervisor That Hands Off to Billing / Technical / Sales Specialists (Strategy.HANDOFF)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We run a support desk and want one agent the frontline can call that works out whether a customer question is about billing, a technical problem, or a sales/upgrade request and hands the conversation to the right specialist. Each specialist has its own instructions and a tool or two (billing can look up invoices, technical can read a ticket, sales can check plan prices). Python please, and once it's deployed we want to call it from our existing `support_intake` workflow.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (multi-agent strategies — the `handoff` row: the model picks a specialist and the conversation continues there; the specialist speaks last unless `synthesize=True`; children compile to `SUB_WORKFLOW`s and the parent owns the loop), references/agents.md §3 (lifecycle verbs, worker gate) and §4 (`agents[]` + `strategy`, `synthesize`, `max_turns`), references/workflow-definition.md (`### AGENT` conductor mode), examples/agent-deploy-and-invoke.md, and references/optimization.md F1/F3. Run the prerequisite check (`conductor agent list`, `python3 \"$CONDUCTOR_API\" providers-status`) and WebFetch the Python SDK `docs/agents/` before pinning `pip install 'conductor-python[agents]'` (SKILL.md Rule 7.3).",
+    "Step 2: Define three child agents with unique names and their own bounds: `billing = Agent(name=\"billing\", model=\"openai/gpt-4o-mini\", instructions=\"...\", tools=[lookup_invoice], max_turns=8)`, `technical = Agent(name=\"technical\", ..., tools=[read_ticket], max_turns=8)`, `sales = Agent(name=\"sales\", ..., tools=[get_plan_price], max_turns=8)`; each tool is a `@tool` function with a plain description (the routing contract) and an idempotency note.",
+    "Step 3: Parent: `support = Agent(name=\"support\", model=\"openai/gpt-4o-mini\", instructions=\"Route to the right specialist.\", agents=[billing, technical, sales], strategy=Strategy.HANDOFF, max_turns=10)` with `from conductor.ai.agents import Agent, AgentRuntime, Strategy, tool`. Explain HANDOFF semantics: the supervisor's model picks one specialist, control transfers, and the specialist's answer is the final answer (it speaks last); set `synthesize=True` only if the supervisor should summarize after the specialist. State that each child compiles to a `SUB_WORKFLOW` inside one deployed agent named `support`.",
+    "Step 4: Local iteration under `if __name__ == \"__main__\":` — `with AgentRuntime() as runtime: result = runtime.run(support, \"My invoice is wrong\"); result.print_result()`. Provider key lives on the server; never in code.",
+    "Step 5: Production split: `release.py` runs `runtime.plan(support)` (prints `requiredWorkers` — the three specialists' `@tool` functions) then `runtime.deploy(support)`; `worker.py` runs `runtime.serve(support)` as a long-lived process. State the agent worker gate (Rule 9 / F3): `requiredWorkers` is non-empty, so `serve` must be running or every run stalls with a tool task SCHEDULED. Never `conductor deploy` (Rule 13).",
+    "Step 6: Wire `support_intake`: `{\"name\":\"ask_support\",\"taskReferenceName\":\"ask_support\",\"type\":\"AGENT\",\"inputParameters\":{\"agentType\":\"conductor\",\"name\":\"support\",\"prompt\":\"${workflow.input.question}\",\"maxDurationSeconds\":900}}`; read `${ask_support.output.text}` (or `.output.output.result`). `agentType` is `conductor` — never `\"handoff\"`, never a framework name; the field is `name`, not `agentName`. Write the JSON to a file, then `conductor workflow update` / `create`.",
+    "Step 7: Bounds (F1): `max_turns` on the parent and every child, `maxDurationSeconds` on the AGENT task, workflow `timeoutSeconds` + `timeoutPolicy`.",
+    "Step 8: Verify: offline `mock_run(support, \"My invoice is wrong\", events=[MockEvent.handoff(...), MockEvent.done(...)])` with `expect(result).handoff_to(\"billing\")` / `assert_handoff_to`; live `conductor agent stream <executionId>` shows `handoff`, `subagent_start`, `subagent_stop` events."
+  ],
+  "success_criteria": [
+    "Defines three child `Agent`s named `billing`, `technical` and `sales`, each with a unique `name`, its own `instructions` and its own `max_turns`",
+    "The parent uses `agents=[billing, technical, sales]` with `strategy=Strategy.HANDOFF` (or `\"handoff\"`) — not a workflow-side FORK_JOIN or SWITCH over three separately deployed agents as the primary design",
+    "Explains HANDOFF semantics: the model picks one specialist, control transfers and the specialist speaks last (mentioning `synthesize=True` as the option to have the parent summarize is a plus)",
+    "Every `model` is provider-qualified (`openai/gpt-4o-mini`, `anthropic/claude-sonnet-4-6`, …) — no bare model names and no reliance on `CONDUCTOR_AGENT_LLM_MODEL`",
+    "Deploy/serve split is explicit: `runtime.deploy(support)` in a release step and a long-lived `runtime.serve(support)` for the specialists' `@tool` workers, with the worker gate stated (`requiredWorkers` non-empty → serve must be running)",
+    "Does not run or recommend `conductor deploy`",
+    "The `AGENT` task in `support_intake` uses `agentType: \"conductor\"`, `name: \"support\"` and a `prompt` — never `agentType: \"handoff\"`, a framework name, or `agentName`",
+    "Reads the result at `${<ref>.output.text}` or `${<ref>.output.output.result}` and sets `maxDurationSeconds` and/or a workflow-level timeout",
+    "States that the children compile to `SUB_WORKFLOW`s inside one deployed agent (the workflow calls a single agent named `support`)",
+    "Mentions a verification path: offline `mock_run` + `expect(...).handoff_to(...)` / `assert_handoff_to`, or the `handoff` / `subagent_start` events on `conductor agent stream`"
+  ]
+}

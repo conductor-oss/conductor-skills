@@ -6,6 +6,8 @@ Workers execute SIMPLE tasks in a workflow. They poll the Conductor server for t
 
 Most "I need a worker for X" requests are actually built-in tasks. Walk SKILL.md Rule 6's table before writing any worker code — if a built-in matches (LLM call, Kafka publish, PDF render, vector index/search, sub-workflow trigger, wait, human approval, JQ transform, fork/join, etc.), use it. A custom worker is the right answer only when no built-in covers the operation (e.g. an internal API, a proprietary system, business logic that doesn't fit a generic task).
 
+> **Agent tools are not workers in this sense.** For a Conductor Agent, tools are `@tool` / `tool()` / `@Tool` / `[Tool]` functions served by `AgentRuntime.serve()`, and the compiler registers their task definitions for you — see [agents.md](agents.md) and [agent-sdks.md](agent-sdks.md). Use this page for `SIMPLE` tasks in hand-written workflows (and for the hosted-agent `autoRunTools` case, where a worker registered for the tool's name serves the agent's tool).
+
 ## Scaffolding flow (SKILL.md Rule 7)
 
 1. **Confirm no built-in fits.** Name the closest candidate and why it doesn't work.
@@ -36,7 +38,7 @@ All official SDKs live under the `conductor-oss` GitHub org with the `*-sdk` nam
 | Ruby | [github.com/conductor-oss/ruby-sdk](https://github.com/conductor-oss/ruby-sdk) | Gem: `conductor_ruby` (early version — confirm patterns from the repo) |
 | Rust | [github.com/conductor-oss/rust-sdk](https://github.com/conductor-oss/rust-sdk) | crates.io: `conductor-rust` (early version — confirm patterns from the repo) |
 
-All SDKs connect via the same env vars: `CONDUCTOR_SERVER_URL`, `CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`.
+All SDKs connect via the same env vars: `CONDUCTOR_SERVER_URL` (API base ending in `/api`), `CONDUCTOR_AUTH_KEY`, `CONDUCTOR_AUTH_SECRET`. Inject credential values through the worker's secret store or environment; never put them in source, workflow input, chat, or CLI arguments.
 
 > **Why the WebFetch step matters.** The Python/JS/Java/Go patterns below are stable across recent versions but the API surface still drifts (e.g. Python switched runner classes; Java's `@WorkerTask` annotation gained options; Go module path moved org without changing the import). The .NET / Ruby / Rust SDKs are younger and their APIs shift more — fetch the README before scaffolding rather than trust an example below.
 
@@ -95,7 +97,7 @@ const client = await orkesConductorClient({
 
 const taskManager = new TaskManager(client, [
   {
-    taskType: "process_order",
+    taskDefName: "process_order", // SDK 4.x field name (older examples used taskType)
     execute: async ({ inputData }) => {
       return {
         status: "COMPLETED",

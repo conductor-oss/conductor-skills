@@ -1,0 +1,27 @@
+{
+  "name": "Research Writer That Plans, Executes Over Tools, Replans on Failure and Falls Back (Strategy.PLAN_EXECUTE)",
+  "skills": ["conductor"],
+  "query": "I want a research-writer agent that first makes a plan (which sections, which searches), then executes it step by step with `search_web` and `write_section` tools, and replans if a step fails. The planner should read our house-style guide from the intranet (it needs a bearer token) plus a short style note. If planning falls over completely there should be a simpler fallback. Python.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `plan_execute` row: a planner agent emits a typed plan over `tools`, executed as a durable sub-workflow and replanned on failure; requires `planner=` and a non-empty `tools=`; `fallback=` runs when planning fails; `planner_context` feeds text or fetched URLs), references/agents.md §4 (`plan_execute` needs `planner=`, optional `fallback=`; `planner_context`, `fallback_max_turns`, `credentials[]`), §8 secrets, references/optimization.md F1, F2, F3, F5 (`${CRED}` placeholders in `plannerContext` headers).",
+    "Step 2: Tools: `@tool def search_web(query: str) -> dict` and `@tool def write_section(title: str, notes: str) -> dict` with plain descriptions (the planner plans over these). Two helper agents: `planner = Agent(name=\"planner\", model=\"openai/gpt-4o-mini\", instructions=\"Produce a step-by-step plan over the available tools.\", max_turns=2)` and `fallback = Agent(name=\"simple_writer\", model=\"openai/gpt-4o-mini\", instructions=\"Write the article directly.\", tools=[search_web, write_section], max_turns=6)`.",
+    "Step 3: `writer = Agent(name=\"research_writer\", model=\"openai/gpt-4o-mini\", tools=[search_web, write_section], strategy=Strategy.PLAN_EXECUTE, planner=planner, fallback=fallback, fallback_max_turns=3, planner_context=[{\"text\": \"House style: short paragraphs.\"}, {\"url\": \"https://intranet.example/guide\", \"headers\": {\"Authorization\": \"Bearer ${DOCS_TOKEN}\"}}], credentials=[\"DOCS_TOKEN\"], max_turns=12)`.",
+    "Step 4: Explain the contract: `planner=` is REQUIRED and `tools=` must be non-empty (plan steps are over these tools); the plan runs as a durable sub-workflow — each step is a task — and a failed step triggers a replan; `fallback` runs only when planning itself fails, bounded by `fallback_max_turns`.",
+    "Step 5: Secret handling (F5 / D1): `${DOCS_TOKEN}` is a placeholder resolved server-side because the name is listed in `credentials=[\"DOCS_TOKEN\"]`; the value lives in the server secret store (`CONDUCTOR_SECRET_DOCS_TOKEN` env on OSS, `/api/secrets` when writable, or the Orkes secret manager) — never pasted into `planner_context`, `instructions` or code.",
+    "Step 6: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(writer, \"Write a 3-section explainer on durable execution\")`; `runtime.plan(writer)` → `requiredWorkers` (`search_web`, `write_section`); `runtime.deploy(writer)` in CI; a long-lived `runtime.serve(writer)` (Rule 9 / F3). Never `conductor deploy`.",
+    "Step 7: Bounds (F1): `max_turns` on planner, fallback and the main agent; `fallback_max_turns`; `maxDurationSeconds` on any caller's `AGENT` task and a workflow timeout.",
+    "Step 8: Optional workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"research_writer\"`, `prompt`; never `agentType: \"plan_execute\"`. Verify with `mock_run` + `expect(result).used_tool(\"search_web\")` and `conductor agent stream <id>`."
+  ],
+  "success_criteria": [
+    "Uses `strategy=Strategy.PLAN_EXECUTE` (or `\"plan_execute\"`) with `planner=<Agent>` present and stated as required",
+    "`tools=[search_web, write_section]` is non-empty on the plan-execute agent and the response states the plan is made over these tools (non-empty `tools=` required)",
+    "Sets `fallback=<Agent>` and `fallback_max_turns`, explaining that the fallback runs when planning fails",
+    "`planner_context` is a list containing a `{\"text\": ...}` item and a `{\"url\": ..., \"headers\": {\"Authorization\": \"Bearer ${DOCS_TOKEN}\"}}` item",
+    "`credentials=[\"DOCS_TOKEN\"]` carries the secret NAME; no token value appears anywhere, and the server-side secret store is named",
+    "States that the plan executes as a durable sub-workflow and is replanned when a step fails",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Sets `max_turns` on the planner, the fallback and the main agent (F1)",
+    "Names a long-lived `runtime.serve(...)` for the two `@tool` workers and deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never `agentType: \"plan_execute\"` or a framework name"
+  ]
+}

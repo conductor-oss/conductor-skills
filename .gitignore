@@ -2,6 +2,14 @@
 .idea/
 *.tgz
 node_modules/
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local Claude Code settings (machine-specific paths, per-developer permissions)
 .claude/

@@ -1,0 +1,26 @@
+{
+  "name": "Run a Google ADK LlmAgent (Gemini, function tools, sub_agent) on Conductor",
+  "skills": ["conductor"],
+  "query": "Our team uses Google ADK. We have an `LlmAgent` on `gemini-2.0-flash` with two Python function tools (`search_kb`, `create_ticket`) and one `sub_agents=[escalation_agent]`. Get it running on Conductor.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (decision table → path 3; Google ADK is compiled into a Conductor graph) and references/agent-sdks.md (Google ADK row for Python: pass the ADK object directly; Gemini model prefix is `google_gemini/`).",
+    "Step 2: Preflight — `conductor agent list`; `GET /api/providers/status` shows `gemini` configured — i.e. `GEMINI_API_KEY` is set on the Conductor server, not in the agent's process.",
+    "Step 3: WebFetch the Python SDK `docs/agents/` ADK page; install `pip install 'conductor-python[adk]'`.",
+    "Step 4: Pass the ADK `LlmAgent` object directly: `runtime = AgentRuntime(); runtime.run(adk_agent, \"test\")`, then `runtime.deploy(adk_agent)` and a long-lived `runtime.serve(adk_agent)`. Keep ADK's singular `instruction` field as-is (the bridge maps it). Keep `sub_agents=[escalation_agent]` — it becomes a sub-agent (`agents[]` + strategy) on the Conductor side.",
+    "Step 5: Explain that on Conductor the model is `google_gemini/gemini-2.0-flash`; do not rely on `AGENT_DEFAULT_MODEL` or `CONDUCTOR_AGENT_LLM_MODEL` to supply it.",
+    "Step 6: The two Python function tools compile to worker tools → `serve()` must be running in production or tool calls hang (worker gate).",
+    "Step 7: Verify with `conductor agent get <name>` (shows `model: google_gemini/...`) and `conductor agent run --name <name> \"...\"`. Workflow invocation uses `AGENT` with `agentType: \"conductor\"` + `name` — never `agentType: \"google_adk\"`. Never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Install is `pip install 'conductor-python[adk]'` (or `[agents]`) — no invented package",
+    "The ADK `LlmAgent` object is passed directly to `AgentRuntime().run/deploy/serve`; the agent is not rewritten into a native Conductor `Agent` or a hand-wired loop",
+    "Model on the Conductor side is described as `google_gemini/gemini-2.0-flash` (the `google_gemini/` prefix), and `GEMINI_API_KEY` is described as living on the Conductor server (checked via `GET /api/providers/status`)",
+    "Keeps ADK's singular `instruction` field (does not tell the user to rename it to `instructions`)",
+    "`sub_agents=[escalation_agent]` is preserved as a sub-agent on the Conductor side (mentions `agents[]` / strategy) rather than being dropped or flattened",
+    "States that the function tools become worker tools that require a `runtime.serve(...)` process in production, and that `deploy()` alone does not run them",
+    "`agentType: \"google_adk\"` (or any framework name) never appears; any `AGENT` task uses `agentType: \"conductor\"` and `name`",
+    "Does not rely on `AGENT_DEFAULT_MODEL` or `CONDUCTOR_AGENT_LLM_MODEL` as the model source",
+    "WebFetches the Python SDK `docs/agents/` before pinning and never recommends `conductor deploy`",
+    "Verifies the deployment with `conductor agent get <name>` and/or `conductor agent list`"
+  ]
+}

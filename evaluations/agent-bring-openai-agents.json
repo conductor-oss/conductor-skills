@@ -1,0 +1,27 @@
+{
+  "name": "Bring an Existing OpenAI Agents SDK App to Conductor with Minimal Changes",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We already have an OpenAI Agents SDK app in Python: an `Agent` with `instructions`, three `@function_tool` functions, and we run it with `Runner.run_sync(agent, prompt)`. I want it running on Conductor with the fewest possible changes. What exactly do I change?",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (decision table → path 3 'bring your framework'; framework execution model — OpenAI Agents is compiled into a Conductor graph) and references/agent-sdks.md (OpenAI Agents SDK row for Python: drop-in `Runner` or pass the `agents.Agent` to `AgentRuntime`).",
+    "Step 2: Preflight — `conductor agent list`; `GET /api/providers/status` shows `openai` configured. Explain that because the agent is compiled, the LLM turns run server-side as `LLM_CHAT_COMPLETE`, so `OPENAI_API_KEY` must be on the Conductor server.",
+    "Step 3: WebFetch the Python SDK `docs/agents/` framework page; install `pip install 'conductor-python[openai-agents]'`.",
+    "Step 4: Minimal-change path: replace `from agents import Runner, function_tool` with `from conductor.ai import Runner, function_tool`; keep `Agent`, `instructions`, the three tools and `Runner.run_sync(agent, prompt)` untouched. Mention `Runner.run` / `Runner.run_streamed` are also available.",
+    "Step 5: Alternative path: keep the `agents` imports and pass the OpenAI `Agent` object directly — `AgentRuntime().run(openai_agent, prompt)` / `deploy(openai_agent)` / `serve(openai_agent)`. Note the normalizer carries over handoffs, guardrails and `output_type` (ask whether the app uses them).",
+    "Step 6: State that `@function_tool` functions become worker tools: for production `runtime.deploy(...)` registers and a long-lived `runtime.serve(...)` process executes them; without `serve()` tool calls hang.",
+    "Step 7: Model ends up as `openai/<model>`; if the code sets a model, keep it explicit. Any workflow invocation uses `AGENT` with `agentType: \"conductor\"` + `name` — never `agentType: \"openai\"`. Never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Offers the drop-in `from conductor.ai import Runner` (with or without also swapping `function_tool`) as the minimal-change path, keeping `Runner.run_sync(agent, prompt)` and the existing `Agent`/tools code",
+    "Also mentions the alternative of passing the OpenAI Agents SDK `Agent` object directly to `AgentRuntime().run/deploy/serve`",
+    "Install is `pip install 'conductor-python[openai-agents]'` (or `[agents]`) — no invented package",
+    "Explains that LLM turns run server-side (the agent is compiled into a Conductor graph) so `OPENAI_API_KEY` must be configured on the Conductor server (checked via `GET /api/providers/status`), not only in the app's environment",
+    "States that `@function_tool` functions are worker tools that need a `runtime.serve(...)` process in production, and that `deploy()` alone does not run them",
+    "Does not rewrite the app into a native Conductor `Agent`/`@tool` form or a hand-wired DO_WHILE loop — the user's Agent, instructions and tools are kept",
+    "Any workflow-side invocation uses `type: \"AGENT\"`, `agentType: \"conductor\"`, `name: \"<deployed name>\"` — `agentType: \"openai\"` never appears",
+    "WebFetches the Python SDK `docs/agents/` (or README) before pinning install/version, and never recommends `conductor deploy`",
+    "Mentions that handoffs / guardrails / `output_type` are carried over by the bridge, or asks whether the app uses them — does not claim they must be dropped"
+  ]
+}

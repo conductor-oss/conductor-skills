@@ -36,11 +36,12 @@ Once installed, your AI agent can:
 - **Signal** WAIT and HUMAN tasks for human-in-the-loop patterns
 - **Schedule** workflows on cron — schedules are part of OSS
 - **Write workers** in Python, JavaScript, Java, Go, C#, Ruby, or Rust
+- **Build agents** — scaffold, test, deploy, and invoke Conductor Agents with the SDK (Python, TypeScript, Java, C#) or bring a LangChain / LangGraph / OpenAI Agents / Google ADK / Vercel AI / Claude Agent SDK agent; call them from workflows with the `AGENT` task, with human-in-the-loop, multi-agent, scheduling, and evals; call remote A2A agents
 - **Visualize** workflows as Mermaid diagrams
-- **Review & optimize** existing workflows against a checklist of 19 reliability / performance / security / structure rules
+- **Review & optimize** existing workflows and agents against a checklist of 32 reliability / performance / security / structure / agent rules
 - **Manage** secrets and webhooks (Orkes)
 
-On Claude Code, four slash commands give you direct entry points:
+On Claude Code, five slash commands give you direct entry points:
 
 | Command | Purpose |
 |---------|---------|
@@ -48,8 +49,9 @@ On Claude Code, four slash commands give you direct entry points:
 | `/conductor-setup` | First-time setup (CLI, server, auth) |
 | `/conductor-optimize` | Review a workflow against the optimization checklist |
 | `/conductor-scaffold-worker` | Generate a worker stub in your language |
+| `/conductor-scaffold-agent` | Scaffold, test, deploy, and wire up a Conductor Agent (native SDK or a framework agent) |
 
-Everything else (run, status, schedule, retry, signal, visualize, create) works through plain English — no command needed.
+Everything else (run, status, schedule, retry, signal, visualize, create, run/observe/approve/cancel agents) works through plain English — no command needed.
 
 ---
 
@@ -210,6 +212,25 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Index this document into the knowledge base"* — using `LLM_INDEX_TEXT`
 - *"Generate an image from a prompt with DALL-E"* — using `GENERATE_IMAGE`
 
+**Conductor Agents** *(or `/conductor-scaffold-agent`)*
+- *"Build a Python agent that looks up orders and issues refunds only after a human approves"*
+- *"Scaffold a TypeScript support agent with a lookup_order tool and tests"*
+- *"Port my LangGraph graph to run durably on Conductor"* — bridges: OpenAI Agents, Google ADK, LangChain, LangGraph, Vercel AI, Claude Agent SDK, LangChain4j, LangGraph4j, Semantic Kernel
+- *"Write mock_run tests for support_agent that prove it never calls issue_refund without lookup_order"*
+- *"Show me what support_agent compiles to before I deploy it"*
+- *"Deploy support_agent and start serving its tools"*
+- *"Add an AGENT task to order-processing that calls support_agent and pauses for a human if it asks a question"*
+- *"Run planner and researcher in parallel from one workflow"*
+
+**Agent operations** *(plain English)*
+- *"Run support_agent with 'where is order 123' and stream it"*
+- *"Show failed agent runs from the last hour"*
+- *"What is agent execution abc-123 waiting on?"* → *"Approve it"* / *"Deny it — amount too high"*
+- *"Cancel agent run abc-123, customer withdrew"*
+- *"Schedule nightly_digest to run at 2am UTC with prompt 'Summarize yesterday'"*
+- *"Review support_agent for production readiness"* *(or `/conductor-optimize support_agent`)*
+- *"Call the currency agent at https://agents.example.com from my workflow"* — remote A2A
+
 **Visualize**
 - *"Show me a diagram of the order-processing workflow"*
 - *"Render the FORK_JOIN flow as a Mermaid chart"*
@@ -249,6 +270,14 @@ AI / LLM patterns:
 | [Autonomous Agent Loop](skills/conductor/examples/ai-agent-loop.md) | ReAct-pattern `DO_WHILE` loop until the LLM decides it's done |
 | [RAG — Retrieval Augmented Generation](skills/conductor/examples/llm-rag.md) | Vector search + grounded LLM answer with sources |
 
+Conductor Agents:
+
+| Example | Description |
+|---------|-------------|
+| [Build, deploy, and invoke an agent](skills/conductor/examples/agent-deploy-and-invoke.md) | SDK `Agent` + tools → run → deploy + serve → `AGENT` task → HITL → observe → schedule → cancel |
+| [Call a remote A2A agent](skills/conductor/examples/agent-a2a-remote.md) | `GET_AGENT_CARD` → `AGENT` a2a → multi-turn resume; expose a workflow as an A2A server |
+| [Agent code samples](skills/conductor/examples/agents/) | Native scaffolds and framework bridges in Python, TypeScript, Java, C# |
+
 Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](skills/conductor/examples/workflows/) — pass any directly to `conductor workflow create`.
 
 ## References
@@ -261,10 +290,12 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [GraalJS Gotchas](skills/conductor/references/graaljs-gotchas.md) | JS-evaluated task pitfalls — Java-Map proxies, `$.varName` rule, scope rules, IIFE convention for DO_WHILE |
 | [Template Resolution](skills/conductor/references/template-resolution.md) | `${...}` resolution pitfalls — missing-field-returns-parent, object → string `toString`, iteration paths |
 | [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, C#, Ruby, Rust |
+| [Conductor Agents](skills/conductor/references/agents.md) | Decision table, lifecycle verbs, `Agent` fields, tools, HITL contract, operations, hosted agents, testing, gotchas |
+| [Agent SDKs](skills/conductor/references/agent-sdks.md) | Per-language scaffolds and the framework-bridge matrix (LangChain, LangGraph, OpenAI Agents, ADK, Vercel AI, Claude Agent SDK, LangChain4j, Semantic Kernel) |
 | [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
 | [Visualization](skills/conductor/references/visualization.md) | Mermaid mappings for every Conductor construct + UI link |
 | [Schedules](skills/conductor/references/schedules.md) | Cron schedules (OSS) — schema, format, idempotency patterns |
-| [Optimization Checklist](skills/conductor/references/optimization.md) | 22 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security |
+| [Optimization Checklist](skills/conductor/references/optimization.md) | 32 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, and agents |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
 | [Fallback CLI](skills/conductor/references/fallback-cli.md) | Python REST script equivalents when the CLI isn't available |

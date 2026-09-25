@@ -1,0 +1,27 @@
+{
+  "name": "Bring a LangChain create_agent Agent to Conductor (drop-in import, compiled vs passthrough)",
+  "skills": ["conductor"],
+  "query": "I have a LangChain agent: `ChatOpenAI(model='gpt-4o-mini')`, two `langchain_core.tools` `@tool` functions, built with `create_agent(model, tools, system_prompt=...)`. How do I run and deploy this on Conductor?",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (framework execution model: plain LangChain is passthrough; the SDK's `create_agent` drop-in enables full extraction) and references/agent-sdks.md (LangChain row for Python — recommended import `from conductor.ai.agents.langchain import create_agent`).",
+    "Step 2: Preflight — `conductor agent list`; `GET /api/providers/status` for `openai`.",
+    "Step 3: WebFetch the Python SDK `docs/agents/` LangChain page; install `pip install 'conductor-python[langchain]'`.",
+    "Step 4: Change one import: `from conductor.ai.agents.langchain import create_agent` instead of `from langchain.agents import create_agent`. Keep `ChatOpenAI(model='gpt-4o-mini')`, the two `@tool` functions and `system_prompt` unchanged.",
+    "Step 5: Explain why: the SDK drop-in stamps metadata so the server does full extraction (agent compiled into a Conductor graph, LLM turns server-side). The plain `langchain.agents.create_agent` returns a `CompiledStateGraph`, is detected as LangGraph and may fall to passthrough — where the whole agent loop runs inside the `serve()` worker and the server sees a single SIMPLE task.",
+    "Step 6: Run and deploy: `runtime = AgentRuntime(); runtime.run(agent, prompt)` locally; `runtime.deploy(agent)` in the release step; long-lived `runtime.serve(agent)`. State that passthrough agents need `serve()` running to make any progress; compiled agents need it for worker tools.",
+    "Step 7: Key location depends on execution model: compiled → `OPENAI_API_KEY` on the Conductor server; passthrough → `ChatOpenAI` calls the provider from inside the `serve()` process, so the key goes in that process's environment (never in code, never in workflow input).",
+    "Step 8: Workflow invocation uses `AGENT` with `agentType: \"conductor\"` + `name` — never `agentType: \"langchain\"`. Never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Uses `from conductor.ai.agents.langchain import create_agent` (the SDK drop-in) rather than `langchain.agents.create_agent` for the Conductor build",
+    "Explains why the drop-in matters: it stamps metadata for full extraction (compiled), whereas the plain builder returns a CompiledStateGraph that is detected as LangGraph and may fall to passthrough",
+    "Explains that in passthrough mode the whole agent loop runs inside the `serve()` worker and the server sees one SIMPLE task — so `serve()` is mandatory for any progress",
+    "Install is `pip install 'conductor-python[langchain]'` (or `[agents]`) — no invented package",
+    "Keeps the user's `ChatOpenAI` model and `langchain_core` `@tool` functions; does not rewrite them into native Conductor tools or a hand-wired DO_WHILE loop",
+    "Shows local iteration with `runtime.run(...)` and a production split of `runtime.deploy(...)` plus a long-lived `runtime.serve(...)`",
+    "Places the `OPENAI_API_KEY` correctly for each execution model: on the Conductor server when compiled, in the serve process's environment when passthrough — never in code or workflow input",
+    "`agentType: \"langchain\"` (or any framework name) never appears; any `AGENT` task uses `agentType: \"conductor\"` and `name`",
+    "Where a Conductor-side model string is given it is provider-qualified (`openai/gpt-4o-mini`); WebFetches the SDK `docs/agents/` before pinning",
+    "Never recommends `conductor deploy`"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Java + LangChain4j: One @Tool Inventory Lookup as a Conductor Agent (Gradle)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We're a Java shop on Gradle using LangChain4j. I have a class with one `@Tool` method `lookupInventory(String sku)`. Turn it into a Conductor agent called `inventory_agent` that we can run locally and deploy.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (decision table → path 3; Java column) and references/agent-sdks.md (Java install/import matrix; LangChain4j row: `org.conductoross.conductor.ai.frameworks.LangChain4jAgent.from(name, model, instructions, toolObjs...)`; artifact is `conductor-client-ai`).",
+    "Step 2: Preflight — `conductor agent list`; `GET /api/providers/status` to pick a configured `provider/model`.",
+    "Step 3: WebFetch the Java SDK `docs/agents/` index and/or Maven Central to pin the `conductor-client-ai` version before writing the build file (a placeholder version with an explicit fetch step is acceptable).",
+    "Step 4: Gradle: `implementation 'org.conductoross:conductor-client-ai:<version>'` (plus the user's existing LangChain4j deps). Note `conductor-client-ai-spring` exists for Spring Boot, or ask whether the service is Spring.",
+    "Step 5: Code: keep the LangChain4j `@Tool`-annotated `lookupInventory(String sku)` method on its class; build the agent with `LangChain4jAgent.from(\"inventory_agent\", \"openai/gpt-4o-mini\", \"You answer inventory questions...\", new InventoryTools())`.",
+    "Step 6: Lifecycle: `AgentRuntime runtime = new AgentRuntime(); runtime.run(agent, \"Stock for SKU 42?\")` locally; a release entry point calling `runtime.deploy(agent)` and a long-lived process calling `runtime.serve(agent)` so the `@Tool` worker executes. State the worker gate.",
+    "Step 7: Testing: Java has no shipped trace-assertion module — assert that `runtime.plan(agent)` compiles and lists the expected `requiredWorkers`; note trace assertions (`mock_run` / `mockRun`) are Python/TypeScript only.",
+    "Step 8: Verify with `conductor agent list` / `conductor agent get inventory_agent`; workflow invocation uses `AGENT` with `agentType: \"conductor\"`, `name: \"inventory_agent\"`. Never recommend `conductor deploy`; stay in Java."
+  ],
+  "success_criteria": [
+    "Gradle dependency uses the artifact `org.conductoross:conductor-client-ai` — not `conductor-ai`, not plain `conductor-client`",
+    "Plan WebFetches the Java SDK `docs/agents/` and/or Maven Central to pin the version before finalizing the build file (a placeholder plus an explicit fetch step is acceptable)",
+    "Agent is built with `LangChain4jAgent.from(name, model, instructions, toolObjs...)` from `org.conductoross.conductor.ai.frameworks` (or the equivalent `LangChainBridge` builder) — no invented class",
+    "The LangChain4j `@Tool` annotation on `lookupInventory(String sku)` is preserved; the user is not told to rewrite the tool in another framework",
+    "Model is a provider-qualified `provider/model` string set explicitly",
+    "Shows local `runtime.run(...)` plus separate `runtime.deploy(...)` and long-lived `runtime.serve(...)` entry points, stating that without `serve()` the tool call hangs",
+    "Does not invent a Spring artifact; mentioning `conductor-client-ai-spring` for Spring Boot (or asking whether the service uses Spring) is a plus",
+    "Stays in Java throughout — does not switch the user to Python or TypeScript",
+    "Is honest about testing: does not claim a Java `mock_run`-style module; suggests asserting on `plan()` output / `requiredWorkers` and notes trace assertions are Python/TypeScript only",
+    "Never recommends `conductor deploy`; verifies with `conductor agent list` / `conductor agent get inventory_agent`"
+  ]
+}

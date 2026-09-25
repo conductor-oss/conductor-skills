@@ -1,0 +1,29 @@
+{
+  "name": "Customer Agent That Remembers Facts Across Runs (SemanticMemory) — and Why sessionId Alone Does Not",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Our `customer_agent` should remember facts about customers across runs — 'Alice prefers email', 'Bob's account is enterprise' — and pull the relevant ones into the conversation when asked. A teammate says we just pass the same `sessionId` on every AGENT call and the agent will remember. Python. Is that right, and how should we actually do it?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §7 (`SemanticMemory(max_results=3)`, `memory.add(...)`, a `@tool recall(query)` returning `memory.get_context(query)`), references/agents.md §4 (`session_id` correlates executions — it becomes `contextId` — but does not replay earlier turns into a new run; for continuity set `memory=` with `ConversationMemory` / `SemanticMemory` or feed the previous result back in `prompt` / `context`), §5 (memory building blocks `ConversationMemory`, `SemanticMemory`, `MemoryStore`), references/workflow-definition.md (`### AGENT` — the `sessionId` row, observed live), references/optimization.md F3 and F5.",
+    "Step 2: Correct the teammate: `sessionId` groups executions for search and becomes the output `contextId`, but a second run with the same `sessionId` has no memory of the first (observed live). Continuity comes from `memory=` on the agent or from passing the prior `${turn1.output.text}` into the next `prompt` / `context`.",
+    "Step 3: Code: `from conductor.ai.agents import Agent, AgentRuntime, SemanticMemory, tool`; `memory = SemanticMemory(max_results=3)`; `memory.add(\"Customer Alice prefers email.\")`; `memory.add(\"Bob's account is enterprise.\")`; `@tool def recall(query: str) -> str: \"\"\"Recall relevant customer context.\"\"\"; return memory.get_context(query)`; `agent = Agent(name=\"customer_agent\", model=\"openai/gpt-4o-mini\", instructions=\"Use recall before answering account questions.\", tools=[recall], memory=memory, max_turns=10)`.",
+    "Step 4: Mention `ConversationMemory` for turn-by-turn continuity within a conversation (and `MemoryStore` for a persistent backing store), and that `recall` is a `@tool` worker — a long-lived `runtime.serve(agent)` must be running (Rule 9 / F3).",
+    "Step 5: Data hygiene (F5): memory content and instructions are sent to the LLM provider every turn and appear in execution views — keep secrets out; customer PII belongs in the run-time `prompt` / `context`, not in `instructions`.",
+    "Step 6: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(agent, \"How should I contact Alice?\")`; `runtime.deploy(agent)` in CI; `runtime.serve(agent)`. Never `conductor deploy`.",
+    "Step 7: Workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"customer_agent\"`, `prompt`, optional `sessionId` for grouping, `maxDurationSeconds`; read `${ref.output.text}`.",
+    "Step 8: Test offline: `mock_run(agent, \"How should I contact Alice?\", events=[MockEvent.tool_call(\"recall\", {\"query\": \"Alice\"}), MockEvent.done(\"Email her.\")], auto_execute_tools=True)`; `expect(result).used_tool(\"recall\").output_contains(\"email\")`."
+  ],
+  "success_criteria": [
+    "Explicitly states that `sessionId` correlates executions (becomes `contextId`, groups searches) but does not replay history into a new run — the teammate's claim is corrected",
+    "Uses a real, durable memory mechanism instead of `sessionId`: `SemanticMemory` (whose default `InMemoryStore` is per-process — a persistent `MemoryStore` implementation is needed for cross-run facts), `index_tool`/`search_tool` (server-side vector index, needs the vector DB integration), or an explicit persistent store exposed as a `@tool` — and names the prerequisite of the chosen design",
+    "The chosen mechanism is wired into the `Agent` (`tools=[...]` or `memory=`) so relevant facts are pulled into the conversation when asked",
+    "Does not confuse cross-run facts with turn-by-turn continuity (mentioning `ConversationMemory` for the latter is a plus)",
+    "States the operational consequence of the chosen design: a `recall` worker tool needs a long-lived `serve()` process, while `index_tool`/`search_tool` need no worker but require the server-side vector DB integration",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "If an `AGENT` task is shown, it uses `agentType: \"conductor\"` + `name` (with `sessionId` only as optional grouping) — never a framework name; N/A and passing when no AGENT task is shown",
+    "Does not put secrets or PII into memory entries or `instructions` (noting that memory/instruction content is sent to the LLM provider, F5, is a plus)",
+    "Offers the alternative of feeding the prior `${<ref>.output.text}` into the next `prompt` / `context` for continuity"
+  ]
+}

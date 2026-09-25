@@ -1,9 +1,9 @@
 {
   "name": "Build an Autonomous Agent Loop with Iteration Cap",
   "skills": ["conductor"],
-  "query": "Build me an autonomous agent loop that uses an HTTP tool, tries up to 10 think/act iterations, accumulates chat history across iterations, and stops when the model emits an answer",
+  "query": "Build me an autonomous agent loop as pure workflow JSON — hand-wire it yourself with DO_WHILE / LLM_CHAT_COMPLETE / SWITCH, no SDK and no deployed Conductor Agent. It should use an HTTP tool, try up to 10 think/act iterations, accumulate chat history across iterations, and stop when the model emits an answer. I know the SDK Agent route exists; I want the raw JSON so I can see and control every step.",
   "expected_behavior": [
-    "Step 1: Consult examples/ai-agent-loop.md, references/workflow-definition.md (DO_WHILE + LLM_CHAT_COMPLETE), references/graaljs-gotchas.md, and references/template-resolution.md",
+    "Step 1: Consult examples/ai-agent-loop.md, references/workflow-definition.md (DO_WHILE + LLM_CHAT_COMPLETE), references/graaljs-gotchas.md, and references/template-resolution.md. Recognize from the decision table in references/agents.md that the user has explicitly chosen path 5 (hand-wired loop / manual control); briefly acknowledge that a deployed Conductor Agent (SDK `Agent` → `deploy()` → `AGENT {agentType:\"conductor\"}`) compiles to this same loop and offer it as an alternative, then deliver the requested hand-wired JSON as the primary deliverable.",
     "Step 2: Seed chat history with a SET_VARIABLE task that initializes workflow.variables.messages with a system prompt + user question, using Conductor's {role, message} schema (NOT {role, content})",
     "Step 3: Construct the DO_WHILE task with evaluatorType: \"graaljs\" at the top level, NOT just on inner tasks",
     "Step 4: loopCondition is an IIFE: (function(){ return $.<loopRef>['iteration'] < $.max_iterations && $.final_response === ''; })();  — NOT an if/else statement, NOT a named function",
@@ -31,6 +31,7 @@
     "JQ `queryExpression` references fields by name (e.g. `.current`, `.tool_result`, `.data`) rather than bare `.` — Conductor's JQ task passes the full `inputParameters` map as the JQ input, so bare `.` is the `{field1: ..., field2: ...}` wrapper, not the value.",
     "Workflow-level `timeoutSeconds` AND `timeoutPolicy: TIME_OUT_WF` are set",
     "outputParameters reads the iteration counter as `${<loopRef>.output.iteration}` (with `.output`), NOT `${<loopRef>.iteration}`",
-    "Agent does not invent a non-existent task type like AGENT_LOOP or REACT_LOOP"
+    "Agent does not invent a non-existent task type like AGENT_LOOP or REACT_LOOP (mentioning the real `AGENT` task or the SDK `Agent` as an alternative is fine)",
+    "Agent acknowledges that a deployed Conductor Agent (SDK `Agent` → `deploy()` → `AGENT` task with `agentType: \"conductor\"`) generates this same loop and offers it as an alternative, while still delivering the requested hand-wired JSON loop as the primary deliverable"
   ]
 }

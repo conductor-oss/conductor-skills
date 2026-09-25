@@ -9,9 +9,9 @@
 conductor workflow get order_processing > /tmp/wf.json
 
 # 2. For each SIMPLE task, load the task definition
-conductor taskDef get charge_card
-conductor taskDef get send_email
-conductor taskDef get update_inventory
+conductor task get charge_card
+conductor task get send_email
+conductor task get update_inventory
 ```
 
 Walk the checklist in [../references/optimization.md](../references/optimization.md). Group findings by severity.

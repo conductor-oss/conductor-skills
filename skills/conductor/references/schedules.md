@@ -14,6 +14,8 @@ conductor schedule pause {name}
 conductor schedule resume {name}
 ```
 
+Flag form for a quick create: `conductor schedule create -n {name} -c "0 0 2 * * ?" -w {workflow} -i '{...}' [-p] [--version N]`.
+
 The Python fallback script does **not** include schedule commands — the CLI is required.
 
 ## Schedule definition
@@ -73,6 +75,8 @@ Either day-of-month or day-of-week must be `?` (Quartz quirk — they can't both
 **Pausing without deleting.** Set `paused: true` and update — preserves history vs delete.
 
 **Ad-hoc backfill.** To run the scheduled workflow immediately for a missed window, just `conductor workflow start -w {name} -i '{...}'` — the schedule is just a trigger, not the workflow.
+
+**Scheduling a deployed agent.** A deployed Conductor Agent *is* a workflow named after the agent ([agents.md](agents.md)), so `startWorkflowRequest.name` is the agent name and `input` carries `{"prompt": "..."}`: `conductor schedule create -n {agent}-{purpose} -c "0 0 6 ? * MON-FRI" -w {agent} -i '{"prompt":"Summarize yesterday."}'`. Pin `--version` for production. Something must be running `runtime.serve(agent)` when it fires or the run's tool tasks sit SCHEDULED. Verify with `conductor agent execution --name {agent} --since 1d`.
 
 **Monitoring.** Schedules don't have their own execution history. Search executions by `correlationId` prefix to find scheduled runs:
 

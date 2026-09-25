@@ -1,0 +1,63 @@
+{
+  "name": "a2a_client_multi_turn",
+  "version": 1,
+  "schemaVersion": 2,
+  "timeoutSeconds": 3600,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "description": "Client-side multi-turn conversation: call a remote agent; if it returns input-required, branch (SWITCH on the agent's state) and call again with the SAME contextId/taskId carrying the answer \u2014 resuming the same remote task.",
+  "ownerEmail": "a2a@example.com",
+  "tasks": [
+    {
+      "name": "ask_agent",
+      "taskReferenceName": "ask",
+      "type": "AGENT",
+      "inputParameters": {
+        "agentType": "a2a",
+        "agentUrl": "${workflow.input.agentUrl}",
+        "text": "${workflow.input.prompt}",
+        "headers": {
+          "Authorization": "Bearer ${workflow.secrets.AGENT_TOKEN}"
+        },
+        "maxDurationSeconds": 900
+      }
+    },
+    {
+      "name": "branch_on_state",
+      "taskReferenceName": "branch",
+      "type": "SWITCH",
+      "evaluatorType": "value-param",
+      "expression": "state",
+      "inputParameters": {
+        "state": "${ask.output.state}"
+      },
+      "decisionCases": {
+        "input-required": [
+          {
+            "name": "answer_agent",
+            "taskReferenceName": "answer",
+            "type": "AGENT",
+            "inputParameters": {
+              "agentType": "a2a",
+              "agentUrl": "${workflow.input.agentUrl}",
+              "text": "${workflow.input.answer}",
+              "contextId": "${ask.output.contextId}",
+              "taskId": "${ask.output.taskId}",
+              "headers": {
+                "Authorization": "Bearer ${workflow.secrets.AGENT_TOKEN}"
+              },
+              "maxDurationSeconds": 900
+            }
+          }
+        ]
+      },
+      "defaultCase": []
+    }
+  ],
+  "outputParameters": {
+    "state": "${ask.output.state}",
+    "text": "${ask.output.text}",
+    "answer": "${ask.output.artifacts[0].parts[0].data.result}",
+    "taskId": "${ask.output.taskId}",
+    "contextId": "${ask.output.contextId}"
+  }
+}

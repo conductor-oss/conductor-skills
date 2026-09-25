@@ -1,0 +1,27 @@
+{
+  "name": "Dev-Team Agent With a Dedicated Selector Routing to Exactly One Specialist (Strategy.ROUTER)",
+  "skills": ["conductor"],
+  "query": "Our dev-team agent has three specialists — `planner`, `coder` and `reviewer` — and every request should go to exactly one of them, no back-and-forth between them. I don't want the specialists deciding; I want a small, cheap classifier making the call. Python. How would you set this up, and what has to be running in prod?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `router` row: a dedicated classifier — an `Agent` or a Python callable — picks exactly one child; no shared conversation; a callable `router` is a worker that `serve()` registers), references/agents.md §3/§4, references/optimization.md F1/F3, and WebFetch the Python SDK `docs/agents/` before pinning the install (Rule 7.3).",
+    "Step 2: Three specialists with unique names, `provider/model`, their own `instructions`, `@tool`s and `max_turns`: `planner`, `coder`, `reviewer`.",
+    "Step 3: A dedicated selector that is NOT one of the specialists: `selector = Agent(name=\"selector\", model=\"openai/gpt-4o-mini\", instructions=\"Reply with exactly one of: planner, coder, reviewer.\", max_turns=1)`; then `team = Agent(name=\"dev_team\", model=\"openai/gpt-4o-mini\", agents=[planner, coder, reviewer], strategy=Strategy.ROUTER, router=selector)`.",
+    "Step 4: Offer the callable alternative: `def pick(prompt: str) -> str: ...` returning a child name, passed as `router=pick` — cheaper and deterministic — and state that a callable router is a worker `serve()` registers, so the agent worker gate (Rule 9) applies to it as well.",
+    "Step 5: Semantics: exactly one child runs per request; there is no shared conversation between children (contrast with HANDOFF, where control transfers mid-conversation, and SWARM); the result is the chosen child's output. Children compile to `SUB_WORKFLOW`s.",
+    "Step 6: Lifecycle: `runtime.run(team, prompt)` locally under `if __name__ == \"__main__\":`; `runtime.plan(team)` to see `requiredWorkers` (the specialists' `@tool` workers plus the callable router if used); `runtime.deploy(team)` in CI; a long-lived `runtime.serve(team)`. Never `conductor deploy`.",
+    "Step 7: Optional workflow invocation: `AGENT` with `agentType: \"conductor\"`, `name: \"dev_team\"`, `prompt`, `maxDurationSeconds`; never `agentType: \"router\"`.",
+    "Step 8: Tests: `mock_run(team, \"Implement the login endpoint\", events=[...])` with `expect(result).handoff_to(\"coder\")` / `assert_agent_ran(\"coder\")`, and `validate_strategy` (raises `StrategyViolation`) to check the routing shape."
+  ],
+  "success_criteria": [
+    "The router is a separate `Agent` (or a Python callable) passed as `router=`, and is not one of `planner` / `coder` / `reviewer`",
+    "The parent uses `strategy=Strategy.ROUTER` (or `\"router\"`) with `agents=[planner, coder, reviewer]`",
+    "States that exactly one child runs per request and that there is no shared conversation between the children (contrasted with handoff/swarm)",
+    "Each specialist and the selector have unique `name`s and their own `max_turns` (the selector bounded to a single turn or similar)",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "States that a callable `router` is a worker registered by `serve()` (worker gate applies), and names the process that serves the specialists' `@tool` workers",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name: \"dev_team\"` — never `agentType: \"router\"` or a framework name",
+    "Mentions an offline verification (`mock_run` + `expect(...).handoff_to(...)` / `assert_agent_ran`, or `validate_strategy`)",
+    "Does not hand-wire the routing as a workflow `SWITCH` plus three `AGENT` tasks as the primary solution (mentioning it as an alternative is fine)"
+  ]
+}

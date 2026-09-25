@@ -1,0 +1,29 @@
+{
+  "name": "Bring a Claude Agent SDK (Claude Code) CI Fixer — Passthrough, Built-in Tools, Python Only",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We already use the Claude Agent SDK (Claude Code) to fix failing CI builds — it edits files and runs Bash. I want to run it as a Conductor agent so runs are durable and visible, keep Claude's built-in tools, let it edit files without prompting, and cap it at 50 turns. It needs a GitHub token. Our platform team also asked whether the TypeScript or Java SDK can do this.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §4 (the Claude Agent SDK row: `[claude]` extra; `Agent(name, model=ClaudeCode(\"sonnet\"), instructions, tools=[\"Read\", \"Glob\", \"Grep\"])`; built-in Claude tool names only; passthrough → `serve()` mandatory; TS has the `ClaudeCode` model class only, no passthrough bridge) and §7 (the `claude_code_fixer` example with `permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS`, `credentials=[\"GITHUB_TOKEN\"]`, `max_turns=50`), the unsupported-cells paragraph (\"Claude Agent SDK outside Python\"), references/agents.md §6 (passthrough: the whole loop runs inside the SDK worker, the server sees one SIMPLE task, provider key needed where `serve()` runs), §12, references/optimization.md F1, F2, F3, F5, and examples/agents/python/claude_agent_sdk_bridge.py. WebFetch the Python SDK `docs/agents/` before pinning (Rule 7.3).",
+    "Step 2: Install `pip install 'conductor-python[claude]'`; `from conductor.ai.agents import Agent, AgentRuntime, ClaudeCode`.",
+    "Step 3: `fixer = Agent(name=\"claude_code_fixer\", model=ClaudeCode(\"sonnet\", permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS), instructions=\"Fix the failing CI build in the current checkout.\", tools=[\"Bash\", \"Read\", \"Write\", \"Edit\", \"Glob\", \"Grep\"], credentials=[\"GITHUB_TOKEN\"], max_turns=50)`.",
+    "Step 4: Execution model: PASSTHROUGH — the whole Claude Code loop runs inside `runtime.serve(fixer)`; the server sees a single SIMPLE worker task; nothing progresses unless a `serve()` process is running (Rule 9 / F3). `ANTHROPIC_API_KEY` must be present where `serve()` runs (not only on the Conductor server), and the checkout / `GITHUB_TOKEN` are resolved there via `credentials`.",
+    "Step 5: Tools: `tools` must be Claude's built-in tool names as strings; passing a custom `@tool` function raises — put custom logic in a separate native `Agent` (or call it through `agent_tool`) instead.",
+    "Step 6: Cross-language answer: the passthrough bridge is Python-only. TypeScript has the `ClaudeCode` model class but no passthrough bridge; Java and C# have none. If they only want Claude as the model, use a native `Agent` with `model=\"anthropic/claude-sonnet-4-6\"` in any language — compiled, server-side, no local Claude Code process.",
+    "Step 7: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(fixer, ...)` to try it; `runtime.deploy(fixer)` in CI; long-lived `runtime.serve(fixer)`. Never `conductor deploy`. Workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"claude_code_fixer\"`, `prompt`, `maxDurationSeconds` — never `agentType: \"claude_agent_sdk\"` / `\"claude\"` / `\"anthropic\"`.",
+    "Step 8: Bounds and safety: `max_turns=50`, `maxDurationSeconds` on the caller, workflow `timeoutSeconds` (F1); `Bash` / `Write` / `Edit` with `ACCEPT_EDITS` are side effects (F2) — scope the checkout, run in a disposable workspace, or gate the merge step upstream."
+  ],
+  "success_criteria": [
+    "Uses `model=ClaudeCode(\"sonnet\", permission_mode=ClaudeCode.PermissionMode.ACCEPT_EDITS)` (or an equivalent `PermissionMode`)",
+    "`tools=[\"Bash\", \"Read\", \"Write\", \"Edit\", \"Glob\", \"Grep\"]` — Claude built-in tool names as strings — and states that a custom `@tool` function raises / is not accepted on this agent",
+    "`credentials=[\"GITHUB_TOKEN\"]` by NAME; no token value appears",
+    "Sets `max_turns=50`",
+    "Installs with `pip install 'conductor-python[claude]'`",
+    "States PASSTHROUGH: the whole loop runs inside `runtime.serve(...)`, which is mandatory (the server sees one SIMPLE task), and the Anthropic key is needed where `serve()` runs",
+    "States the passthrough bridge is Python-only (other languages have at most the `ClaudeCode` model class) and offers a native `Agent` with an `anthropic/...` model as the cross-language alternative",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name: \"claude_code_fixer\"` — never `agentType: \"claude_agent_sdk\"`, `\"claude\"`, `\"anthropic\"` or another framework name",
+    "Any explicit model string is provider-qualified (`anthropic/claude-sonnet-4-6`), and caller-side bounds (`maxDurationSeconds` / workflow timeout) are set alongside `max_turns`"
+  ]
+}

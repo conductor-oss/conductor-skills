@@ -23,11 +23,12 @@ commands/
   conductor-setup.md            # /conductor-setup
   conductor-optimize.md         # /conductor-optimize
   conductor-scaffold-worker.md  # /conductor-scaffold-worker
+  conductor-scaffold-agent.md   # /conductor-scaffold-agent
 skills/conductor/
   SKILL.md             # the skill itself; frontmatter `name:` must match plugin name
   references/          # lazy-loaded reference docs
   examples/            # narrative examples + raw JSON definitions
-  scripts/             # bundled fallback REST script
+  scripts/             # bundled fallback REST script (incl. agent verbs)
 VERSION                # source-of-truth version string
 scripts/validate_plugin.py   # CI validator
 .github/workflows/validate-plugin.yml
