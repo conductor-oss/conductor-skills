@@ -1,0 +1,30 @@
+{
+  "name": "TypeScript Conductor Agent Reusing Existing Vercel AI SDK tool() Definitions",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We have a TypeScript service with a couple of Vercel AI SDK `tool()` definitions using zod schemas — `getForecast` and `getAlerts`. Build a Conductor agent called `weather_bot` that reuses those tool definitions as they are. Show me how to run it once from the command line and how we'd deploy it.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (decision table → path 3 'bring your framework', TypeScript column), references/agent-sdks.md (TypeScript install/import matrix; Vercel AI row: AI-SDK `tool()` objects go straight into `Agent.tools`), and examples/agent-deploy-and-invoke.md.",
+    "Step 2: Preflight — `conductor agent list` and `GET /api/providers/status` to pick a `provider/model` whose provider is configured on the server.",
+    "Step 3: WebFetch the JavaScript SDK `docs/agents/` before pinning; for unchanged `parameters`-based tools install `npm i @io-orkes/conductor-javascript ai@4 zod@3`. For AI SDK 5+, use Conductor's native `tool()` adapter with `inputSchema`.",
+    "Step 4: Code: `import { Agent, AgentRuntime } from \"@io-orkes/conductor-javascript/agents\"`; keep the existing `tool({ description, parameters: z.object({...}), execute })` objects unchanged and pass them into `new Agent({ name: \"weather_bot\", model: \"openai/gpt-4o-mini\", instructions, tools: [getForecast, getAlerts] })` (array or map form).",
+    "Step 5: `run.ts`: `const runtime = new AgentRuntime(); const result = await runtime.run(agent, \"Forecast for Seattle?\"); console.log(result); await runtime.shutdown();`.",
+    "Step 6: Deploy vs serve split: `deploy.ts` calls `runtime.deploy(agent)` (registers only, prints `requiredWorkers`); `serve.ts` calls `runtime.serve(agent)` as the long-lived process that executes the `tool()` `execute` functions. State the worker gate.",
+    "Step 7: Environment: the JS SDK 4.x reads `CONDUCTOR_SERVER_URL` (ending in `/api`), `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` (plus `CONDUCTOR_TLS_*` / `CONDUCTOR_PROXY_URL`), or takes them explicitly as `new AgentRuntime({serverUrl, keyId, keySecret})`; provider keys stay on the server. Never invent `AGENTSPAN_*` names.",
+    "Step 8: Tests via `@io-orkes/conductor-javascript/agents/testing` (`mockRun`, `expectResult`), noting `mockRun` executes every tool locally (a wiring check, not a routing check).",
+    "Step 9: Invocation from a workflow uses `AGENT` with `agentType: \"conductor\"` and `name: \"weather_bot\"` — never `agentType: \"vercel_ai\"`. Never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Install includes `@io-orkes/conductor-javascript` and either pins `ai@4 zod@3` for unchanged `parameters`-based tools or uses the native Conductor `tool()` adapter for AI SDK 5+ — no invented package such as `@conductor/vercel` or `conductor-vercel-ai`",
+    "Imports `Agent` / `AgentRuntime` from the `@io-orkes/conductor-javascript/agents` subpath (not the package root, not `agentspan`)",
+    "The user's Vercel AI SDK tool definitions are reused with their zod schemas intact — either passed directly as AI-SDK v4 `tool()` objects (Zod `parameters` + `execute`) or re-declared with the native Conductor `tool(execute, {name, description, inputSchema})` — and the agent mentions the AI SDK 5+ `inputSchema` detection caveat or the auto-generated tool-name caveat (N/A and passing if the plan uses the native `tool()` with explicit names)",
+    "`model` is a provider-qualified `provider/model` string (e.g. `openai/gpt-4o-mini`), set explicitly",
+    "The one-off run script calls `runtime.run(agent, prompt)` and then `runtime.shutdown()` (or an equivalent close) so the process exits",
+    "Deploy and serve are separate: `runtime.deploy(agent)` registers, `runtime.serve(agent)` runs the tool workers as a long-lived process — with an explicit statement that without `serve()` tool calls hang",
+    "Runtime configuration is honest: `CONDUCTOR_SERVER_URL` / `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` env (or the same values passed explicitly to `new AgentRuntime(...)`), with provider keys on the server — no invented env names",
+    "Tests (if included) import from `@io-orkes/conductor-javascript/agents/testing` (`mockRun`, `expectResult`) — no invented `conductor agent test`",
+    "`agentType: \"vercel_ai\"` (or any framework name) never appears; any `AGENT` task uses `agentType: \"conductor\"` with `name: \"weather_bot\"`",
+    "The plan WebFetches the JS SDK `docs/agents/` before pinning versions and never recommends `conductor deploy`"
+  ]
+}

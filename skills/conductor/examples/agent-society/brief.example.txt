@@ -1,0 +1,2 @@
+Build a small HTTP service that stores named snippets and returns them by ID.
+Use the existing project conventions, validate inputs, and include automated tests and run instructions.

@@ -1,0 +1,28 @@
+{
+  "name": "Turn an agentskills.io SKILL.md Folder Into a Conductor Agent — CLI skill run / load / serve and Python skill()",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We have an agentskills.io skill folder at `./skills/release-notes` (a `SKILL.md`, a `scripts/collect_prs.py`, and a sub-agent file). I'd like to (a) try it once from the CLI with GPT-4o-mini, (b) deploy it so the UI can run it by name, and (c) call it as a tool from our existing Python `tech_lead` agent. Anything special about big SKILL.md files or the server?",
+  "expected_behavior": [
+    "Step 1: Consult references/cli-index.md (Skills table: `conductor skill run {path-or-name} \"prompt\" --model provider/model [--param k=v] [--workspace dir]`, `skill load {path} --model ...` deploys as an agent with framework `skill`, `skill serve {path-or-name}`, `skill register {path} [--version] [--model] [--agent-model name=model]`, `skill list/get/pull/delete`; requires `agentspan.skills.enabled=true`, off by default; after `load`, `conductor agent run --name {skill}` works), references/agents.md §2 (path 4c — skill agent) and §12 (`/api/skills/**` needs `agentspan.skills.enabled=true`), references/agent-sdks.md §7 (`skill(\"path\", model=M)` → `Agent`; `agent_tool(dg, description=...)`; `load_skills(dir)`), references/optimization.md F1, F3, F6, and SKILL.md Rule 13 (no `conductor deploy`).",
+    "Step 2: (a) One-off: `conductor skill run ./skills/release-notes \"Write the release notes for v2.3\" --model openai/gpt-4o-mini` (optionally `--param repo=acme/api --workspace ./work`) — the CLI process serves the skill's script tools for the duration of the run.",
+    "Step 3: (b) Deploy: `conductor skill load ./skills/release-notes --model openai/gpt-4o-mini` registers the skill as a deployed agent (framework `skill`); then `conductor agent run --name release-notes \"...\"`, the UI `/runAgent`, or an `AGENT` task can start it. Because `scripts/collect_prs.py` becomes a worker tool named `release-notes__collect_prs` (`<skill>__<script>`), a `conductor skill serve ./skills/release-notes` (or `conductor skill serve release-notes`) process must be running for runs started from the UI or a workflow (Rule 9 / F3). `--agent-model name=provider/model` overrides the model of a sub-agent.",
+    "Step 4: Optional `conductor skill register ./skills/release-notes --version 1.0.0 --model openai/gpt-4o-mini` stores the package server-side via `/api/skills`; this needs `agentspan.skills.enabled=true` on the server (off by default) — check with `conductor skill list`.",
+    "Step 5: (c) Python: `from conductor.ai.agents import Agent, AgentRuntime, skill, agent_tool`; `rn = skill(\"./skills/release-notes\", model=\"openai/gpt-4o-mini\")` returns an `Agent`; `tech_lead = Agent(name=\"tech_lead\", model=\"openai/gpt-4o-mini\", instructions=\"...\", tools=[agent_tool(rn, description=\"Draft release notes for a version\")], max_turns=10)`; `runtime.deploy(tech_lead)` in CI and a long-lived `runtime.serve(tech_lead, rn)` (or `conductor skill serve`) so the skill's script workers are served — the `agent_tool` itself needs no worker.",
+    "Step 6: Package mapping: `scripts/` → `<skill>__<script>` worker tools; sub-agent files → `agent_tool`s; SKILL.md sections are split above 50 KB.",
+    "Step 7: Model is always `--model provider/model` / `model=\"provider/model\"` (F6); never `conductor deploy`; any `AGENT` task uses `agentType: \"conductor\"` + `name: \"release-notes\"` (or inline `skillRef{name,version}`) — never `agentType: \"skill\"` (`skill` is the framework id, not an execution mode). Bounds: `max_turns` on `tech_lead`, `maxDurationSeconds` on callers (F1)."
+  ],
+  "success_criteria": [
+    "Shows `conductor skill run ./skills/release-notes \"<prompt>\" --model openai/gpt-4o-mini` (provider-qualified) for the one-off try",
+    "Shows `conductor skill load <path> --model provider/model` to deploy (framework `skill`), followed by `conductor agent run --name release-notes ...` / the UI",
+    "States that `conductor skill serve <path-or-name>` must be running for runs started from the UI or a workflow, because `scripts/` become worker tools",
+    "States that scripts map to worker tools named `<skill>__<script>` (e.g. `release-notes__collect_prs`) and that sub-agent files become `agent_tool`s",
+    "States that `conductor skill register` / `/api/skills` needs `agentspan.skills.enabled=true` (off by default)",
+    "Python path uses `skill(\"./skills/release-notes\", model=...)` returning an `Agent`, wrapped with `agent_tool(rn, description=...)` in `tech_lead`'s `tools`",
+    "Does not invent a SKILL.md size limit; if size is discussed, states the real behaviour (bodies over 50,000 characters are auto-split into `## ` sections) — N/A and passing when size is not discussed",
+    "Every `--model` / `model=` is provider-qualified (`provider/model`), never bare",
+    "Never uses `conductor deploy`; the SDK `runtime.deploy` / `runtime.serve` (or `conductor skill serve`) handles deployment and serving",
+    "If an `AGENT` task is shown, it uses `agentType: \"conductor\"` + `name` (or `skillRef`) — never `agentType: \"skill\"` or another framework name; N/A and passing when no AGENT task is shown"
+  ]
+}

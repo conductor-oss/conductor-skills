@@ -1,6 +1,6 @@
 # Orkes Enterprise Features
 
-Secrets and webhooks require Orkes Conductor (orkes.io). They are unavailable on plain OSS Conductor and on the Python fallback script.
+Webhooks and the managed secret store (with the `conductor secret` CLI) require Orkes Conductor (orkes.io). **`${workflow.secrets.X}` itself is not Orkes-only any more**: OSS Conductor resolves it from `CONDUCTOR_SECRET_X` environment variables on the server (`conductor.secrets.type=env`, the default), and servers with the agent runtime expose the store at `/api/secrets` (UI `/agentSecrets`) for agent `credentials=[...]` — see [agents.md](agents.md) §8. The Python fallback script has no secret commands.
 
 > Schedules used to live here — they're now part of OSS. See [schedules.md](schedules.md).
 
@@ -8,7 +8,7 @@ Auth is the same as the rest of the CLI — see [setup.md](setup.md) (key/secret
 
 ## Secrets
 
-Securely store values referenced from workflows (e.g. API keys). Reference in tasks via `${workflow.secrets.MY_KEY}`.
+Securely store values referenced from workflows (e.g. API keys). Reference in tasks via `${workflow.secrets.MY_KEY}` (and `${workflow.secrets.MY_KEY.sub_key}` when the secret holds a JSON object). On OSS the equivalent is `export CONDUCTOR_SECRET_MY_KEY=...` in the server's environment.
 
 ```bash
 conductor secret list
@@ -53,5 +53,5 @@ After creation the CLI returns a webhook URL — give that to the user (don't fa
 
 ## Notes
 
-- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. If the user hits this, confirm they're pointed at an Orkes server.
+- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. If the user hits this, confirm they're pointed at an Orkes server. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
 - For dev against Orkes, [developer.orkescloud.com](https://developer.orkescloud.com) is the public developer sandbox.

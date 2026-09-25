@@ -1,0 +1,29 @@
+{
+  "name": "Run an Inline Agent Definition from an AGENT Task Without Deploying First",
+  "skills": [
+    "conductor"
+  ],
+  "query": "For a quick experiment I want a throwaway summarizer step inside my `nightly_digest` workflow, but I don't want to deploy an agent by name first. Can the AGENT task carry the agent definition inline? Same question for a LangGraph config I already have as JSON, and for a skill package we registered. And when should I deploy by name instead?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md `### AGENT` (the `agentConfig` / `framework` + `rawConfig` / `skillRef{name,version}` row and inline example) and references/agents.md (§3 decision table, §8 operate) before writing JSON.",
+    "Step 2: Inline native definition: an `AGENT` task with `agentType: \"conductor\"`, `prompt`, and `agentConfig: {\"name\": \"digest_summarizer\", \"model\": \"openai/gpt-4o-mini\", \"instructions\": \"...\", \"maxTurns\": 3}` instead of `name`. Model is `provider/model`; the provider must be configured on the server (`GET /api/providers/status`).",
+    "Step 3: State that `name`, `agentConfig`, `framework` + `rawConfig`, and `skillRef` are mutually exclusive ways to say which agent runs; exactly one is set.",
+    "Step 4: Framework config: `framework: \"langgraph\"` (server normalizer ids: `openai`, `google_adk`, `langgraph`, `langchain`, `vercel_ai`, `claude_agent_sdk`, `skill`) with `rawConfig: {...}` — `agentType` stays `conductor`, never the framework name (Rule 10). Any worker tools in that config still need a `serve()` process (Rule 9), so inline does not remove the worker gate.",
+    "Step 5: Skill package: `skillRef: {\"name\": \"release-notes\", \"version\": 1}` for a skill registered via `conductor skill register` — the skill registry needs `agentspan.skills.enabled=true` on the server (otherwise `/api/skills` is 404).",
+    "Step 6: Recommend deploying by `name` (SDK `runtime.deploy()` or `agent-deploy-config`) for anything reused, versioned, scheduled or reviewed: the definition is then visible with `conductor agent get <name>`, executions group by `agentName`, and `version` can be pinned; inline is for experiments and one-off steps.",
+    "Step 7: Keep the bounds: `maxDurationSeconds` on the task and a workflow `timeoutSeconds` + `timeoutPolicy` (F1); read the answer from `${<ref>.output.text}` / `${<ref>.output.output.result}`.",
+    "Step 8: Write the JSON to a file and register with `conductor workflow create <file>`; do not invent fields such as `agentName`, `agentType: \"inline\"`, or a framework name in `agentType`."
+  ],
+  "success_criteria": [
+    "Shows an `AGENT` task with `agentType: \"conductor\"`, a `prompt`, and an `agentConfig` object (with `name`, `model`, `instructions`) in place of `name`",
+    "The inline `model` is provider-qualified (`provider/model`) and a turn bound (`maxTurns`) is set inside `agentConfig`",
+    "States that `name`, `agentConfig`, `framework` + `rawConfig`, and `skillRef` are mutually exclusive alternatives (exactly one is used)",
+    "For the LangGraph case uses `framework: \"langgraph\"` + `rawConfig` while keeping `agentType: \"conductor\"`, and notes worker tools still require a running `serve()` process",
+    "For the skill case uses `skillRef: {name, version}` and mentions the `agentspan.skills.enabled` gate (or that `/api/skills` is off by default)",
+    "Recommends deploying by `name` for reused, versioned, scheduled or reviewed agents and gives at least one concrete reason (`conductor agent get`, version pinning, execution grouping)",
+    "Sets `maxDurationSeconds` on the AGENT task and/or a workflow-level timeout, citing F1 or the 24 h default",
+    "Reads the result via `${<ref>.output.text}` or `${<ref>.output.output.result}` (not `${<ref>.output.result}`)",
+    "Writes the workflow JSON to a file before `conductor workflow create`",
+    "Does not use `agentName`, does not put a framework name in `agentType`, and does not invent an `agentType: \"inline\"`"
+  ]
+}

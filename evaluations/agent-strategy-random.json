@@ -1,0 +1,28 @@
+{
+  "name": "Three-Persona Brainstorm With Random Speaker Order (Strategy.RANDOM) — and When Round-Robin Is Better",
+  "skills": [
+    "conductor"
+  ],
+  "query": "For a brainstorming bot I want three personas — `creative`, `practical` and `critical` — to riff on a product idea, but not in a predictable order every time; some randomness in who speaks next gives better ideas. It must still end. Python. Also: when would I NOT want random and just use round-robin?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `round_robin / random` rows: a random child per turn; `allowed_transitions` constrains who may follow whom; every open-ended strategy needs `max_turns` or `termination`), references/agents.md §4 and §11 (`record()` / `replay()`), references/optimization.md F1/F3, and WebFetch the Python SDK `docs/agents/` before pinning the install.",
+    "Step 2: Three personas with unique names, `provider/model` and distinct instructions: `creative`, `practical`, `critical` (give a persona its own `max_turns` only if it carries tools — a tool-less persona compiles to one LLM call).",
+    "Step 3: `brainstorm = Agent(name=\"brainstorm\", model=\"openai/gpt-4o-mini\", agents=[creative, practical, critical], strategy=Strategy.RANDOM, max_turns=6, termination=TextMentionTermination(\"FINAL IDEAS\") | MaxMessageTermination(9))`; optionally `allowed_transitions={\"critical\": [\"creative\", \"practical\"]}` to stop the critic from following itself.",
+    "Step 4: Explain RANDOM vs ROUND_ROBIN: RANDOM picks the next child at random each turn (within `allowed_transitions` if given) — good for diversity and breaking anchoring in brainstorms; ROUND_ROBIN is a deterministic fixed rotation — prefer it when order carries meaning (draft → review → approve), when runs must be reproducible/auditable, or when every child must get equal turns.",
+    "Step 5: Bounds (F1): `max_turns` plus an explicit `termination`; without them a RANDOM/ROUND_ROBIN conversation has no natural end.",
+    "Step 6: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(brainstorm, \"Idea: a smart water bottle\")`; `runtime.deploy(brainstorm)` in CI; `runtime.serve(brainstorm)` only if a persona has `@tool` workers (state `requiredWorkers`). Never `conductor deploy`.",
+    "Step 7: Optional workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"brainstorm\"`, `prompt`, `maxDurationSeconds`; never `agentType: \"random\"`.",
+    "Step 8: Testing note: speaker order is non-deterministic, so assert with `assert_agent_ran` / `expect(result).completed()` or `record()` / `replay()` rather than a fixed `assert_event_sequence`."
+  ],
+  "success_criteria": [
+    "Uses `strategy=Strategy.RANDOM` (or `\"random\"`) with `agents=[creative, practical, critical]`",
+    "Sets `max_turns` on the parent",
+    "Sets an explicit `termination` (e.g. `TextMentionTermination(...) | MaxMessageTermination(n)`, `StopMessageTermination`, or `TokenUsageTermination`)",
+    "Explains when ROUND_ROBIN beats RANDOM (order carries meaning, reproducibility/audit, equal participation) and when RANDOM fits (diversity in a brainstorm)",
+    "Each persona has a unique `name` and its own instructions; any persona that carries tools also sets its own `max_turns` (tool-less personas compile to a single LLM call, so a parent bound is enough for them)",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` and states whether `serve()` is needed — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name: \"brainstorm\"` — never `agentType: \"random\"` or a framework name",
+    "Acknowledges the non-deterministic order in testing (`assert_agent_ran` / `record()` + `replay()` rather than a fixed sequence) and/or uses `allowed_transitions` to constrain the randomness"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Refund / Tech-Support Swarm With Declarative Handoffs (Strategy.SWARM)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Support swarm in Python: a `refund_specialist` and a `tech_support` agent that can pass the customer to each other as the conversation develops. If the customer mentions a refund, go to refunds; if the `lookup_order` tool comes back saying the item was damaged, go to tech support. Refunds must be approved by a human, and nothing may loop forever. What does the SDK give me for this?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `swarm` row: children pass control through compiler-injected `transfer_to_<peer>` tools; declarative `handoffs=[OnTextMention(...), OnToolResult(...)]`; gotchas — never name a tool `transfer_*` or an agent `done`; `OnCondition` handoffs are workers `serve()` registers; every open-ended strategy needs `max_turns` or `termination`), references/agents.md §4/§5 (handoff conditions, termination, `approval_required`), references/optimization.md F1, F2 (refund is a side-effect tool), F3 and F10 (`swarm` without `termination` is flagged).",
+    "Step 2: Two children with unique names, `provider/model`, instructions and their own `max_turns`; tools: `lookup_order` (`@tool`), `issue_refund` (`@tool(approval_required=True)` — F2), `open_ticket` (`@tool`). Tool names must not start with `transfer_`.",
+    "Step 3: `support = Agent(name=\"support_swarm\", model=\"openai/gpt-4o-mini\", agents=[refund_specialist, tech_support], strategy=Strategy.SWARM, max_turns=6, handoffs=[OnTextMention(text=\"refund\", target=\"refund_specialist\"), OnToolResult(tool_name=\"lookup_order\", result_contains=\"damaged\", target=\"tech_support\")])` with `from conductor.ai.agents import Agent, AgentRuntime, Strategy, OnTextMention, OnToolResult, OnCondition, tool`.",
+    "Step 4: Explain the mechanism: the compiler injects a `transfer_to_<peer>` tool into each child so the model itself can hand off; the declarative `handoffs` fire on text mentions / tool results; `OnCondition(callable, target=...)` exists for custom predicates and is a worker that `serve()` registers (worker gate). Do not name any agent `done`.",
+    "Step 5: Bounds (F1/F10): `max_turns=6` on the swarm plus, optionally, `termination=TextMentionTermination(\"RESOLVED\") | MaxMessageTermination(12)`; each child has its own `max_turns`.",
+    "Step 6: Lifecycle: `runtime.run(support, ...)` under `if __name__ == \"__main__\":`; `runtime.deploy(support)`; long-lived `runtime.serve(support)` for the `@tool` workers and any `OnCondition` handoff. Never `conductor deploy`.",
+    "Step 7: Approval: when `issue_refund` is reached the run pauses with `waiting: true` + `pendingTool.toolCalls[].name == \"issue_refund\"`; approve with `conductor agent respond <id> --approve` / `POST /api/agent/{id}/respond {\"approved\": true}` — never via an AGENT resume (Rule 12 / F8).",
+    "Step 8: Any workflow call uses `AGENT` with `agentType: \"conductor\"`, `name: \"support_swarm\"`, `maxDurationSeconds`; never `agentType: \"swarm\"`. Verify offline with `mock_run(..., events=[MockEvent.handoff(...)])` + `expect(result).handoff_to(\"tech_support\")`, live with the `handoff` event on `conductor agent stream`."
+  ],
+  "success_criteria": [
+    "Uses `strategy=Strategy.SWARM` (or `\"swarm\"`) with `agents=[refund_specialist, tech_support]`",
+    "`handoffs=[...]` includes an `OnTextMention(text=..., target=...)` and an `OnToolResult(tool_name=\"lookup_order\", result_contains=\"damaged\", target=...)`",
+    "States that the compiler injects `transfer_to_<peer>` tools and therefore warns not to name custom tools `transfer_*` or an agent `done`",
+    "Sets `max_turns` on the swarm (and/or a `termination` condition) and states that an unbounded swarm is a problem (F1 / F10)",
+    "If `OnCondition` (callable predicate) handoffs are used, states they are workers that `serve()` registers — N/A and passing when only `OnTextMention` / `OnToolResult` are used",
+    "The refund side-effect tool is gated with `approval_required=True` (or a guardrail) per F2, and approval goes through `conductor agent respond --approve` / `POST /api/agent/{id}/respond {\"approved\": true}` — not an AGENT resume",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` and names a long-lived `runtime.serve(...)` for the `@tool` workers — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never `agentType: \"swarm\"` or a framework name",
+    "Each child has a unique `name` and its own `max_turns`, and a verification path is mentioned (`mock_run` + `handoff_to`, or the `handoff` stream event)"
+  ]
+}

@@ -7,7 +7,7 @@ set -euo pipefail
 # https://github.com/conductor-oss/conductor-skills
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION="1.7.0"
+VERSION="1.8.0"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging — the install scripts ride
 # along with whatever main is serving.
@@ -20,38 +20,92 @@ LOCAL_DIR="${CONDUCTOR_SKILLS_LOCAL_DIR:-}"
 # Files to ship to non-Claude agents (Claude uses the marketplace flow).
 SKILL_FILES=(
   "skills/conductor/SKILL.md"
-  "skills/conductor/references/setup.md"
+  "skills/conductor/references/agent-sdks.md"
+  "skills/conductor/references/agents.md"
+  "skills/conductor/references/api-reference.md"
   "skills/conductor/references/cli-index.md"
   "skills/conductor/references/fallback-cli.md"
-  "skills/conductor/references/workflow-definition.md"
-  "skills/conductor/references/workers.md"
-  "skills/conductor/references/api-reference.md"
-  "skills/conductor/references/visualization.md"
-  "skills/conductor/references/schedules.md"
-  "skills/conductor/references/orkes.md"
+  "skills/conductor/references/graaljs-gotchas.md"
   "skills/conductor/references/optimization.md"
+  "skills/conductor/references/orkes.md"
+  "skills/conductor/references/schedules.md"
+  "skills/conductor/references/setup.md"
+  "skills/conductor/references/template-resolution.md"
   "skills/conductor/references/troubleshooting.md"
-  "skills/conductor/examples/create-and-run-workflow.md"
-  "skills/conductor/examples/monitor-and-retry.md"
-  "skills/conductor/examples/signal-wait-task.md"
-  "skills/conductor/examples/fork-join.md"
-  "skills/conductor/examples/do-while-loop.md"
-  "skills/conductor/examples/sub-workflow.md"
-  "skills/conductor/examples/review-workflow.md"
-  "skills/conductor/examples/llm-chat.md"
-  "skills/conductor/examples/ai-agent-mcp.md"
+  "skills/conductor/references/visualization.md"
+  "skills/conductor/references/workers.md"
+  "skills/conductor/references/workflow-definition.md"
+  "skills/conductor/examples/agent-a2a-remote.md"
+  "skills/conductor/examples/agent-deploy-and-invoke.md"
+  "skills/conductor/examples/agent-society/.env.example"
+  "skills/conductor/examples/agent-society/README.md"
+  "skills/conductor/examples/agent-society/brief.example.txt"
+  "skills/conductor/examples/agent-society/deploy.py"
+  "skills/conductor/examples/agent-society/requirements.txt"
+  "skills/conductor/examples/agent-society/run.py"
+  "skills/conductor/examples/agent-society/serve.py"
+  "skills/conductor/examples/agent-society/software_society/__init__.py"
+  "skills/conductor/examples/agent-society/software_society/agents.py"
+  "skills/conductor/examples/agent-society/software_society/tools.py"
+  "skills/conductor/examples/agent-society/tests/test_society.py"
+  "skills/conductor/examples/agent-society/workflows/software-society.json"
+  "skills/conductor/examples/bengaluru-writers-room/.env.example"
+  "skills/conductor/examples/bengaluru-writers-room/README.md"
+  "skills/conductor/examples/bengaluru-writers-room/deploy.py"
+  "skills/conductor/examples/bengaluru-writers-room/mission.example.txt"
+  "skills/conductor/examples/bengaluru-writers-room/requirements.txt"
+  "skills/conductor/examples/bengaluru-writers-room/run.py"
+  "skills/conductor/examples/bengaluru-writers-room/serve.py"
+  "skills/conductor/examples/bengaluru-writers-room/tests/test_writers_room.py"
+  "skills/conductor/examples/bengaluru-writers-room/workflows/bengaluru-writers-room.json"
+  "skills/conductor/examples/bengaluru-writers-room/writers_room/__init__.py"
+  "skills/conductor/examples/bengaluru-writers-room/writers_room/agents.py"
+  "skills/conductor/examples/bengaluru-writers-room/writers_room/tools.py"
   "skills/conductor/examples/ai-agent-loop.md"
+  "skills/conductor/examples/ai-agent-mcp.md"
+  "skills/conductor/examples/create-and-run-workflow.md"
+  "skills/conductor/examples/do-while-loop.md"
+  "skills/conductor/examples/fork-join.md"
+  "skills/conductor/examples/llm-chaining.md"
+  "skills/conductor/examples/llm-chat.md"
   "skills/conductor/examples/llm-rag.md"
-  "skills/conductor/examples/workflows/weather-notification.json"
-  "skills/conductor/examples/workflows/fork-join.json"
-  "skills/conductor/examples/workflows/do-while-loop.json"
-  "skills/conductor/examples/workflows/child-normalize.json"
-  "skills/conductor/examples/workflows/parent-pipeline.json"
-  "skills/conductor/examples/workflows/llm-chat.json"
-  "skills/conductor/examples/workflows/ai-agent-mcp.json"
+  "skills/conductor/examples/monitor-and-retry.md"
+  "skills/conductor/examples/review-workflow.md"
+  "skills/conductor/examples/signal-wait-task.md"
+  "skills/conductor/examples/sub-workflow.md"
+  "skills/conductor/examples/workflows/a2a-remote-agent.json"
+  "skills/conductor/examples/workflows/a2a-expose-agent.json"
+  "skills/conductor/examples/workflows/agent-cancel.json"
+  "skills/conductor/examples/workflows/agent-fork-specialists.json"
+  "skills/conductor/examples/workflows/agent-hitl-resume.json"
+  "skills/conductor/examples/workflows/agent-approval-in-workflow.json"
+  "skills/conductor/examples/workflows/agent-invoke.json"
   "skills/conductor/examples/workflows/ai-agent-loop.json"
+  "skills/conductor/examples/workflows/ai-agent-mcp.json"
+  "skills/conductor/examples/workflows/child-normalize.json"
+  "skills/conductor/examples/workflows/do-while-loop.json"
+  "skills/conductor/examples/workflows/fork-join.json"
+  "skills/conductor/examples/workflows/llm-chaining.json"
+  "skills/conductor/examples/workflows/llm-chat.json"
   "skills/conductor/examples/workflows/llm-rag.json"
+  "skills/conductor/examples/workflows/parent-pipeline.json"
+  "skills/conductor/examples/workflows/weather-notification.json"
+  "skills/conductor/examples/agents/agent-config.json"
+  "skills/conductor/examples/agents/csharp/WeatherAgent.cs"
+  "skills/conductor/examples/agents/java/WeatherAgent.java"
+  "skills/conductor/examples/agents/python/adk_bridge.py"
+  "skills/conductor/examples/agents/python/claude_agent_sdk_bridge.py"
+  "skills/conductor/examples/agents/python/langchain_bridge.py"
+  "skills/conductor/examples/agents/python/langgraph_bridge.py"
+  "skills/conductor/examples/agents/python/openai_agents_bridge.py"
+  "skills/conductor/examples/agents/python/test_weather_agent.py"
+  "skills/conductor/examples/agents/python/weather_agent.py"
+  "skills/conductor/examples/agents/typescript/langgraph-bridge.ts"
+  "skills/conductor/examples/agents/typescript/openai-agents-bridge.ts"
+  "skills/conductor/examples/agents/typescript/vercel-ai-tools.ts"
+  "skills/conductor/examples/agents/typescript/weather-agent.ts"
   "skills/conductor/scripts/conductor_api.py"
+  "skills/conductor/scripts/test_conductor_api.py"
 )
 
 # Colors (if terminal supports them)
@@ -60,10 +114,11 @@ if [ -t 1 ]; then
   GREEN=$'\033[0;32m'
   YELLOW=$'\033[1;33m'
   BLUE=$'\033[0;34m'
+  CYAN=$'\033[0;36m'
   BOLD=$'\033[1m'
   NC=$'\033[0m'
 else
-  RED='' GREEN='' YELLOW='' BLUE='' BOLD='' NC=''
+  RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' NC=''
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -624,19 +679,12 @@ install_aider_to_dir() {
   local config="$3"
   local read_prefix="$4"
 
-  mkdir -p "$skill_dir/references" "$skill_dir/examples" "$skill_dir/scripts"
+  mkdir -p "$skill_dir"
 
   info "Copying skill files to $skill_dir ..."
-  cp "$tmp_dir/skills/conductor/SKILL.md" "$skill_dir/"
-  for f in "$tmp_dir"/skills/conductor/references/*.md; do
-    cp "$f" "$skill_dir/references/"
-  done
-  for f in "$tmp_dir"/skills/conductor/examples/*.md; do
-    cp "$f" "$skill_dir/examples/"
-  done
-  for f in "$tmp_dir"/skills/conductor/scripts/*.py; do
-    [ -f "$f" ] && cp "$f" "$skill_dir/scripts/"
-  done
+  # Copy the whole tree so nested dirs (examples/workflows, examples/agents) land too;
+  # the read: entries below reference every file in SKILL_FILES.
+  cp -R "$tmp_dir/skills/conductor/." "$skill_dir/"
   ok "Files copied to $skill_dir"
 
   if [ -f "$config" ] && grep -q "conductor-skills" "$config" 2>/dev/null; then
@@ -1112,6 +1160,7 @@ main() {
 
   # Install for each agent
   local installed_count=0
+  local fresh_install_count=0
   local skipped_count=0
   local legacy_warned=""
 
@@ -1206,6 +1255,9 @@ main() {
       write_manifest_entry "$manifest" "$a" "$target_version" "$mode" "$target_path"
       record_group "$(display_path_for_agent "$a" "$project_dir" "$use_global")" "$a"
       installed_count=$((installed_count + 1))
+      if [ -z "$installed_ver" ]; then
+        fresh_install_count=$((fresh_install_count + 1))
+      fi
     fi
   done
 
@@ -1214,21 +1266,42 @@ main() {
   echo ""
   echo -e "${GREEN}${BOLD}Done!${NC} ${installed_count} configured, ${skipped_count} skipped (already up to date)."
   echo ""
-  echo "Next steps:"
+
+  if [ "$fresh_install_count" -gt 0 ]; then
+    echo -e "${CYAN}+==================================================================+${NC}"
+    echo -e "${CYAN}|${NC}                  ${BOLD}WELCOME TO CONDUCTOR SKILLS${NC}                     ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}     Durable workflows. Powerful agents. Built to keep running.   ${CYAN}|${NC}"
+    echo -e "${CYAN}+==================================================================+${NC}"
+    echo ""
+    echo -e "  ${BOLD}COMMUNITY & SUPPORT${NC}"
+    echo "  Join the Conductor community on Slack for help and discussion:"
+    echo -e "  ${BLUE}https://join.slack.com/t/orkes-conductor/shared_invite/zt-3dpcskdyd-W895bJDm8psAV7viYG3jFA${NC}"
+    echo ""
+    echo -e "  ${BOLD}DOCUMENTATION${NC}"
+    echo -e "  ${BLUE}https://docs.conductor-oss.org/${NC}"
+    echo ""
+    echo -e "  ${BOLD}OPEN SOURCE${NC}"
+    echo "  Star the project, open a feature request, or send us a PR:"
+    echo -e "  ${BLUE}https://github.com/conductor-oss/conductor${NC}"
+    echo ""
+  fi
+
+  echo -e "${BOLD}GET STARTED${NC}"
   # If claude was among the agents, the in-place messaging from install_claude
-  # already covered the restart instructions. For non-claude agents, just point
-  # the user at connecting to their server.
+  # already covered the restart instructions.
   local agents_str="${agents[*]}"
   if [[ " $agents_str " == *" claude "* ]]; then
     echo "  1. Restart Claude Code to load the plugin (see ACTION REQUIRED above)"
-    echo "  2. In the new session, ask your agent to connect to your Conductor server, e.g.:"
+    echo "  2. In the new session, ask your agent:"
   else
-    echo "  Ask your agent to connect to your Conductor server, e.g.:"
+    echo "  Ask your agent:"
   fi
   echo ""
-  echo '     "Connect to my Conductor server at http://localhost:8080/api"'
+  echo '    "Set up both my Conductor profiles: developer and localhost.'
+  echo '     Use Developer Edition by default."'
   echo ""
-  echo -e "  Docs: ${BLUE}https://github.com/conductor-oss/conductor-skills${NC}"
+  echo -e "  ${BOLD}[default] developer${NC}  ${CYAN}https://developer.orkescloud.com/${NC}"
+  echo -e "  ${BOLD}[switch]  localhost${NC}  ${CYAN}http://localhost:8080/api${NC}"
   echo ""
 }
 

@@ -1,0 +1,29 @@
+{
+  "name": "Pin an Agent Version and Override Model, Context and Idempotency Per Call",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Our deployed `planner` agent has versions 1 and 2. From the `release_notes` workflow I need to: pin v2 for now, use `gpt-4o` for this call only, hand the agent the release metadata as structured data rather than pasting it into the prompt, make workflow retries not spawn a second agent run, and group all calls for one customer so I can find them later. Show me the AGENT task.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md `### AGENT` (per-call override row: `version`, `sessionId`, `context{}`, `media[]`, `model`, `timeoutSeconds`, `idempotencyKey`, `credentials{}`) and references/agents.md §8 operate / §12 gotchas (`sessionId` groups but does not replay history).",
+    "Step 2: Confirm the versions exist: `conductor agent get planner --version 2` (or `GET /api/agent/planner?version=2`).",
+    "Step 3: `AGENT` task with `agentType: \"conductor\"`, `name: \"planner\"`, `version: 2` (omitting `version` means latest — pinning protects the workflow from a later deploy), `prompt` from workflow input.",
+    "Step 4: `model: \"openai/gpt-4o\"` as a per-call override — `provider/model` form (Rule 11 / F6); the provider must be `configured: true` in `GET /api/providers/status`; this does not change the deployed definition.",
+    "Step 5: `context: {\"release\": \"${workflow.input.release}\"}` passes structured data the agent sees as context (the compiled agent exposes it as `${...output.output.context}`), keeping the prompt short.",
+    "Step 6: `idempotencyKey`: the task already defaults to `conductor-agent-<workflowId>:<taskRef>:<iteration>`, so a retry of the same task reuses the run; set an explicit key (e.g. `\"release-${workflow.input.releaseId}\"`) when re-runs of the whole workflow must also map to one agent run.",
+    "Step 7: `sessionId: \"${workflow.input.customerId}\"` — it becomes the output `contextId` and groups executions (`conductor agent execution`, `GET /api/agent/executions?sessionId=`), but it does not replay earlier turns into a new run: whatever the next call needs must be in `prompt` or `context`.",
+    "Step 8: Bounds and outputs: `maxDurationSeconds` (F1) and optional `timeoutSeconds` for the agent's own wall clock; read `${<ref>.output.text}` / `${<ref>.output.output.result}`; write the JSON to a file, `conductor workflow create <file>`."
+  ],
+  "success_criteria": [
+    "The `AGENT` task keeps `agentType: \"conductor\"`, `name: \"planner\"` (not `agentName`) and a `prompt`",
+    "Pins `version: 2` and explains that omitting `version` resolves to the latest deployed version",
+    "Uses a per-call `model` override in `provider/model` form (e.g. `openai/gpt-4o`) and notes the provider must be configured on the server",
+    "Passes the release metadata via `context: {...}` (structured) rather than only concatenating it into the prompt",
+    "Uses `idempotencyKey` (explicit, or explains the automatic per-task default) so retries do not start a second agent run",
+    "Uses `sessionId` for grouping and states that it groups executions (`contextId`) but does not replay prior conversation history into a new run",
+    "Verifies the version exists with `conductor agent get planner --version 2` or the equivalent REST call",
+    "Sets `maxDurationSeconds` (and/or a workflow timeout), citing F1 or the 24 h default",
+    "Reads the result via `${<ref>.output.text}` or `${<ref>.output.output.result}` and writes the JSON to a file before registering",
+    "Does not put a framework name in `agentType` and does not claim `CONDUCTOR_AGENT_LLM_MODEL` controls the per-call model"
+  ]
+}

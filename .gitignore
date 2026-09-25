@@ -2,11 +2,19 @@
 .idea/
 *.tgz
 node_modules/
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local Claude Code settings (machine-specific paths, per-developer permissions)
 .claude/
 
 # Artifacts left behind when install.sh is run from the repo root during testing
 # (single-agent project install defaults to the current directory)
-AGENTS.md
+/AGENTS.md
 .conductor-skills/

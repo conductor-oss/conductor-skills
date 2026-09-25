@@ -1,0 +1,25 @@
+{
+  "name": "Researcher → Writer → Editor Content Pipeline (Strategy.SEQUENTIAL) With Offline Tests",
+  "skills": ["conductor"],
+  "query": "I want a content-pipeline agent in Python: a researcher gathers facts on a topic, a writer drafts an article from those facts, and an editor polishes the draft. Each stage should only see the previous stage's output. I also want to unit-test the pipeline without hitting an LLM or a server.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `sequential` row: each child receives the previous child's output; `>>` is sugar for `strategy=Strategy.SEQUENTIAL`; children compile to `SUB_WORKFLOW`s), references/agents.md §4 and §11 (test ladder — `mock_run`, `MockEvent`, `expect`, `assert_*`), and references/optimization.md F1/F3. WebFetch the Python SDK `docs/agents/` before pinning `conductor-python[agents]`.",
+    "Step 2: Three children with unique names, `provider/model`, instructions and bounds: `researcher = Agent(name=\"researcher\", model=\"openai/gpt-4o-mini\", instructions=\"Gather facts...\", tools=[search_web], max_turns=6)`, `writer = Agent(name=\"writer\", ..., max_turns=4)`, `editor = Agent(name=\"editor\", ..., max_turns=3)`.",
+    "Step 3: Compose: `pipeline = researcher >> writer >> editor` — or the explicit `Agent(name=\"content_pipeline\", model=..., agents=[researcher, writer, editor], strategy=Strategy.SEQUENTIAL)`; prefer the explicit named form for deployment so the deployed agent (= workflow name) is stable. Explain that each child receives the previous child's output and the editor's output is the pipeline's result; each child runs as a `SUB_WORKFLOW` in order.",
+    "Step 4: Offline test: `from conductor.ai.agents.testing import mock_run, MockEvent, expect`; `result = mock_run(pipeline, \"Topic: durable execution\", events=[MockEvent.tool_call(\"search_web\", {...}), MockEvent.done(\"...\")], auto_execute_tools=True)`; `expect(result).completed().no_errors()`; `assert_agent_ran(...)` / `assert_event_sequence(...)` for the stage order. State explicitly that this needs no server and no LLM key.",
+    "Step 5: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(pipeline, prompt)` locally; `runtime.plan` → `requiredWorkers` (`search_web`); `runtime.deploy(pipeline)` in CI; `runtime.serve(pipeline)` long-lived for the `@tool` worker (Rule 9 / F3). Never `conductor deploy`.",
+    "Step 6: Optional workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"content_pipeline\"`, `prompt: \"${workflow.input.topic}\"`, `maxDurationSeconds`; read `${ref.output.text}`.",
+    "Step 7: Bounds (F1): `max_turns` per child, `maxDurationSeconds` and workflow `timeoutSeconds` on the caller."
+  ],
+  "success_criteria": [
+    "Uses `researcher >> writer >> editor` and/or `Agent(name=..., agents=[researcher, writer, editor], strategy=Strategy.SEQUENTIAL)` — not a FORK_JOIN and not a hand-wired workflow of LLM tasks",
+    "States that each child receives the previous child's output and that the editor's output is the final result",
+    "The three children have unique `name`s, provider-qualified `model`s (`provider/model`) and their own `max_turns`",
+    "States that the children compile to `SUB_WORKFLOW`s inside one deployed agent",
+    "The offline test uses `mock_run(...)` from `conductor.ai.agents.testing` with `MockEvent` events and `expect(result)...` / `assert_*`, and explicitly says it needs no server and no LLM",
+    "Deploys with `runtime.deploy(...)` and names a `runtime.serve(...)` process for any `@tool` worker (worker gate) — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never `agentType: \"sequential\"` or a framework name",
+    "Sets bounds: `max_turns` per child plus `maxDurationSeconds` / workflow timeout on the caller",
+    "Execution entry points (`run` / `serve`) are placed under `if __name__ == \"__main__\":`"
+  ]
+}

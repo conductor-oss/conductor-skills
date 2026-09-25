@@ -1,0 +1,28 @@
+{
+  "name": "Scaffold a Native Python Conductor Agent (run locally, deploy for prod, with tests)",
+  "skills": ["conductor"],
+  "query": "Scaffold a Python Conductor agent called `support_triage` that can look up an order by id and issue a refund. Use OpenAI. I want to run it locally first, then deploy it for prod, and I want tests.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md (Rules 8–13), references/agents.md (decision table → path 2 'Conductor Agent via SDK'; lifecycle verbs; tool types; HITL contract; testing section), references/agent-sdks.md (Python install/import + native scaffold), and examples/agent-deploy-and-invoke.md. Optionally follow the `/conductor-scaffold-agent` procedure.",
+    "Step 2: Preflight — `conductor agent list` (agent runtime reachable) and a provider check via `GET /api/providers/status` (or `conductor_api.py providers-status`) confirming `openai` is `configured: true`. State that `OPENAI_API_KEY` lives on the Conductor server, not in the agent's code or `.env`.",
+    "Step 3: WebFetch the Python SDK `docs/agents/` index (Rule 7.3 / Rule 13) before pinning the install: `pip install 'conductor-python[agents]'`.",
+    "Step 4: Generate the agent: `from conductor.ai.agents import Agent, AgentRuntime, tool`; two `@tool` functions with type hints and docstrings — `lookup_order(order_id: str) -> dict` and `issue_refund(order_id: str, amount: float, reason: str) -> dict`; the refund tool is `@tool(approval_required=True)` because it moves money (F2). `Agent(name=\"support_triage\", model=\"openai/gpt-4o-mini\", instructions=..., tools=[lookup_order, issue_refund], max_turns=<bounded>)`.",
+    "Step 5: Local iteration: `runtime = AgentRuntime(); result = runtime.run(agent, \"Where is order 123?\")` — print `result.execution_id` and the UI link `{BASE_URL}/agentExecutions/{id}`. State that `run()` is not a deployment.",
+    "Step 6: Production split: `deploy.py` (release pipeline) calls `runtime.plan(agent)` then `runtime.deploy(agent)` and prints `requiredWorkers`; `serve.py` (long-lived service) calls `runtime.serve(agent)`. State the agent worker gate (Rule 9): `deploy()` only registers — without a `serve()` process the worker tool calls sit SCHEDULED and the run hangs.",
+    "Step 7: Tests: `from conductor.ai.agents.testing import mock_run, MockEvent, expect` for offline unit tests (no LLM, no server); optional live `CorrectnessEval(runtime).run([EvalCase(...)])` behind a marker.",
+    "Step 8: Show how the deployed agent is invoked — `conductor agent run --name support_triage \"...\"` and/or an `AGENT` task `{\"agentType\":\"conductor\",\"name\":\"support_triage\",\"prompt\":\"${workflow.input.prompt}\"}` in a workflow JSON written to a file.",
+    "Step 9: `.env.example` contains `CONDUCTOR_SERVER_URL` (+ auth key/secret placeholders) only — no provider keys. Never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Code imports `from conductor.ai.agents import Agent, AgentRuntime, tool` (not `agentspan`, not `conductor.client.agents`, not a made-up module)",
+    "`Agent(...)` sets `model` explicitly in `provider/model` form starting with `openai/` (e.g. `openai/gpt-4o-mini`); the plan does not rely on `CONDUCTOR_AGENT_LLM_MODEL` as the model source",
+    "Tools are plain Python functions decorated with `@tool`, with type hints and docstrings; the refund tool uses `@tool(approval_required=True)` (or an equivalent approval gate) with a stated reason (money-moving / side-effect, F2)",
+    "Local iteration uses `AgentRuntime().run(agent, prompt)` (or `start`/`stream`) and the plan says `run()` is not a deployment",
+    "Deploy and serve are separate entry points: `runtime.deploy(agent)` (optionally after `runtime.plan(agent)`) registers the agent, and `runtime.serve(agent)` runs as a long-lived process — with an explicit statement that without `serve()` the worker tool calls hang / sit SCHEDULED",
+    "`OPENAI_API_KEY` is described as configured on the Conductor server (verified via `GET /api/providers/status` or `conductor agent list`), not embedded in agent code or the agent's `.env`",
+    "Plan WebFetches the Python SDK `docs/agents/` (or repo README) before pinning the install, and the install is `pip install 'conductor-python[agents]'` (or another real extra such as `[openai-agents]`) — not an invented package",
+    "Tests use `conductor.ai.agents.testing` (`mock_run` / `MockEvent` / `expect` or `assert_*` for offline; `CorrectnessEval` / `EvalCase` for live) — no invented `conductor agent test` command",
+    "No secret literals appear anywhere and `conductor deploy` is never recommended",
+    "The agent does not hand-wire a DO_WHILE ReAct loop in workflow JSON instead of using the SDK `Agent`; any workflow-side invocation uses `type: \"AGENT\"` with `agentType: \"conductor\"` and `name: \"support_triage\"`"
+  ]
+}

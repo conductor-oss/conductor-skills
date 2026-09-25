@@ -398,7 +398,7 @@ No-operation task. Immediately completes with no side effects. Useful as a place
 
 ## AI task types
 
-Conductor has built-in AI tasks supporting 12 LLM providers (OpenAI, Anthropic, Google Vertex AI, Azure OpenAI, AWS Bedrock, Mistral, Cohere, Grok, Perplexity, HuggingFace, Ollama, Stability AI) and vector databases (Pinecone, Postgres pgvector, MongoDB Atlas).
+Agent task types (`AGENT`, `CANCEL_AGENT`, `GET_AGENT_CARD`) are in their own section below. Conductor has built-in AI tasks supporting 12 LLM providers (OpenAI, Anthropic, Google Vertex AI, Azure OpenAI, AWS Bedrock, Mistral, Cohere, Grok, Perplexity, HuggingFace, Ollama, Stability AI) and vector databases (Pinecone, Postgres pgvector, MongoDB Atlas).
 
 ### LLM_CHAT_COMPLETE
 Multi-turn conversational AI with optional tool calling. Supports all LLM providers.
@@ -780,6 +780,92 @@ Call a specific tool on an MCP server. All extra inputParameters are passed as t
 ```
 **Inputs**: `mcpServer`, `method` (both required), `headers`, plus any tool-specific parameters.
 **Outputs**: `content` (array of result items), `isError`.
+
+---
+
+## Agent task types
+
+Three system tasks drive agents. Full contract, HITL semantics, hosted platforms and operations: [agents.md](agents.md). Framework names are **never** `agentType` values (SKILL.md Rule 10).
+
+### AGENT
+Invoke an agent and poll it to completion without holding a worker thread (`IN_PROGRESS` + `callbackAfterSeconds` between polls). `agentType` selects the **execution mode**: `conductor` (a deployed Conductor Agent, by name), `a2a` (remote Agent2Agent endpoint — the default when omitted), `microsoft-foundry` / `openai-assistants` / `bedrock` (hosted platform agents, see [agents.md §9](agents.md#9-hosted-platform-agents-agenttype-microsoft-foundry--openai-assistants--bedrock)). The mapper injects `retryCount=3, retryDelaySeconds=2, LINEAR_BACKOFF` when the `AGENT` task def has no retries — no task definition is required.
+
+**conductor mode** (verbatim from `conductor/ai/examples/31-conductor-agent-basic.json`):
+```json
+{
+  "name": "run_agent", "taskReferenceName": "run_agent_ref", "type": "AGENT",
+  "inputParameters": {
+    "agentType": "conductor",
+    "name": "planner",
+    "prompt": "${workflow.input.prompt}",
+    "pollIntervalSeconds": 5,
+    "maxDurationSeconds": 3600
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `agentType` | `"conductor"` — set it explicitly; omitted = a2a → `AGENT requires 'agentUrl'` |
+| `name` | deployed agent name. **Not `agentName`** (that is an output field / REST alias). Required on a fresh start |
+| `prompt` | **required on start and on resume** (`AGENT requires 'prompt'` → `FAILED_WITH_TERMINAL_ERROR`) |
+| `executionId` | present → **resume** a paused run: posts `{"result": prompt}` to its pending HUMAN task, then re-polls. `name` optional on resume |
+| `version` | pin a deployed version; latest when omitted |
+| `sessionId`, `runId`, `context{}`, `media[]`, `model`, `timeoutSeconds`, `idempotencyKey`, `credentials{}` | per-call overrides; `sessionId` becomes output `contextId` and groups executions for search — it does **not** replay earlier turns into a new run by itself (observed live: a second call with the same `sessionId` had no memory of the first). For continuity give the agent `memory=` or pass the prior `${turn1.output.text}` in `prompt` / `context`. Idempotency key auto = `conductor-agent-<wfId>:<taskRef>:<iteration>` |
+| `agentConfig` / `framework` + `rawConfig` / `skillRef{name,version}` | inline agent instead of `name` (mutually exclusive) |
+| `pollIntervalSeconds` 5 · `maxDurationSeconds` 86400 · `maxPollFailures` 30 | polling bounds; exceeding → `FAILED_WITH_TERMINAL_ERROR` + best-effort child cancel. Always set `maxDurationSeconds` below the 24 h default (rule F1) |
+| `autoRunTools` (default true), `maxToolTurns` 10, `toolTaskNames{}` | hosted-platform tool loop — see agents.md §9 |
+
+**Outputs**: `executionId` (also the task's `subWorkflowId`; **it is a workflow id**), `agentName`, `state` (`working` · `input-required` · `completed` · `failed` · `canceled`), `text`, `output` (the compiled workflow's `outputParameters`: `{result, finishReason, context, rejectionReason}` → **`${run_agent_ref.output.output.result}`**), `waiting: true` + `pendingTool{taskRefName, toolCalls[{name, args}], response_schema, response_ui_schema}` at a human gate (`tool_name`/`parameters` are `null` for compiled Conductor agents — read `toolCalls[].name`; `text` is absent while waiting), `agentStartTime`/`agentEndTime`, plus the canonical A2A keys `taskId` (= executionId), `contextId`, `task`, `artifacts`, `agentMessage`.
+
+**Status mapping**: `working` → `IN_PROGRESS` · `input-required` → **`COMPLETED` with `waiting: true`** (branch on `${ref.output.waiting}` with a `value-param` SWITCH, `defaultCase: []`) · `completed` → `COMPLETED` · `failed` (agent error, its own `TIME_OUT_WF`, "Agent not found") → `FAILED` · `canceled` (parent `TERMINATE`, `CANCEL_AGENT`, operator cancel) → **`CANCELED`**. Deadline / poll-cap / bad input → `FAILED_WITH_TERMINAL_ERROR`.
+
+Resume (verbatim from `32-conductor-agent-human-in-loop.json`; the whole HITL workflow is [../examples/workflows/agent-hitl-resume.json](../examples/workflows/agent-hitl-resume.json)):
+```json
+{
+  "name": "resume_agent", "taskReferenceName": "resume_agent_ref", "type": "AGENT",
+  "inputParameters": {
+    "agentType": "conductor",
+    "name": "planner",
+    "executionId": "${run_agent_ref.output.executionId}",
+    "prompt": "${collect_answer_ref.output.answer}"
+  }
+}
+```
+**Approve ≠ resume**: resume answers a question (`pendingTool.response_schema` has `response`); an approval gate (`response_schema.required` has `approved`, gated calls in `pendingTool.toolCalls[].name`) is answered with `conductor agent respond <id> --approve` / `POST /api/agent/{id}/respond {"approved": true}` / SDK `approve()`, or in-workflow via [../examples/workflows/agent-approval-in-workflow.json](../examples/workflows/agent-approval-in-workflow.json) (HUMAN → `HTTP` respond → poll `/status`). A resume's `{"result": prompt}` only reaches a gate through an LLM normalizer (F8); a resume after approval fails with `No pending HUMAN task`.
+
+**Inline definition instead of `name`** (verified live): `agentConfig: {"name": "digest_summarizer", "model": "openai/gpt-4o-mini", "instructions": "...", "maxTurns": 3}` (native), `framework: "langgraph"|"openai"|"google_adk"|"langchain"|"vercel_ai"|"claude_agent_sdk"|"skill"` + `rawConfig: {...}` (`agentType` stays `conductor`), or `skillRef: {"name": "...", "version": 1}` (a registered skill; needs `agentspan.skills.enabled=true`). Exactly one of `name` / `agentConfig` / `framework`+`rawConfig` / `skillRef`. Inline worker tools still need `serve()`. Deploy by `name` for anything reused, versioned, scheduled or reviewed (`conductor agent get`, execution grouping).
+
+**Multi-round conversation** (verified live): put the `AGENT` task in a `DO_WHILE`, store each round's `text` with `SET_VARIABLE`, interpolate it into the next `prompt` (`sessionId` groups executions under one `contextId` but does not replay history). Bound the loop (`iteration < N` + an early-exit flag, B5) and each round (`maxDurationSeconds`, F1). Each round is a new `executionId` unless the previous one ended `waiting: true` — then resume it with `executionId` + `prompt`. If the loop is just "agent, API, repeat", give the agent the API as an `http_tool` and let it own the loop (rule F4).
+
+**a2a mode** (verbatim from `10-a2a-call-agent.json`):
+```json
+{
+  "name": "call_currency_agent", "taskReferenceName": "agent", "type": "AGENT",
+  "inputParameters": {
+    "agentType": "a2a",
+    "agentUrl": "http://localhost:9999",
+    "text": "convert 100 USD to EUR",
+    "pollIntervalSeconds": 5,
+    "headers": {"Authorization": "Bearer ${workflow.secrets.AGENT_TOKEN}"}
+  }
+}
+```
+Inputs: `agentUrl` (**required**; JSON-RPC endpoint or `*.json` agent-card URL), one of `message` > `parts[]` > `text` / `prompt`, `contextId` + `taskId` (resume an `input-required` task), `headers{}`, `historyLength`, `streaming` (SSE), `pushNotification` (+ `pushBackstopPollSeconds` 300; silently polls if `conductor.a2a.callback.url` is unset), `metadata`, and the same poll bounds. Outputs: `state` (`submitted` · `working` · `input-required` · `auth-required` · `completed` · `canceled` · `failed` · `rejected` · `unknown`, or `"message"` for a direct reply), `taskId`, `contextId`, `artifacts[]`, `text` (only when the remote sent text parts — Conductor's own A2A facades return a `data` artifact: `${ref.output.artifacts[0].parts[0].data.result}`), `agentMessage`, `task`. `input-required` / `auth-required` → `COMPLETED`; re-call with the same `taskId` + `contextId` (see [../examples/agent-a2a-remote.md](../examples/agent-a2a-remote.md)). Terminal errors (blank `agentUrl`, deadline, poll cap, unsupported `agentType`) → `FAILED_WITH_TERMINAL_ERROR`.
+
+### CANCEL_AGENT
+```json
+{"name": "cancel_run", "taskReferenceName": "cancel_run_ref", "type": "CANCEL_AGENT",
+ "inputParameters": {"agentType": "conductor", "executionId": "${run_agent_ref.output.executionId}", "reason": "superseded"}}
+```
+conductor / hosted: requires `executionId` (`reason` default `"Cancelled by CANCEL_AGENT task"`) → `{executionId, canceled: true}`. a2a: requires `agentUrl` + `taskId` → `{task}`. The `AGENT` task that owns the run ends `CANCELED`. Alternative from a parent workflow: `TERMINATE` the parent — cancellation propagates to the child (embedded runtime only).
+
+### GET_AGENT_CARD
+```json
+{"name": "discover_agent", "taskReferenceName": "card", "type": "GET_AGENT_CARD",
+ "inputParameters": {"agentUrl": "http://localhost:9999", "headers": {}}}
+```
+a2a only (`agentType` other than `a2a` → terminal error). Resolves `/.well-known/agent-card.json` → `{agentCard}` (`skills`, `capabilities.streaming`, `url`). Mark `optional: true` when discovery is a pre-flight.
 
 ---
 

@@ -1,0 +1,29 @@
+{
+  "name": "Market / Risk / Compliance Analysts in Parallel With a Synthesizing Parent (Strategy.PARALLEL)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "For each new deal we need three independent analyses — market, risk and compliance — followed by one combined memo. They shouldn't wait on each other. Build this as a single Python agent I can invoke from our `deal_review` workflow, and tell me what it costs in LLM calls per deal.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `parallel` row: all children run at once as a `FORK_JOIN`, the parent synthesizes; the parent's model is inherited from the first child if omitted), references/agents.md §4, references/workflow-definition.md (`### AGENT`), references/optimization.md F1 and F10 (fan-out multiplies LLM spend and worker load), and examples/agent-deploy-and-invoke.md (`agent-fork-specialists.json` for the workflow-side alternative).",
+    "Step 2: Three children with unique names, `provider/model`, their own instructions and `max_turns`: `market_analyst`, `risk_analyst`, `compliance` (e.g. `max_turns=5` each).",
+    "Step 3: Parent: `analysis = Agent(name=\"deal_analysis\", model=\"openai/gpt-4o-mini\", instructions=\"Combine the three analyses into one memo.\", agents=[market_analyst, risk_analyst, compliance], strategy=Strategy.PARALLEL, max_turns=3)`. Explain the compiled shape: a `FORK_JOIN` over three `SUB_WORKFLOW`s (one per child) followed by the parent's synthesis turn; note the parent's `model` is inherited from the first child if omitted, and set it explicitly anyway.",
+    "Step 4: Cost (F10): at least one LLM call per child plus the synthesis turn per deal, each child up to its own `max_turns` — so keep the fan-out fixed and small (three), bound every child, and set `max_turns` on the parent.",
+    "Step 5: Lifecycle: `runtime.run(analysis, prompt)` under `if __name__ == \"__main__\":`; `runtime.deploy(analysis)` in CI; `runtime.serve(analysis)` only if any child has `@tool` workers (state `requiredWorkers`). Never `conductor deploy`.",
+    "Step 6: `deal_review` gets one task: `{\"type\":\"AGENT\",\"inputParameters\":{\"agentType\":\"conductor\",\"name\":\"deal_analysis\",\"prompt\":\"${workflow.input.deal_summary}\",\"maxDurationSeconds\":1200}}`; read `${ref.output.text}` / `.output.output.result`. `agentType` is `conductor`, never `\"parallel\"`.",
+    "Step 7: Mention the workflow-side alternative — a `FORK_JOIN` over three separately deployed agents with a JOIN and a fourth `AGENT` task — and when it fits (the specialists already exist as deployed agents owned by other teams).",
+    "Step 8: Verify offline with `mock_run` + `assert_agent_ran(\"risk_analyst\")` (or `expect(result).completed()`), and live with `conductor agent stream <id>` (`subagent_start` / `subagent_stop` events)."
+  ],
+  "success_criteria": [
+    "The parent uses `agents=[market_analyst, risk_analyst, compliance]` with `strategy=Strategy.PARALLEL` (or `\"parallel\"`)",
+    "States that PARALLEL compiles to a `FORK_JOIN` over the children (each a `SUB_WORKFLOW`) and that the parent synthesizes their outputs",
+    "Sets the parent's `model` explicitly in `provider/model` form (noting that an omitted parent model is inherited from the first child is a plus)",
+    "Every `model` is provider-qualified (`provider/model`); no bare model names",
+    "Each child has a unique `name` and its own `max_turns`; the parent has `max_turns` too",
+    "Shows cost/F10 awareness: fan-out multiplies LLM calls (at least one per child plus the synthesis turn) and the branch count is kept fixed and small",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy` — and states whether a `serve()` process is needed (`requiredWorkers`)",
+    "The `AGENT` task in `deal_review` uses `agentType: \"conductor\"` + `name: \"deal_analysis\"` + `prompt` with `maxDurationSeconds` — never `agentType: \"parallel\"` or a framework name",
+    "Reads the result at `${<ref>.output.text}` or `${<ref>.output.output.result}` (not `${<ref>.output.result}`)",
+    "Mentions a workflow-side `FORK_JOIN` alternative (over separately deployed agents or LLM tasks) and when the SDK strategy is the better fit"
+  ]
+}

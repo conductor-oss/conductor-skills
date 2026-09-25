@@ -10,7 +10,7 @@
     "Step 5: Include proper inputParameters with ${...} expressions to pass data between tasks",
     "Step 6: Write the workflow JSON to a file",
     "Step 7: Register the workflow using `conductor workflow create workflow.json`",
-    "Step 8: List task definitions with `conductor taskDef list` to check if SIMPLE tasks have registered workers",
+    "Step 8: List task definitions with `conductor task list --json` to check if SIMPLE tasks have registered workers",
     "Step 9: If any SIMPLE task has no task definition, offer to create the task definition and scaffold a worker",
     "Step 10: Start the workflow using `conductor workflow start -w <name> -i '{...}'`",
     "Step 11: Check execution status using `conductor workflow get-execution <workflowId>`",

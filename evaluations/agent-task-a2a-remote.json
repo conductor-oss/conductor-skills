@@ -1,0 +1,26 @@
+{
+  "name": "Call a Partner's Remote A2A Agent with Bearer Auth, Handle input-required in the Same Conversation, Discover Its Card",
+  "skills": ["conductor"],
+  "query": "A partner exposes an A2A agent at https://agents.partner.example/a2a/legal-review and it needs a bearer token. From my `contract_intake` workflow, send it the contract summary; if it comes back asking a follow-up question, answer it from our `clarifications` input in the same conversation. Also — how do I find out what that agent can do before I call it?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT` a2a mode, `### GET_AGENT_CARD`), references/agents.md (A2A states, callback config), examples/agent-a2a-remote.md, and references/optimization.md rules D1 and F9.",
+    "Step 2: Discovery: `GET_AGENT_CARD` task `{\"agentUrl\":\"https://agents.partner.example/a2a/legal-review\",\"headers\":{\"Authorization\":\"Bearer ${workflow.secrets.PARTNER_A2A_TOKEN}\"}}` → output `agentCard` (skills, input modes); optionally run it once and inspect.",
+    "Step 3: First call (ref `ask`): `AGENT` with `agentType: \"a2a\"`, `agentUrl`, `text: \"${workflow.input.contract_summary}\"` (or `prompt` / `message` / `parts`), `headers.Authorization` from `${workflow.secrets.PARTNER_A2A_TOKEN}`, `pollIntervalSeconds: 5`, `maxDurationSeconds: 900`.",
+    "Step 4: Secrets: the token comes from the secrets system — `${workflow.secrets.NAME}` resolves on OSS from a `CONDUCTOR_SECRET_PARTNER_A2A_TOKEN` env var on the server (or from Orkes' managed store) — never from `${workflow.input.*}` (rule D1 CRITICAL).",
+    "Step 5: `SWITCH` (`value-param`) on `${ask.output.state}` with case `input-required` and `defaultCase: []`. Inside the case, a second `AGENT` a2a task (ref `answer`) that re-calls with the SAME `contextId: \"${ask.output.contextId}\"` and `taskId: \"${ask.output.taskId}\"`, `text: \"${workflow.input.clarifications}\"`, same headers and bounds.",
+    "Step 6: Outputs: read `text`, `artifacts`, `state` from whichever task finished; `outputParameters` exposes them. Note `pushNotification: true` only works when `conductor.a2a.callback.url` is configured on the server — otherwise it silently falls back to polling — so leave it off unless the callback URL is set.",
+    "Step 7: Write the JSON to a file, `conductor workflow create <file>`, test with `conductor workflow start -w contract_intake --sync -i '{...}'`."
+  ],
+  "success_criteria": [
+    "The call is an `AGENT` task with `agentType: \"a2a\"` and `agentUrl` set to the partner endpoint — not `agentType: \"conductor\"` and not a hand-rolled `HTTP` task speaking JSON-RPC",
+    "The message is supplied via `text` (or `prompt` / `message` / `parts`) and points at the contract summary input",
+    "The bearer token is referenced through the secrets system (`${workflow.secrets.NAME}` — OSS env-backed via `CONDUCTOR_SECRET_*` on the server, or Orkes managed store) and never via `${workflow.input.*}`; rule D1 is cited",
+    "A `SWITCH` routes on `${<ref>.output.state}` with an `input-required` case and an empty (`[]`) `defaultCase`",
+    "The follow-up `AGENT` a2a task reuses BOTH `contextId` and `taskId` from the first task's output so the answer lands in the same conversation/task",
+    "`maxDurationSeconds` is set explicitly on the a2a calls (optionally with `pollIntervalSeconds`) — remote agents are outside our control (F9)",
+    "Results are read from the a2a outputs `text` / `artifacts` / `state`",
+    "States that `pushNotification` requires `conductor.a2a.callback.url` on the server (otherwise silent poll fallback) — either configures it or leaves push off",
+    "Discovery uses a `GET_AGENT_CARD` task taking `agentUrl` (plus optional `headers`) and returning `agentCard`",
+    "Workflow JSON is written to a file before `conductor workflow create`"
+  ]
+}

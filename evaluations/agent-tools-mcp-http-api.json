@@ -1,0 +1,27 @@
+{
+  "name": "One Agent, Three Server-Side Tool Kinds — mcp_tool, http_tool and api_tool (OpenAPI)",
+  "skills": ["conductor"],
+  "query": "One Python agent with three kinds of tools: our internal MCP server at `http://localhost:3001/mcp` exposes `get_weather`; a partner REST endpoint `POST https://api.example.com/reverse` that needs a bearer token; and the Petstore OpenAPI spec at `https://petstore.example.com/openapi.json`, of which I only want `getPetById` and `findPetsByStatus`. Do I have to write workers for any of this, and what does the server admin need to configure?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §7 (`http_tool(name, description, url, method, headers={\"Authorization\": \"Bearer ${API_TOKEN}\"}, input_schema, credentials=[\"API_TOKEN\"])`, `api_tool(url=<openapi json>, tool_names=[...], max_tools=64)`, `mcp_tool(server_url, name, tool_names=[...])` — LIST_MCP_TOOLS at compile time; origin must be allowed on the server), references/agents.md §1 (MCP / OpenAPI tool discovery is outbound deny-all: `conductor.ai.outbound.allowed-origins`, `conductor.ai.outbound.allow-private-networks=true` for localhost in dev), §5 tools table (compile targets and the `Needs serve()?` column), §8 secrets, references/optimization.md F5 and D1.",
+    "Step 2: `reverse = http_tool(name=\"reverse_string\", description=\"Reverse a string\", url=\"https://api.example.com/reverse\", method=\"POST\", headers={\"Authorization\": \"Bearer ${API_TOKEN}\"}, input_schema={\"type\": \"object\", \"properties\": {\"text\": {\"type\": \"string\"}}, \"required\": [\"text\"]}, credentials=[\"API_TOKEN\"])` — compiles to an `HTTP` task; `${API_TOKEN}` is resolved server-side from the secret named in `credentials`.",
+    "Step 3: `petstore = api_tool(url=\"https://petstore.example.com/openapi.json\", tool_names=[\"getPetById\", \"findPetsByStatus\"], max_tools=64)` — OpenAPI discovery at compile time turns the two operations into `HTTP` tools (discovery pre-tasks); `tool_names` filters so the model is not offered the whole spec.",
+    "Step 4: `testkit = mcp_tool(server_url=\"http://localhost:3001/mcp\", name=\"mcp_testkit\", tool_names=[\"get_weather\"])` — `LIST_MCP_TOOLS` at compile time and `CALL_MCP_TOOL` per call.",
+    "Step 5: `agent = Agent(name=\"ops_helper\", model=\"openai/gpt-4o-mini\", instructions=\"...\", tools=[reverse, petstore, testkit], max_turns=10)`. Answer the worker question: all three are server-side tool types, so no `serve()` process is needed — `runtime.plan(agent)[\"requiredWorkers\"]` should be empty; adding any `@tool` function would change that (Rule 9 / F3). No hand-written workers wrapping HTTP or MCP calls.",
+    "Step 6: Server admin: list the MCP origin (`http://localhost:3001`) and the OpenAPI host in `conductor.ai.outbound.allowed-origins`; for localhost in dev add `conductor.ai.outbound.allow-private-networks=true`. Without this, MCP / OpenAPI discovery fails at compile time.",
+    "Step 7: Secret: store the partner token under the NAME `API_TOKEN` (`CONDUCTOR_SECRET_API_TOKEN` env on the OSS server, `/api/secrets` when writable, UI `/agentSecrets`, or the Orkes secret manager); never a literal token in `headers`, `instructions` or code (F5 / D1).",
+    "Step 8: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(agent, ...)`; `runtime.deploy(agent)` in CI. Never `conductor deploy`. Any workflow call uses `AGENT` with `agentType: \"conductor\"` + `name: \"ops_helper\"`, `maxDurationSeconds`."
+  ],
+  "success_criteria": [
+    "Uses `mcp_tool(server_url=\"http://localhost:3001/mcp\", name=..., tool_names=[\"get_weather\"])`",
+    "Uses `http_tool(name=..., description=..., url=\"https://api.example.com/reverse\", method=\"POST\", headers={\"Authorization\": \"Bearer ${API_TOKEN}\"}, input_schema={...}, credentials=[\"API_TOKEN\"])`",
+    "Uses `api_tool(url=\"https://petstore.example.com/openapi.json\", tool_names=[\"getPetById\", \"findPetsByStatus\"], max_tools=64)` with the `tool_names` filter",
+    "States that these three are server-side tool types needing no `serve()` (`requiredWorkers` empty) and that any `@tool` function would still need one",
+    "Names the compile targets: `LIST_MCP_TOOLS` + `CALL_MCP_TOOL` for the MCP tool, `HTTP` for `http_tool` / `api_tool`",
+    "Names the admin setting `conductor.ai.outbound.allowed-origins` (plus `conductor.ai.outbound.allow-private-networks=true` for localhost in dev) for MCP / OpenAPI discovery",
+    "The secret is referenced by NAME (`credentials=[\"API_TOKEN\"]`, `${API_TOKEN}` placeholder) with the server-side secret store named; no token value appears",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never a framework name — and no hand-written worker wraps the HTTP or MCP calls"
+  ]
+}
