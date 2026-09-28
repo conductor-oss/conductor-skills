@@ -10,6 +10,10 @@ name: Skill Evals
 #   ANTHROPIC_API_KEY  — agent + default judge (required)
 #   OPENAI_API_KEY     — only needed when running against gpt-* models
 #   GEMINI_API_KEY     — only needed when running against gemini-* models
+#
+# Layout: the suite is split into five shards by file-name prefix so each
+# shard stays inside the 30-minute budget. A final `report` job merges the
+# shard JSON reports, renders the HTML, uploads it, and comments on the PR.
 
 on:
   workflow_dispatch:
@@ -47,6 +51,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each shard is a space-separated list of shell-glob prefixes expanded as
+        # evaluations/<prefix>*.json — five shards of 10–22 evals (78 total). Every
+        # file must match exactly one shard (checked by scripts/validate_plugin.py).
+        shard: ["agent-[a-r] a[h-z]", "agent-s", "agent-[t-z] [b-g]", "[h-m]", "[n-z]"]
+        include:
+          - shard: "agent-[a-r] a[h-z]"
+            index: 1
+          - shard: "agent-s"
+            index: 2
+          - shard: "agent-[t-z] [b-g]"
+            index: 3
+          - shard: "[h-m]"
+            index: 4
+          - shard: "[n-z]"
+            index: 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -69,18 +92,97 @@ jobs:
       - name: Validate plugin (must pass before spending API tokens)
         run: python3 scripts/validate_plugin.py
 
-      - name: Run evals
+      - name: Run evals (shard ${{ matrix.index }} — ${{ matrix.shard }})
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY:    ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
         run: |
           mkdir -p eval-output
-          python3 scripts/run_evals.py \
+          files=$(for p in ${{ matrix.shard }}; do ls evaluations/${p}*.json; done)
+          python3 scripts/run_evals.py $files \
             --model "${{ steps.cfg.outputs.model }}" \
             --judge-model "${{ steps.cfg.outputs.judge }}" \
             --json \
-            --output eval-output/report.json
+            --output eval-output/report-${{ matrix.index }}.json
+
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-shard-${{ matrix.index }}
+          path: eval-output/
+          retention-days: 7
+
+  report:
+    needs: evals
+    # Run even when a shard failed (evals exiting 1), but not when the whole
+    # evals job was skipped (unlabeled PR).
+    if: always() && needs.evals.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Resolve model + judge
+        id: cfg
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "model=${{ inputs.model }}"   >> "$GITHUB_OUTPUT"
+            echo "judge=${{ inputs.judge }}"   >> "$GITHUB_OUTPUT"
+          else
+            echo "model=claude-sonnet-4-6"               >> "$GITHUB_OUTPUT"
+            echo "judge=claude-sonnet-5"        >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-shard-*
+          path: shards
+          merge-multiple: true
+
+      - name: Merge shard reports
+        run: |
+          mkdir -p eval-output
+          python3 - <<'PY'
+          import glob, json
+          files = sorted(glob.glob("shards/report-*.json"))
+          expected_shards = 5
+          expected_evals = len(glob.glob("evaluations/*.json"))
+          if len(files) != expected_shards:
+              raise SystemExit(f"expected {expected_shards} shard reports, found {len(files)}")
+          merged, results = None, []
+          for f in files:
+              d = json.load(open(f))
+              merged = merged or d
+              results.extend(d.get("results", []))
+          if merged is None:
+              raise SystemExit("no shard reports found under shards/")
+          total = len(results)
+          if total != expected_evals:
+              raise SystemExit(f"expected {expected_evals} eval results, found {total}")
+          result_names = [r.get("name") for r in results]
+          if len(set(result_names)) != total:
+              raise SystemExit("duplicate eval results found while merging shards")
+          passed = sum(1 for r in results if r.get("overall_pass"))
+          merged["results"] = results
+          merged["summary"] = {
+              "total_evals": total,
+              "passed_evals": passed,
+              "total_criteria": sum(r.get("total", 0) for r in results),
+              "passed_criteria": sum(r.get("passed", 0) for r in results),
+              "avg_score": round(sum(r.get("overall_score", 0) for r in results) / total, 3) if total else 0,
+          }
+          json.dump(merged, open("eval-output/report.json", "w"), indent=2)
+          print(f"merged {len(files)} shard report(s): {passed}/{total} evals passed")
+          PY
 
       - name: Render HTML report
         if: always()

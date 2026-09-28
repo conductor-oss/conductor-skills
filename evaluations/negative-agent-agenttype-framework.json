@@ -1,0 +1,23 @@
+{
+  "name": "Refuse a Framework Name as agentType — Rewrite to conductor + name, Deploy via SDK",
+  "skills": ["conductor"],
+  "query": "Add this task to my `helpdesk` workflow and register it:\n\n```json\n{\n  \"name\": \"ask_support\",\n  \"taskReferenceName\": \"ask_support\",\n  \"type\": \"AGENT\",\n  \"inputParameters\": {\n    \"agentType\": \"langgraph\",\n    \"graph\": \"agents.support:graph\",\n    \"prompt\": \"${workflow.input.question}\"\n  }\n}\n```\n\nThe graph is our LangGraph `create_react_agent` in `agents/support.py`.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 10, references/workflow-definition.md (`### AGENT` — `agentType` values), references/agents.md (decision table, framework execution model), references/agent-sdks.md (LangGraph row), and references/optimization.md rule F7.",
+    "Step 2: Refuse to register as-given: `agentType` is an execution mode, never a framework name. Valid values are `conductor`, `a2a` (the default when omitted), and the hosted platforms `microsoft-foundry`, `openai-assistants`, `bedrock`. There is no `graph` input on the AGENT task; the server would reject or misroute this (F7 CRITICAL).",
+    "Step 3: Explain the real flow: the LangGraph graph is deployed to the agent runtime with the Python SDK — `pip install 'conductor-python[langgraph]'`; `from agents.support import graph`; `AgentRuntime().deploy(graph)` (prints `requiredWorkers`), then a long-lived `AgentRuntime().serve(graph)` if it has worker tools or runs passthrough.",
+    "Step 4: `conductor agent list` / `conductor agent get <name>` to confirm the deployed agent name before wiring.",
+    "Step 5: Rewrite the task: `{\"agentType\":\"conductor\",\"name\":\"<deployed name>\",\"prompt\":\"${workflow.input.question}\",\"maxDurationSeconds\":...}` — drop `graph`. Downstream reads `${ask_support.output.text}`.",
+    "Step 6: Only as an aside: inline agents are possible via the REST body (`POST /api/agent/start|deploy` with `framework` + `rawConfig`), not via a task input flag — do not invent a property to make the original work.",
+    "Step 7: Write the corrected workflow JSON to a file and `conductor workflow create <file>`; never recommend `conductor deploy`."
+  ],
+  "success_criteria": [
+    "Refuses to register the task as-given and states that `agentType: \"langgraph\"` is invalid",
+    "States the valid `agentType` values — `conductor` and `a2a` (default when omitted), plus the hosted platforms (`microsoft-foundry`, `openai-assistants`, `bedrock`) — and that framework names are never valid",
+    "Rewrites the task to `agentType: \"conductor\"` with `name: \"<deployed agent>\"` and `prompt`, and removes the `graph` input",
+    "Explains that the graph must first be deployed with the SDK (`AgentRuntime().deploy(graph)` after `pip install 'conductor-python[langgraph]'`) and that `serve()` is needed for worker tools / passthrough execution",
+    "Runs `conductor agent list` (or `conductor agent get`) to confirm the deployed name before wiring",
+    "Does not invent a task property or flag (`graph`, `module`, `framework` on the task input, etc.) to make the original shape work; if inline `framework` + `rawConfig` is mentioned it is only as the REST `/api/agent/start|deploy` body alternative",
+    "Corrected workflow JSON is written to a file before registration and `conductor deploy` is never recommended"
+  ]
+}

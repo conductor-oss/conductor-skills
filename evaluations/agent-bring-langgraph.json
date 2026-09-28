@@ -1,0 +1,27 @@
+{
+  "name": "Deploy a LangGraph create_react_agent Graph and Call It from an Existing Workflow",
+  "skills": ["conductor"],
+  "query": "I have a LangGraph agent built with `create_react_agent(model, tools)` in `agents/support.py`. Deploy it to Conductor and call it from my existing `ticket_router` workflow.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (decision table → path 3; framework execution model: LangGraph is compiled when a `model` is extractable, otherwise passthrough), references/agent-sdks.md (LangGraph row), references/workflow-definition.md (`### AGENT`, conductor mode), and examples/agent-deploy-and-invoke.md.",
+    "Step 2: Preflight — `conductor agent list`; `GET /api/providers/status` for the graph's provider; explain the provider key must be on the Conductor server when the graph is compiled (LLM turns are server-side).",
+    "Step 3: WebFetch the Python SDK `docs/agents/` LangGraph page; install `pip install 'conductor-python[langgraph]'`.",
+    "Step 4: Pass the graph as-is: `from agents.support import graph`; `runtime = AgentRuntime(); runtime.run(graph, \"test prompt\")` to iterate, then `runtime.deploy(graph)` (prints `requiredWorkers`) and a long-lived `runtime.serve(graph)`. Optionally give a `{model: \"provider/model\"}` hint if extraction needs it.",
+    "Step 5: Explain compiled vs passthrough: `create_react_agent` with a readable `model` → full extraction (Conductor graph; `serve()` needed only for worker tools); a complex graph → passthrough (the whole loop runs inside the `serve()` worker, so `serve()` must be running or the run never progresses).",
+    "Step 6: Verify with `conductor agent list` and `conductor agent get <name>` before wiring the workflow.",
+    "Step 7: Fetch `ticket_router` (`conductor workflow get ticket_router`), add `{\"name\":\"ask_support_agent\",\"taskReferenceName\":\"ask_support_agent\",\"type\":\"AGENT\",\"inputParameters\":{\"agentType\":\"conductor\",\"name\":\"<deployed name>\",\"prompt\":\"${workflow.input.ticket_text}\",\"maxDurationSeconds\":1800}}`, and read the answer downstream via `${ask_support_agent.output.text}` (or `${ask_support_agent.output.output.result}`).",
+    "Step 8: Write the updated JSON to a file, bump the version, `conductor workflow create <file>`, then `conductor workflow start -w ticket_router --sync -i '{...}'` to verify."
+  ],
+  "success_criteria": [
+    "Install is `pip install 'conductor-python[langgraph]'` (or `[agents]`) — no invented package",
+    "The LangGraph graph object is passed as-is to `runtime.run` / `runtime.deploy` / `runtime.serve` — not rewritten into a native `Agent` or a hand-wired DO_WHILE loop",
+    "Explains compiled vs passthrough execution and states that a passthrough graph needs `serve()` running to make any progress",
+    "Provider key is described as living on the Conductor server (checked via `GET /api/providers/status`) for the compiled case",
+    "Runs `conductor agent list` and/or `conductor agent get <name>` after deploying and before wiring the workflow",
+    "The workflow task is `type: \"AGENT\"` with `agentType: \"conductor\"` and `name: \"<deployed name>\"` — `agentType: \"langgraph\"` never appears",
+    "Downstream tasks read the agent's answer via `${<ref>.output.text}` or `${<ref>.output.output.result}` — not `${<ref>.output.result}`",
+    "The updated `ticket_router` JSON is written to a file before `conductor workflow create` (never inline)",
+    "Bounds are set: `maxDurationSeconds` on the AGENT task and/or workflow-level `timeoutSeconds` + `timeoutPolicy`",
+    "Never recommends `conductor deploy`; deployment is via the SDK `deploy()`"
+  ]
+}

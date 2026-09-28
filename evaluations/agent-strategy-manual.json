@@ -1,0 +1,27 @@
+{
+  "name": "Editorial Team Where a Human Picks the Next Agent Every Turn (Strategy.MANUAL)",
+  "skills": ["conductor"],
+  "query": "Editorial-team agent with `writer`, `editor` and `fact_checker` — but our managing editor insists on choosing which agent goes next at every step, personally. Python. How does the run pause, how does she answer (she'll use the CLI, or we'll wire a button), and what has to be running in prod for this to work?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `manual` row: the run pauses every turn with `waiting` + `pendingTool.response_schema`; a human picks the next agent via `handle.respond({...})`; `serve()` / `run()` register the `{name}_process_selection` worker; MANUAL selection is a worker so the agent worker gate applies), references/agents.md §7 (HITL contract — `waiting`, `pendingTool`, answer channels), §8 (`conductor agent respond <id> -m`, `POST /api/agent/{id}/respond`), references/workflow-definition.md (`### AGENT` — `waiting`, resume with `executionId` + `prompt`), references/optimization.md F1, F3, F8.",
+    "Step 2: Three children with unique names, `provider/model`, instructions and their own `max_turns`: `writer`, `editor`, `fact_checker`.",
+    "Step 3: `team = Agent(name=\"editorial_team\", model=\"openai/gpt-4o-mini\", agents=[writer, editor, fact_checker], strategy=Strategy.MANUAL, max_turns=3)` — `max_turns` bounds the number of manual selections (F1).",
+    "Step 4: Pause semantics: on every turn the execution reports state `input-required` with `waiting: true` and a `pendingTool` whose `response_schema` describes the selection to make; nothing proceeds until a human answers. From a parent workflow the `AGENT` task completes with `waiting: true` — branch with a `value-param` SWITCH on `${ref.output.waiting}` (`defaultCase: []`).",
+    "Step 5: Answer channels: SDK `handle = runtime.start(team, prompt)` then `handle.respond({...})` with the selection shaped by `response_schema`; CLI `conductor agent respond <executionId> -m \"editor\"`; REST `POST /api/agent/{executionId}/respond`; the execution page in the UI. This is the conversational-response path — `--approve` / `{\"approved\": true}` is for `approval_required` tools, not for picking the next agent (Rule 12 / F8).",
+    "Step 6: Prod: `runtime.serve(team)` (or `run()`) registers the `editorial_team_process_selection` worker (`{name}_process_selection`) automatically — it appears in `runtime.plan(team)[\"requiredWorkers\"]`, so a long-lived `serve()` process is mandatory or every selection stalls SCHEDULED (Rule 9 / F3). Deploy with `runtime.deploy(team)` in CI. Never `conductor deploy`.",
+    "Step 7: Optional workflow wiring: `AGENT` with `agentType: \"conductor\"`, `name: \"editorial_team\"`, `prompt`, `maxDurationSeconds`; SWITCH on `waiting`; HUMAN task collects the selection; resume `AGENT` with `executionId: \"${first.output.executionId}\"` + `prompt` (required on resume). Never `agentType: \"manual\"`.",
+    "Step 8: Observe with `conductor agent stream <executionId>` (`waiting` events) and `conductor agent status <executionId>`."
+  ],
+  "success_criteria": [
+    "Uses `strategy=Strategy.MANUAL` (or `\"manual\"`) with the three named children",
+    "States that the run pauses every turn with `waiting: true` (state `input-required`) and a `pendingTool.response_schema` describing the selection",
+    "Shows at least two answer channels among SDK `handle.respond({...})`, CLI `conductor agent respond <id> -m \"...\"`, and REST `POST /api/agent/{id}/respond`",
+    "States that `serve()` / `run()` register the `editorial_team_process_selection` (`{name}_process_selection`) worker automatically and that a long-lived `serve()` process must be running in prod",
+    "Sets `max_turns` (bounding the number of manual selections)",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy`",
+    "If a workflow is shown: `agentType: \"conductor\"` + `name`, a SWITCH on `${<ref>.output.waiting}` with `defaultCase: []`, and a resume `AGENT` carrying `executionId` + `prompt` — never `agentType: \"manual\"` or a framework name",
+    "Does not confuse the selection response with tool approval (`--approve` / `{\"approved\": true}` is only for `approval_required` tools)",
+    "Each child has a unique `name` and its own bounds"
+  ]
+}

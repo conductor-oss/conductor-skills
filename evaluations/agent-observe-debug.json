@@ -1,0 +1,26 @@
+{
+  "name": "Observe and Debug an Agent That Sometimes Fails and Sometimes Hangs",
+  "skills": ["conductor"],
+  "query": "My deployed `researcher` agent sometimes fails and sometimes just sits there for an hour doing nothing. Show me how to see what it actually did on the last few runs, and how to tell a real hang from the agent just waiting on a human.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (operations: CLI/REST/UI routes; SSE event types; gotchas), references/troubleshooting.md (agent errors table), references/cli-index.md (`agent execution|status|stream|get`), and examples/agent-deploy-and-invoke.md (observe section).",
+    "Step 2: List recent runs: `conductor agent execution --name researcher --since 24h` and `conductor agent execution --name researcher --status FAILED --since 24h` (REST: `GET /api/agent/executions?agentName=researcher&status=FAILED`).",
+    "Step 3: Inspect one run: `conductor agent status <executionId>` / `GET /api/agent/executions/{id}` (and `GET /api/agent/execution/{id}` for token usage); UI `{BASE_URL}/agentExecutions/{id}` (agents list at `/agents`).",
+    "Step 4: Replay what it did: `conductor agent stream <executionId>` (`--last-event-id` to resume) — events `thinking`, `tool_call`, `tool_result`, `waiting`, `guardrail_fail`, `error`, `done`.",
+    "Step 5: Because the `executionId` is a workflow id, `conductor workflow get-execution <executionId>` shows the compiled tasks — which `<name>_llm` / tool task is SCHEDULED, IN_PROGRESS, or FAILED.",
+    "Step 6: Triage table: (a) status shows `waiting: true` + `pendingTool` (or a `waiting` SSE event, HUMAN task IN_PROGRESS) → not a hang, the agent is at a HITL/approval boundary → `conductor agent respond <id> --approve|--deny` or resume with an answer; (b) a worker tool task stuck SCHEDULED with no `waiting` → no `serve()` process is polling → start `runtime.serve(agent)` (F3); (c) FAILED with a provider/model error → check `GET /api/providers/status` and that the model is `provider/model`; (d) genuinely long runs → inspect bounds with `conductor agent get researcher` (`maxTurns`, `timeoutSeconds`) and add `maxDurationSeconds` where invoked from workflows (F1).",
+    "Step 7: Do not invent `conductor agent logs` / `debug` / `trace` verbs."
+  ],
+  "success_criteria": [
+    "Lists recent runs with `conductor agent execution --name researcher` using `--status` and/or `--since` filters (or the REST `GET /api/agent/executions?agentName=...&status=...` equivalent)",
+    "Inspects a single run with `conductor agent status <id>` and/or `GET /api/agent/executions/{id}` (or `/api/agent/execution/{id}`)",
+    "Replays the run with `conductor agent stream <id>` and names at least two real SSE event types (thinking, tool_call, tool_result, handoff, waiting, guardrail_pass, guardrail_fail, error, done)",
+    "States that the agent `executionId` is a workflow id and uses `conductor workflow get-execution <id>` to see which compiled task is SCHEDULED / IN_PROGRESS / FAILED",
+    "Points to the UI route `/agentExecutions/{id}` (and/or `/agents`)",
+    "Triage: `waiting: true` + `pendingTool` (or a `waiting` event / IN_PROGRESS HUMAN task) is identified as a HITL pause, resolved via `conductor agent respond <id> --approve|--deny` or a resume — not treated as a hang",
+    "Triage: a tool task stuck SCHEDULED with no `waiting` is identified as unserved worker tools (no `serve()` process) and the fix is to start `runtime.serve(agent)`",
+    "Triage: provider/model failures are checked via `GET /api/providers/status` and the `provider/model` format",
+    "Loads the agent definition with `conductor agent get researcher` (or `GET /api/agent/researcher`) to inspect bounds such as `maxTurns` / `timeoutSeconds`",
+    "Does not invent `conductor agent logs`, `conductor agent debug`, or `conductor agent trace` commands"
+  ]
+}

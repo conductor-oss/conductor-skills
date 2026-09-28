@@ -1,0 +1,29 @@
+{
+  "name": "Run Two Deployed Agents in Parallel, Then a Third Synthesizes (FORK_JOIN over AGENT tasks)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "I have three deployed agents: `researcher`, `critic`, and `writer`. Build a workflow that runs researcher and critic in parallel on the same brief, then has writer synthesize both of their outputs into a final article.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT` conductor mode; FORK_JOIN/JOIN), references/agents.md (multi-agent options: workflow-side FORK_JOIN vs SDK `agents=[...]` + `strategy` / `scatter_gather`), and examples/agent-deploy-and-invoke.md (`agent-fork-specialists.json`).",
+    "Step 2: `conductor agent list` to confirm `researcher`, `critic`, and `writer` are all deployed (and `conductor agent get <name>` for each if unsure about human/approval tools).",
+    "Step 3: `FORK_JOIN` with two branches, each a single `AGENT` task: `{\"agentType\":\"conductor\",\"name\":\"researcher\",\"prompt\":\"${workflow.input.brief}\",\"maxDurationSeconds\":1800}` (ref `research`) and the same shape for `critic` (ref `critique`).",
+    "Step 4: `JOIN` with `joinOn: [\"research\", \"critique\"]`.",
+    "Step 5: `writer` `AGENT` task after the JOIN whose `prompt` interpolates both results: `\"Brief: ${workflow.input.brief}\\n\\nResearch:\\n${research.output.text}\\n\\nCritique:\\n${critique.output.text}\\n\\nWrite the final article.\"` (`.output.output.result` is also acceptable).",
+    "Step 6: Bounds: `maxDurationSeconds` on each AGENT task and/or workflow-level `timeoutSeconds` + `timeoutPolicy: TIME_OUT_WF`; note F10 (fan-out multiplies LLM spend — keep the branch count fixed and small).",
+    "Step 7: Mention the SDK alternative: a single orchestrator `Agent(agents=[researcher, critic, writer], strategy=...)` or `scatter_gather(...)` deployed as one agent and invoked with one AGENT task.",
+    "Step 8: `outputParameters: {\"article\": \"${write.output.text}\"}`; write the JSON to a file, `conductor workflow create <file>`, test with `conductor workflow start -w ... --sync -i '{\"brief\":\"...\"}'`."
+  ],
+  "success_criteria": [
+    "Uses a `FORK_JOIN` with exactly two branches followed by a `JOIN` whose `joinOn` lists both AGENT task reference names",
+    "Each parallel branch is a `type: \"AGENT\"` task with `agentType: \"conductor\"` and the correct `name` (`researcher`, `critic`)",
+    "Both parallel agents receive the same brief from workflow input in their `prompt`",
+    "The `writer` AGENT task runs after the JOIN and its `prompt` interpolates both results via `${<ref>.output.text}` (or `${<ref>.output.output.result}`) — not `${<ref>.output.result}`",
+    "Plan runs `conductor agent list` (or `conductor agent get`) to confirm all three agents are deployed before writing the workflow",
+    "Bounds are set: per-AGENT `maxDurationSeconds` and/or workflow-level `timeoutSeconds` + `timeoutPolicy`",
+    "No invented multi-agent `agentType` (e.g. `\"multi\"`, `\"parallel\"`, `\"swarm\"`, or a framework name) — every task uses `agentType: \"conductor\"`",
+    "Does not claim FORK_JOIN is the only way to run agents in parallel (mentioning the SDK alternative `Agent(agents=[...], strategy=PARALLEL)` / `scatter_gather` is a plus)",
+    "Workflow JSON is written to a file before `conductor workflow create`",
+    "`outputParameters` exposes the writer's text as the workflow result"
+  ]
+}

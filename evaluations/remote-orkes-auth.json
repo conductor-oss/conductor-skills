@@ -1,0 +1,25 @@
+{
+  "name": "Connect to Explicit Orkes Server with Existing Secure Credentials",
+  "skills": ["conductor"],
+  "query": "Use my Orkes server at https://pg-qa.orkesconductor.com/. It requires auth; CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET are already securely set in the environment. Show me the workflows and remember this as pg-qa.",
+  "expected_behavior": [
+    "Step 1: Because the user supplied a remote URL, do not ask local-vs-remote again.",
+    "Step 2: Normalize the root URL to `https://pg-qa.orkesconductor.com/api` and set `CONDUCTOR_SERVER_TYPE=Enterprise`; do not append `/api` twice.",
+    "Step 3: Check the CLI and use the already-injected CONDUCTOR_AUTH_KEY / CONDUCTOR_AUTH_SECRET without printing values, running `env`, enabling shell tracing, or placing credentials in command arguments.",
+    "Step 4: Verify identity/connectivity with `conductor whoami` and/or `conductor workflow list --json`, then report the workflow count without exposing credentials.",
+    "Step 5: Explain that key/secret authentication is exchanged for a JWT at POST `/api/token` and the CLI/SDK handles it; provider API keys remain on the Conductor server.",
+    "Step 6: Because the user asked to remember the connection, direct them to run `conductor config save --profile pg-qa` interactively in their terminal. Do not invent `--server`, `--auth-key`, or `--auth-secret` flags on `config save`.",
+    "Step 7: Verify the saved profile with `conductor config list` and `conductor --profile pg-qa workflow list --json`; never read `config-pg-qa.yaml`.",
+    "Step 8: If the CLI is genuinely unavailable, use the fallback, which normalizes the root URL and exchanges CONDUCTOR_AUTH_KEY + CONDUCTOR_AUTH_SECRET at `/api/token` in memory."
+  ],
+  "success_criteria": [
+    "The explicit remote target is used without re-asking local-vs-remote",
+    "The root URL becomes exactly `https://pg-qa.orkesconductor.com/api` and Enterprise server type is selected",
+    "No credential value appears in chat, commands, CLI arguments, environment dumps, or output",
+    "Connectivity is verified with a real CLI/API operation before success is reported",
+    "Profile creation uses only the current interactive form `conductor config save --profile pg-qa`",
+    "Profile discovery uses `conductor config list`; raw profile YAML is never read",
+    "The answer distinguishes Conductor access credentials from LLM-provider keys on the server",
+    "The fallback's automatic key/secret-to-token exchange is described accurately"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Long-Running Remote A2A Agent: Streaming, Push Notifications, History Length",
+  "skills": [
+    "conductor"
+  ],
+  "query": "A vendor's A2A agent takes up to 20 minutes per job. Its agent card says `capabilities.streaming: true` and it supports push notifications. Polling it every 5 seconds for 20 minutes from my `claims_review` workflow feels wasteful — what are my options on the AGENT task, how do I authenticate, and how do I keep only the last 3 messages of history?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT` a2a mode inputs: `streaming`, `pushNotification`, `pushBackstopPollSeconds`, `historyLength`, `headers`, `pollIntervalSeconds`, `maxDurationSeconds`; `### GET_AGENT_CARD`), examples/agent-a2a-remote.md, and references/optimization.md F9.",
+    "Step 2: Pre-flight with `GET_AGENT_CARD` (`agentUrl`, optional `headers`) → `agentCard.capabilities.streaming` / `pushNotifications` and `url`; mark it `optional: true` if the call must proceed regardless.",
+    "Step 3: Option A — polling tuned: `pollIntervalSeconds: 30` (or 60) with `maxDurationSeconds: 1800` so a 20-minute job fits and the task still fails deterministically after the deadline (F9/F1); `maxPollFailures` for flaky endpoints.",
+    "Step 4: Option B — `streaming: true`: the task subscribes to the agent's SSE `message/stream` and finishes when the stream reports a terminal state; still set `maxDurationSeconds`.",
+    "Step 5: Option C — `pushNotification: true`: the vendor calls back into Conductor, so the server must have `conductor.a2a.callback.url` set to an address the vendor can reach; without it the task silently falls back to polling. `pushBackstopPollSeconds` (default 300) is the safety-net poll when a callback is lost.",
+    "Step 6: Auth via `headers: {\"Authorization\": \"Bearer ${workflow.secrets.VENDOR_TOKEN}\"}` — a secret reference (OSS: `CONDUCTOR_SECRET_VENDOR_TOKEN` on the server; Orkes: managed store), never `${workflow.input.*}` (D1).",
+    "Step 7: `historyLength: 3` limits the message history the remote agent returns/keeps in `task.history`; `contextId` + `taskId` are reused if the agent returns `input-required` (SWITCH on `${<ref>.output.state}`, `defaultCase: []`).",
+    "Step 8: Outputs `state`, `text`, `artifacts`, `taskId`, `contextId`; `agentType` stays `a2a` (never `conductor` for a remote URL); write JSON to a file, `conductor workflow create <file>`."
+  ],
+  "success_criteria": [
+    "Uses `type: \"AGENT\"` with `agentType: \"a2a\"` and `agentUrl` for the vendor endpoint (not `agentType: \"conductor\"`, not a hand-rolled `HTTP` JSON-RPC task)",
+    "Presents `streaming: true` as an option and explains it uses the agent's SSE stream instead of periodic polling",
+    "Presents `pushNotification: true` and states it requires `conductor.a2a.callback.url` on the server, with silent fallback to polling when it is unset",
+    "Mentions `pushBackstopPollSeconds` (default 300) as the safety-net poll for lost callbacks, or an equivalent explanation of the backstop",
+    "Sets `maxDurationSeconds` explicitly (around 20–30 minutes) and, for the polling option, raises `pollIntervalSeconds` above the 5 s default",
+    "Uses `historyLength: 3` for the history limit",
+    "Authenticates via `headers.Authorization` sourced from `${workflow.secrets.<NAME>}` and never from `${workflow.input.*}`",
+    "Uses `GET_AGENT_CARD` (returning `agentCard`) to check `capabilities.streaming` / push support before relying on them",
+    "Handles `input-required` by re-calling with both `contextId` and `taskId`, routed by a `SWITCH` on `${<ref>.output.state}`",
+    "Writes the workflow JSON to a file before `conductor workflow create`"
+  ]
+}

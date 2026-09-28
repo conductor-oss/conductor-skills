@@ -1,0 +1,29 @@
+{
+  "name": "Pause a Workflow While an Agent Waits on a Human, Then Resume the Same Agent Run",
+  "skills": [
+    "conductor"
+  ],
+  "query": "My deployed agent `onboarding_assistant` sometimes needs to ask the user a clarifying question mid-run. In my workflow, when that happens I want to pause, collect the answer from a human, and then continue the same agent run with their answer. How do I wire this?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT` — `waiting`, `pendingTool`, `executionId` resume, `prompt` required on resume), references/agents.md (HITL contract + approve-vs-resume table), and examples/agent-deploy-and-invoke.md (the `agent-hitl-resume.json` walk-through).",
+    "Step 2: First `AGENT` task: `{\"agentType\":\"conductor\",\"name\":\"onboarding_assistant\",\"prompt\":\"${workflow.input.prompt}\",\"maxDurationSeconds\":...}` with ref `ask`.",
+    "Step 3: `SWITCH` with `evaluatorType: \"value-param\"`, `expression: \"waiting\"`, `inputParameters: {\"waiting\": \"${ask.output.waiting}\"}`, `decisionCases: {\"true\": [...]}`, and `defaultCase: []` (nothing to do when the agent finished).",
+    "Step 4: Inside the `true` branch: a `HUMAN` task (ref `collect_answer`) whose output carries the answer; explain `${ask.output.pendingTool}`: `response_schema` with a `response` field = a question (answer via resume), `required: [\"approved\"]` = an approval gate; `toolCalls[].name` lists gated tools while `tool_name`/`parameters` are `null` for compiled agents; the question text itself lives on the child's HUMAN task input (`conductor workflow get-execution <executionId>`).",
+    "Step 5: Second `AGENT` task (ref `resume`) in the same branch: `{\"agentType\":\"conductor\",\"executionId\":\"${ask.output.executionId}\",\"prompt\":\"${collect_answer.output.answer}\"}` — `executionId` present means resume; `prompt` is required on resume (the server rejects a resume without it).",
+    "Step 6: Distinguish conversational resume from approval: AGENT-resume posts `{\"result\": prompt}` to the pending human step, which answers a clarifying question; at an approval gate that text only passes through an LLM normalizer, so it is not the approval channel. Approval-gated tools (`approval_required=True`) need `conductor agent respond <executionId> --approve` / `POST /api/agent/{id}/respond {\"approved\": true}` / SDK `approve()` instead.",
+    "Step 7: Show how the human completes the HUMAN task: `conductor task signal --workflow-id <wfId> --task-ref collect_answer --status COMPLETED --output '{\"answer\":\"...\"}'` (or `conductor task update-execution ...`).",
+    "Step 8: Workflow `outputParameters` reads the final answer from `${resume.output.text}` (with the non-waiting path reading `${ask.output.text}`); set workflow `timeoutSeconds` + `timeoutPolicy`. Write the JSON to a file, `conductor workflow create <file>`."
+  ],
+  "success_criteria": [
+    "First task is `type: \"AGENT\"` with `agentType: \"conductor\"`, `name: \"onboarding_assistant\"` and a `prompt`",
+    "A `SWITCH` with `evaluatorType: \"value-param\"` routes on `${<ref>.output.waiting}` with a `\"true\"` case, and its `defaultCase` is empty (`[]`)",
+    "A `HUMAN` task inside the waiting branch collects the answer",
+    "The second `AGENT` task carries `executionId: \"${<first>.output.executionId}\"` AND a `prompt` taken from the HUMAN task's output, and the plan states that `prompt` is required on resume",
+    "The resume task keeps `agentType: \"conductor\"` (does not drop it or switch to a framework name)",
+    "Explains the `pendingTool` output (`response_schema` and/or `toolCalls[].name`) as the way to see what the agent is waiting for, and does not claim `pendingTool.tool_name` carries the tool name for a compiled agent",
+    "Explicitly distinguishes conversational resume (AGENT + `executionId` + `prompt`, which posts `{\"result\": prompt}`) from tool approval (`conductor agent respond <id> --approve` / `POST /api/agent/{id}/respond {\"approved\": true}` / SDK `approve()`), and states the resume path is not the approval channel for a gated tool (its `{\"result\": prompt}` is at best LLM-interpreted)",
+    "Shows how the human completes the HUMAN task via `conductor task signal --workflow-id ... --task-ref ... --status COMPLETED --output '{...}'` (or `conductor task update-execution`)",
+    "Workflow JSON is written to a file before registration",
+    "The final answer is read via `${<ref>.output.text}` or `${<ref>.output.output.result}` (not `${<ref>.output.result}`), and a workflow-level timeout is set"
+  ]
+}

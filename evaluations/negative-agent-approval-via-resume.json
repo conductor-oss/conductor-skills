@@ -1,0 +1,25 @@
+{
+  "name": "Refuse Approving a Gated Tool via AGENT Resume — Use respond/approve",
+  "skills": [
+    "conductor"
+  ],
+  "query": "My deployed `payments_agent` has a `transfer_funds` tool marked `approval_required=True`. In my workflow, when the first AGENT task comes back with `waiting: true`, I have a HUMAN task `approve` where the approver types \"approved\", and then this second AGENT task resumes the run:\n\n```json\n{\n  \"name\": \"resume_agent\",\n  \"taskReferenceName\": \"resume_agent\",\n  \"type\": \"AGENT\",\n  \"inputParameters\": {\n    \"agentType\": \"conductor\",\n    \"executionId\": \"${run_agent.output.executionId}\",\n    \"prompt\": \"${approve.output.decision}\"\n  }\n}\n```\n\nRegister it please.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 12, references/agents.md (HITL contract — approve-vs-resume table; `pendingTool`), references/workflow-definition.md (`### AGENT` resume semantics), and references/optimization.md rule F8.",
+    "Step 2: Do not present the wiring as working. Explain: an AGENT task with `executionId` + `prompt` is the conversational resume path — the server posts `{\"result\": \"<prompt>\"}` to the pending human step. An approval gate expects `{\"approved\": true|false}`; the compiled gate only bridges free text through an LLM normalizer (`<agent>_approval_human_normalizer`), so \"approved\" typed by a human is a model guess plus an extra model call, not an approval.",
+    "Step 3: Distinguish the two HITL cases: conversational `input-required` (the agent asked a question → AGENT resume with the answer is correct) vs tool approval (`pendingTool.response_schema.required` contains `approved` and `pendingTool.toolCalls[].name == \"transfer_funds\"`; `tool_name`/`parameters` are `null` for compiled agents → needs approve/reject).",
+    "Step 4: Correct approval paths: `POST /api/agent/{executionId}/respond` with `{\"approved\": true}` (or `false`), `conductor agent respond <executionId> --approve` / `--deny --reason \"...\"`, or SDK `handle.approve()` / `reject()`.",
+    "Step 5: Show how to do it inside the workflow: keep the SWITCH on `${run_agent.output.waiting}` (case `true`, `defaultCase: []`) and the HUMAN `approve` task; replace the resume AGENT with either an `HTTP` task POSTing `{\"approved\": ${approve.output.approved}}` to Conductor's own `/api/agent/${run_agent.output.executionId}/respond`, or a SIMPLE worker that calls the SDK `approve()`/`reject()`, or an operator step; then a final AGENT/poll step or `conductor agent status` to read the completed result.",
+    "Step 6: Make the HUMAN task output a boolean (`approved: true|false`) rather than free text, and point the approver at `${run_agent.output.pendingTool}` so they see what they are approving.",
+    "Step 7: Write the corrected workflow JSON to a file; confirm with the user before `conductor workflow create`."
+  ],
+  "success_criteria": [
+    "States that AGENT-resume posts `{\"result\": prompt}` while an approval gate expects `{\"approved\": true}`, and that the proposed resume is not a reliable approval for `transfer_funds` (at best an LLM normalizer interprets the text)",
+    "Distinguishes conversational `input-required` (resume via AGENT + `executionId` + `prompt` is correct) from tool approval (needs approve/reject)",
+    "Gives the correct approval mechanism: `POST /api/agent/{id}/respond {\"approved\": true}`, `conductor agent respond <id> --approve` (or `--deny`), and/or SDK `approve()`/`reject()`",
+    "Shows at least one way to perform the approval from within the workflow or operationally (HTTP task to Conductor's `/api/agent/{id}/respond`, a SIMPLE worker calling the SDK, or an operator running `conductor agent respond`)",
+    "Points to `pendingTool` (`response_schema` / `toolCalls[].name`) as the way to confirm the run is at an approval gate",
+    "Does not present the original resume wiring as working and does not register it as-given",
+    "Keeps the SWITCH on `${<ref>.output.waiting}` with an empty `defaultCase` in the corrected design, and cites F8 or Rule 12"
+  ]
+}

@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SCRIPT_VERSION = "1.7.0"
+$SCRIPT_VERSION = "1.8.0"
 # Per-file fetches and the upgrade-check both read from `main`. Releases are
 # rolled by bumping VERSION on main, not by tagging.
 $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/main"
@@ -28,39 +28,93 @@ $REPO_BASE = "https://raw.githubusercontent.com/conductor-oss/conductor-skills/m
 $LOCAL_DIR = $env:CONDUCTOR_SKILLS_LOCAL_DIR
 
 $SKILL_FILES = @(
-    "skills/conductor/SKILL.md"
-    "skills/conductor/references/setup.md"
-    "skills/conductor/references/cli-index.md"
-    "skills/conductor/references/fallback-cli.md"
-    "skills/conductor/references/workflow-definition.md"
-    "skills/conductor/references/workers.md"
-    "skills/conductor/references/api-reference.md"
-    "skills/conductor/references/visualization.md"
-    "skills/conductor/references/schedules.md"
-    "skills/conductor/references/orkes.md"
-    "skills/conductor/references/optimization.md"
-    "skills/conductor/references/troubleshooting.md"
-    "skills/conductor/examples/create-and-run-workflow.md"
-    "skills/conductor/examples/monitor-and-retry.md"
-    "skills/conductor/examples/signal-wait-task.md"
-    "skills/conductor/examples/fork-join.md"
-    "skills/conductor/examples/do-while-loop.md"
-    "skills/conductor/examples/sub-workflow.md"
-    "skills/conductor/examples/review-workflow.md"
-    "skills/conductor/examples/llm-chat.md"
-    "skills/conductor/examples/ai-agent-mcp.md"
-    "skills/conductor/examples/ai-agent-loop.md"
-    "skills/conductor/examples/llm-rag.md"
-    "skills/conductor/examples/workflows/weather-notification.json"
-    "skills/conductor/examples/workflows/fork-join.json"
-    "skills/conductor/examples/workflows/do-while-loop.json"
-    "skills/conductor/examples/workflows/child-normalize.json"
-    "skills/conductor/examples/workflows/parent-pipeline.json"
-    "skills/conductor/examples/workflows/llm-chat.json"
-    "skills/conductor/examples/workflows/ai-agent-mcp.json"
-    "skills/conductor/examples/workflows/ai-agent-loop.json"
-    "skills/conductor/examples/workflows/llm-rag.json"
+    "skills/conductor/SKILL.md",
+    "skills/conductor/references/agent-sdks.md",
+    "skills/conductor/references/agents.md",
+    "skills/conductor/references/api-reference.md",
+    "skills/conductor/references/cli-index.md",
+    "skills/conductor/references/fallback-cli.md",
+    "skills/conductor/references/graaljs-gotchas.md",
+    "skills/conductor/references/optimization.md",
+    "skills/conductor/references/orkes.md",
+    "skills/conductor/references/schedules.md",
+    "skills/conductor/references/setup.md",
+    "skills/conductor/references/template-resolution.md",
+    "skills/conductor/references/troubleshooting.md",
+    "skills/conductor/references/visualization.md",
+    "skills/conductor/references/workers.md",
+    "skills/conductor/references/workflow-definition.md",
+    "skills/conductor/examples/agent-a2a-remote.md",
+    "skills/conductor/examples/agent-deploy-and-invoke.md",
+    "skills/conductor/examples/agent-society/.env.example",
+    "skills/conductor/examples/agent-society/README.md",
+    "skills/conductor/examples/agent-society/brief.example.txt",
+    "skills/conductor/examples/agent-society/deploy.py",
+    "skills/conductor/examples/agent-society/requirements.txt",
+    "skills/conductor/examples/agent-society/run.py",
+    "skills/conductor/examples/agent-society/serve.py",
+    "skills/conductor/examples/agent-society/software_society/__init__.py",
+    "skills/conductor/examples/agent-society/software_society/agents.py",
+    "skills/conductor/examples/agent-society/software_society/tools.py",
+    "skills/conductor/examples/agent-society/tests/test_society.py",
+    "skills/conductor/examples/agent-society/workflows/software-society.json",
+    "skills/conductor/examples/bengaluru-writers-room/.env.example",
+    "skills/conductor/examples/bengaluru-writers-room/README.md",
+    "skills/conductor/examples/bengaluru-writers-room/deploy.py",
+    "skills/conductor/examples/bengaluru-writers-room/mission.example.txt",
+    "skills/conductor/examples/bengaluru-writers-room/requirements.txt",
+    "skills/conductor/examples/bengaluru-writers-room/run.py",
+    "skills/conductor/examples/bengaluru-writers-room/serve.py",
+    "skills/conductor/examples/bengaluru-writers-room/tests/test_writers_room.py",
+    "skills/conductor/examples/bengaluru-writers-room/workflows/bengaluru-writers-room.json",
+    "skills/conductor/examples/bengaluru-writers-room/writers_room/__init__.py",
+    "skills/conductor/examples/bengaluru-writers-room/writers_room/agents.py",
+    "skills/conductor/examples/bengaluru-writers-room/writers_room/tools.py",
+    "skills/conductor/examples/ai-agent-loop.md",
+    "skills/conductor/examples/ai-agent-mcp.md",
+    "skills/conductor/examples/create-and-run-workflow.md",
+    "skills/conductor/examples/do-while-loop.md",
+    "skills/conductor/examples/fork-join.md",
+    "skills/conductor/examples/llm-chaining.md",
+    "skills/conductor/examples/llm-chat.md",
+    "skills/conductor/examples/llm-rag.md",
+    "skills/conductor/examples/monitor-and-retry.md",
+    "skills/conductor/examples/review-workflow.md",
+    "skills/conductor/examples/signal-wait-task.md",
+    "skills/conductor/examples/sub-workflow.md",
+    "skills/conductor/examples/workflows/a2a-remote-agent.json",
+    "skills/conductor/examples/workflows/a2a-expose-agent.json",
+    "skills/conductor/examples/workflows/agent-cancel.json",
+    "skills/conductor/examples/workflows/agent-fork-specialists.json",
+    "skills/conductor/examples/workflows/agent-hitl-resume.json",
+    "skills/conductor/examples/workflows/agent-approval-in-workflow.json",
+    "skills/conductor/examples/workflows/agent-invoke.json",
+    "skills/conductor/examples/workflows/ai-agent-loop.json",
+    "skills/conductor/examples/workflows/ai-agent-mcp.json",
+    "skills/conductor/examples/workflows/child-normalize.json",
+    "skills/conductor/examples/workflows/do-while-loop.json",
+    "skills/conductor/examples/workflows/fork-join.json",
+    "skills/conductor/examples/workflows/llm-chaining.json",
+    "skills/conductor/examples/workflows/llm-chat.json",
+    "skills/conductor/examples/workflows/llm-rag.json",
+    "skills/conductor/examples/workflows/parent-pipeline.json",
+    "skills/conductor/examples/workflows/weather-notification.json",
+    "skills/conductor/examples/agents/agent-config.json",
+    "skills/conductor/examples/agents/csharp/WeatherAgent.cs",
+    "skills/conductor/examples/agents/java/WeatherAgent.java",
+    "skills/conductor/examples/agents/python/adk_bridge.py",
+    "skills/conductor/examples/agents/python/claude_agent_sdk_bridge.py",
+    "skills/conductor/examples/agents/python/langchain_bridge.py",
+    "skills/conductor/examples/agents/python/langgraph_bridge.py",
+    "skills/conductor/examples/agents/python/openai_agents_bridge.py",
+    "skills/conductor/examples/agents/python/test_weather_agent.py",
+    "skills/conductor/examples/agents/python/weather_agent.py",
+    "skills/conductor/examples/agents/typescript/langgraph-bridge.ts",
+    "skills/conductor/examples/agents/typescript/openai-agents-bridge.ts",
+    "skills/conductor/examples/agents/typescript/vercel-ai-tools.ts",
+    "skills/conductor/examples/agents/typescript/weather-agent.ts",
     "skills/conductor/scripts/conductor_api.py"
+    "skills/conductor/scripts/test_conductor_api.py"
 )
 
 $VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp")
@@ -525,24 +579,12 @@ function Install-ToFile {
 function Install-AiderToDir {
     param([string]$SkillDir, [string]$TmpDir, [string]$Config, [string]$ReadPrefix)
 
-    New-Item -ItemType Directory -Path (Join-Path $SkillDir "references") -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $SkillDir "examples") -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $SkillDir "scripts") -Force | Out-Null
+    New-Item -ItemType Directory -Path $SkillDir -Force | Out-Null
 
     Write-Info "Copying skill files to $SkillDir ..."
-    Copy-Item (Join-Path $TmpDir "skills/conductor/SKILL.md") $SkillDir -Force
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/references") -Filter "*.md") {
-        Copy-Item $f.FullName (Join-Path $SkillDir "references") -Force
-    }
-    foreach ($f in Get-ChildItem (Join-Path $TmpDir "skills/conductor/examples") -Filter "*.md") {
-        Copy-Item $f.FullName (Join-Path $SkillDir "examples") -Force
-    }
-    $scriptsDir = Join-Path $TmpDir "skills/conductor/scripts"
-    if (Test-Path $scriptsDir) {
-        foreach ($f in Get-ChildItem $scriptsDir -Filter "*.py") {
-            Copy-Item $f.FullName (Join-Path $SkillDir "scripts") -Force
-        }
-    }
+    # Copy the whole tree so nested dirs (examples/workflows, examples/agents) land too;
+    # the read: entries below reference every file in SKILL_FILES.
+    Copy-Item -Path (Join-Path $TmpDir "skills/conductor/*") -Destination $SkillDir -Recurse -Force
     Write-Ok "Files copied to $SkillDir"
 
     if ((Test-Path $Config) -and (Select-String -Path $Config -Pattern "conductor-skills" -Quiet)) {
@@ -900,6 +942,7 @@ try {
     Write-Ok "Assembled skill content ($size bytes)"
 
     $installedCount = 0
+    $freshInstallCount = 0
     $skippedCount = 0
     $legacyWarned = @()
 
@@ -974,6 +1017,7 @@ try {
             Write-ManifestEntry -ManifestPath $manifest -AgentName $a -Ver $targetVersion -Mode $mode -TargetPath $targetPath
             Record-Group -Path (Get-DisplayPathForAgent -AgentName $a -ProjDir $ProjectDir -IsGlobal $useGlobal) -AgentName $a
             $installedCount++
+            if (!$installedVer) { $freshInstallCount++ }
         }
     }
 
@@ -982,12 +1026,34 @@ try {
     Write-Host ""
     Write-Host "Done! Installed: $installedCount, Skipped: $skippedCount" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Next steps:"
-    Write-Host '  Ask your agent to connect to your Conductor server, e.g.:'
+
+    if ($freshInstallCount -gt 0) {
+        Write-Host "+==================================================================+" -ForegroundColor Cyan
+        Write-Host "|                  WELCOME TO CONDUCTOR SKILLS                     |" -ForegroundColor Cyan
+        Write-Host "|     Durable workflows. Powerful agents. Built to keep running.   |" -ForegroundColor Cyan
+        Write-Host "+==================================================================+" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  COMMUNITY & SUPPORT" -ForegroundColor White
+        Write-Host "  Join the Conductor community on Slack for help and discussion:"
+        Write-Host "  https://join.slack.com/t/orkes-conductor/shared_invite/zt-3dpcskdyd-W895bJDm8psAV7viYG3jFA" -ForegroundColor Blue
+        Write-Host ""
+        Write-Host "  DOCUMENTATION" -ForegroundColor White
+        Write-Host "  https://docs.conductor-oss.org/" -ForegroundColor Blue
+        Write-Host ""
+        Write-Host "  OPEN SOURCE" -ForegroundColor White
+        Write-Host "  Star the project, open a feature request, or send us a PR:"
+        Write-Host "  https://github.com/conductor-oss/conductor" -ForegroundColor Blue
+        Write-Host ""
+    }
+
+    Write-Host "GET STARTED" -ForegroundColor White
+    Write-Host '  Ask your agent:'
     Write-Host ""
-    Write-Host '     "Connect to my Conductor server at http://localhost:8080/api"'
+    Write-Host '    "Set up both my Conductor profiles: developer and localhost.'
+    Write-Host '     Use Developer Edition by default."'
     Write-Host ""
-    Write-Host "  Docs: https://github.com/conductor-oss/conductor-skills" -ForegroundColor Blue
+    Write-Host "  [default] developer  https://developer.orkescloud.com/" -ForegroundColor White
+    Write-Host "  [switch]  localhost  http://localhost:8080/api" -ForegroundColor White
     Write-Host ""
 } finally {
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue

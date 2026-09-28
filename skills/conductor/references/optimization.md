@@ -13,7 +13,8 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
 1. Load the workflow definition. Either:
    - User supplied a JSON file → read it.
    - User named a registered workflow → `conductor workflow get {name} --version {v}` (omit `--version` for the latest).
-2. For each `SIMPLE` task, load its task definition: `conductor taskDef get {name}`. Timeout/retry config lives there, not on the workflow task.
+2. For each `SIMPLE` task, load its task definition: `conductor task get {name}`. Timeout/retry config lives there, not on the workflow task.
+   - For each `AGENT` task with `agentType: "conductor"`, also load the agent definition: `conductor agent get {name} [--version v]`. `maxTurns`, tool approval flags, model and credentials live there — the analog of loading task defs. For an agent defined in code, `runtime.plan(agent)` / `conductor agent compile {config}` shows the compiled shape.
 3. (Optional, if the user asks about runtime behavior) Look at recent executions: `conductor workflow search -w {name} -s FAILED -c 20` and inspect a few with `get-execution`.
 4. Walk the checklist below, recording findings.
 5. Report grouped by severity. Offer to apply each fix. Don't apply silently.
@@ -91,7 +92,7 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
 
 ### D. Security & inputs
 
-- **D1. No secrets in workflow input.** Tokens, API keys, signing secrets must come from the secrets system (`${workflow.secrets.X}` on Orkes) or worker environment variables — never `${workflow.input.token}`. Workflow inputs are visible in the execution view.
+- **D1. No secrets in workflow input.** Tokens, API keys, signing secrets must come from the secrets system — `${workflow.secrets.X}` resolves on OSS from `CONDUCTOR_SECRET_X` env vars on the server and on Orkes from the managed secret store — or from worker environment variables; never `${workflow.input.token}`. Workflow inputs are visible in the execution view. For agents see F5.
   - Severity: CRITICAL if a real secret is being passed via input.
 - **D2. No hardcoded URLs / config in task definitions.** Parameterize via `${workflow.input.x}` or `${workflow.variables.x}` — environment-specific URLs hardcoded into a definition mean a separate definition per environment.
   - Severity: WARN.
@@ -129,6 +130,51 @@ Sometimes the right answer is *not a workflow*. Smell tests:
   - Fix: replace the HTTP/INLINE/worker task with the matching built-in. If the user objects ("we want flexibility / we want to swap providers"), point out that flexibility is exactly what `llmProvider` on `LLM_*`, `vectorDB` on `LLM_INDEX_TEXT`/`LLM_SEARCH_INDEX`, and `subWorkflowParam` on `SUB_WORKFLOW` already give you.
   - Legitimate exceptions (downgrade to INFO with one-line reason): (a) the operation truly has no built-in (custom internal API, proprietary system); (b) the user has demonstrated a specific missing feature in the built-in — name it. In case (a), follow SKILL.md Rule 7 to scaffold a worker (ask language, WebFetch the SDK).
 
+### F. Agents (`AGENT` / `CANCEL_AGENT` / `GET_AGENT_CARD` tasks and deployed agents)
+
+Contract in [agents.md](agents.md). Load the agent definition first (review flow step 2).
+
+- **F1. Bounded agent loop.** Three independent bounds: turns (`max_turns` / `maxTurns`), agent wall clock (agent `timeoutSeconds` / run `timeout`), caller wall clock (`AGENT.maxDurationSeconds` — the 86400 s default is effectively unbounded) plus workflow `timeoutSeconds` + `timeoutPolicy` (B2). B5 is the DO_WHILE instance of this rule.
+  - Detect: `maxTurns` absent / `<= 0` / `> 200`; agent `timeoutSeconds` 0; `AGENT` task without `maxDurationSeconds`; open-ended stop criteria in the instructions ("until you have everything"); a framework-bridged agent (LangChain / LangGraph / OpenAI Agents) with no caller-side bound — those builders take no `max_turns` and compile with the server default of 100.
+  - Severity: **CRITICAL** if `maxTurns` is missing/absurd or an `AGENT` inside `DO_WHILE`/`FORK_JOIN_DYNAMIC` has no `maxDurationSeconds`; **WARN** when relying on defaults; **INFO** when all three are explicit.
+  - Fix: `max_turns` 10–50, agent `timeoutSeconds`, `maxDurationSeconds`, workflow timeout; an explicit stop condition or `termination` / `stop_when`.
+- **F2. Side-effect tools without an approval gate or guardrail.** Tools that transfer / refund / charge / delete / send / deploy / run shell or code need `approval_required=True`, an input guardrail, allow-lists (`cli_allowed_commands`, `allowed_languages`) or `max_calls`.
+  - Detect: tool name/description matching `transfer|refund|charge|pay|delete|remove|drop|send|email|post|deploy|write|update|rm|exec`; `http` POST/PUT/DELETE; `cliConfig` / `codeExecution` enabled with empty allow-lists — and no gate.
+  - Severity: **CRITICAL** for financial/destructive verbs or unrestricted shell/code; **WARN** other mutating tools; **INFO** gated.
+  - Fix: `approval_required` (the run pauses with `waiting: true` + `pendingTool`; approve via `conductor agent respond {id} --approve`), a guardrail, allow-lists, `max_calls`.
+- **F3. Worker tools or a passthrough agent with no `serve()` process.** `deploy()` registers only. Every `worker` tool (any `@tool` function, framework function tools) and every passthrough framework (plain LangChain, Claude Agent SDK, complex LangGraph) needs a process running `runtime.serve(agent)`; otherwise the run sits IN_PROGRESS forever. Agent analog of SKILL.md Rule 1.
+  - Detect: agent def has `worker` tools or a single `<name>_worker` passthrough tool; tool task stuck SCHEDULED in a recent execution; a deployment plan with `deploy()` but no `serve()`.
+  - Severity: **CRITICAL** when worker tools exist and no serving process is planned/evidenced; **WARN** when unverifiable (ask); **INFO** when confirmed.
+  - Fix: long-lived `runtime.serve(agent)`; `serve(agent, blocking=False)` in tests.
+- **F4. Hand-wired ReAct loop where a Conductor Agent would do.** `DO_WHILE { LLM_CHAT_COMPLETE(jsonOutput) → SWITCH → tool → SET_VARIABLE history }` is what the agent compiler emits (`{name}_loop`, `{name}_llm`) minus approval gates, guardrails, streaming, token accounting and handoffs. Legitimate when the compiler cannot express it: custom loop condition, non-LLM steps between turns, several models per iteration, `previousResponseId` chaining, no agent runtime on the server, JSON-only deliverable.
+  - Detect: that shape in a workflow whose `metadata.classifier` is not `AGENT`.
+  - Severity: **INFO** by default (offer the SDK path); **WARN** when the loop re-implements approval/guardrail/streaming by hand or is duplicated across workflows.
+  - Fix: `Agent(...)` + `runtime.deploy` (+ `serve`) and an `AGENT` task with `agentType: "conductor"`; keep the hand-wired loop only with a stated reason.
+- **F5. Secrets or PII in agent `instructions`, `prompt` or tool config.** Instructions are sent to the LLM provider every turn, persisted in the agent definition (`conductor agent get`) and shown in execution views. Extends D1.
+  - Detect: `sk-`, `sk_live_`, `ghp_`, `AKIA`, `Bearer `, `api_key=`, `eyJ` (JWT), `-----BEGIN` in `instructions`, `AGENT.prompt`, `tools[].config.headers`, `plannerContext`; customer PII pasted into instructions.
+  - Severity: **CRITICAL** credentials; **WARN** PII that belongs in the run-time `prompt`/`context`.
+  - Fix: `credentials=["NAME"]` on the agent or tool with the value in the server store (`CONDUCTOR_SECRET_NAME` env on the server, `PUT /api/secrets/{key}` when writable, UI `/agentSecrets`, or the Orkes secret manager); `${workflow.secrets.X}` in task input; `${CRED}` in `plannerContext` headers. Treat any pasted value as compromised (Rule 5).
+- **F6. Model not provider-qualified / provider not configured.** `AgentConfig.model` must be `provider/model` (`openai/gpt-4o-mini`, `anthropic/claude-sonnet-4-6`, `google_gemini/gemini-2.0-flash`); a bare model name is rejected at compile/deploy. The provider must report `configured: true` on `GET /api/providers/status`. `CONDUCTOR_AGENT_LLM_MODEL` is read only by the Python OpenAI-compat `Runner` and by examples — never a substitute for `model=`.
+  - Detect: `model` without `/`; empty `model`; provider prefix not configured; an `AGENT.model` override with the same faults.
+  - Severity: **CRITICAL**.
+  - Fix: explicit `model="provider/model"`; the provider key env var on the Conductor server.
+- **F7. `AGENT` task with an invalid `agentType` or wrong agent reference.** `agentType` ∈ {`conductor`, `a2a` (default), `microsoft-foundry` (alias `azure-foundry`), `openai-assistants`, `bedrock`}; there is no `vertex` runtime (use a2a); framework names are never valid. The conductor branch takes `name` (+ `version`), **not `agentName`**; `prompt` is required on start and resume; omitting `agentType` with `name` defaults to a2a → misleading `AGENT requires 'agentUrl'`.
+  - Detect: `agentType` outside the set; `agentName` / `agent` / `agent_name` keys; `name` not in `conductor agent list`; both `name` and `agentConfig`; missing `prompt`; `agentType` omitted with `name`.
+  - Severity: **CRITICAL**.
+  - Fix: `{"agentType": "conductor", "name": "<deployed>", "prompt": "..."}`; deploy framework agents via the SDK first.
+- **F8. HITL resume misuse.** Resuming with `AGENT` + `executionId` posts `{"result": prompt}` — right for a conversational `input-required` pause (`pendingTool.response_schema` has `response`), wrong for a tool-approval gate that expects `{"approved": true}` (`response_schema.required` has `approved`; the compiled gate only bridges free text through an LLM normalizer — a model guess plus an extra model call). Also: an agent with approval/human tools whose caller never branches on `waiting` proceeds with a partial answer.
+  - Detect: resume `AGENT` fed from a HUMAN task whose output is `approved`/boolean; `approvalRequired` tools and no `SWITCH` on `${ref.output.waiting}`.
+  - Severity: **CRITICAL** approval-via-resume (the verdict depends on an LLM reading free text); **WARN** missing `waiting` branch.
+  - Fix: `POST /api/agent/{id}/respond {"approved": true}` / `conductor agent respond {id} --approve` / SDK `approve()`; SWITCH on `waiting` with `defaultCase: []`; AGENT-resume only for answer text.
+- **F9. A2A call bounds and callback config.** Remote agents are outside your control.
+  - Detect: `agentType: a2a` without `maxDurationSeconds`; `pushNotification: true` while `conductor.a2a.callback.url` is unset (silent fallback to polling every 300 s); `headers.Authorization` from `${workflow.input.*}` (D1); no `SWITCH` on `state` for `input-required` / `auth-required`; per-environment `agentUrl` hardcoded (D2).
+  - Severity: **WARN**; **CRITICAL** for credentials via workflow input.
+  - Fix: `maxDurationSeconds` + `pollIntervalSeconds`; re-call with `contextId` + `taskId`; configure the callback URL or drop `pushNotification`; secrets system for tokens.
+- **F10. Unbounded sub-agent / `agent_tool` fan-out.** `agents[]` with `parallel` / `swarm`, `agent_tool` tools, `FORK_JOIN(_DYNAMIC)` over `AGENT` tasks multiply LLM spend and worker load. C3 is the workflow instance.
+  - Detect: `agent_tool` with no call bound (`max_calls` set on the returned `ToolDef` — the constructor has no such kwarg); children without their own `max_turns`; `FORK_JOIN` with > ~10 `AGENT` branches; `FORK_JOIN_DYNAMIC` over `AGENT` tasks with no batching; `swarm` without `termination`.
+  - Severity: **WARN**; **CRITICAL** when dynamic and unbounded.
+  - Fix: `t = agent_tool(child); t.max_calls = N`, `max_turns` on children, `scatter_gather` with a batch size, `concurrentExecLimit` on the generated tool task defs, explicit `termination`.
+
 ## Report template
 
 Render findings like this:
@@ -136,7 +182,7 @@ Render findings like this:
 ```
 Workflow: order_processing v3 (47 tasks)
 
-CRITICAL (4)
+CRITICAL (6)
   ✗ B1  SIMPLE task `charge_card`: responseTimeoutSeconds=0
         → Set responseTimeoutSeconds >= 30, pollTimeoutSeconds >= 60, timeoutSeconds = 300
   ✗ B5  DO_WHILE `retry_loop`: condition has no iteration cap
@@ -146,6 +192,10 @@ CRITICAL (4)
           ANTHROPIC_API_KEY on the server if the integration isn't configured yet.
   ✗ D1  Workflow input `stripeKey` looks like a secret
         → Move to ${workflow.secrets.STRIPE_KEY} or worker env
+  ✗ F1  AGENT `run_crawler`: agent maxTurns=100000, task has no maxDurationSeconds
+        → Set max_turns=30 on the agent, maxDurationSeconds=1800 on the task, workflow timeoutSeconds=3600
+  ✗ F3  Agent `support_triage` has 2 worker tools; no poller for `lookup_order`
+        → Run `runtime.serve(agent)` as a long-lived process next to the deployment
 
 WARN (4)
   ⚠ A1  Description is empty

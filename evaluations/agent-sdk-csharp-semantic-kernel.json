@@ -1,0 +1,29 @@
+{
+  "name": ".NET Team Runs a Semantic Kernel Plugin as a Conductor Agent (Preview Packages, Run → Deploy → Serve)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "We're a .NET 8 shop already on Semantic Kernel. We have a `CalculatorPlugin` class with `[KernelFunction, Description(...)]` methods and want to run it as a Conductor agent — run once locally, then deploy and serve in prod. Is LangChain available for .NET too? And which packages do we install?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md (language table — C# NuGet ids `conductor-ai`, `conductor-ai-openai`, `conductor-ai-google-adk`, `conductor-ai-semantic-kernel` are **preview, not yet published** → project reference; `using Conductor.AI;`), §4 (Semantic Kernel cell: `SemanticKernelAgent.From(name, model, instructions, new CalculatorPlugin())` with `[KernelFunction]` methods; unsupported cell \"LangChain / LangGraph in C#\"), §1 (C# native scaffold: `new Agent(\"...\") { Model, Instructions, Tools = ToolRegistry.FromInstance(...) }`, `[Tool]`, `await using var runtime = new AgentRuntime(); await runtime.RunAsync(...)`), §2 (`PlanAsync` / `DeployAsync` / `ServeAsync(token, agent)`), references/agents.md §6 (Semantic Kernel: compiled; `[KernelFunction]` plugins run as local worker tools → `serve` yes), §11 (Java / C#: no test kit — unit-test tool classes and assert `plan()` compiles), §12 (C# `conductor-ai*` are preview; the C# runtime's env names must be confirmed from its README), references/optimization.md F1, F3, F6. WebFetch `https://github.com/conductor-oss/csharp-sdk/tree/main/docs/agents` before pinning anything (Rule 7.3 / Rule 13).",
+    "Step 2: Packages — say it plainly: `conductor-ai` and `conductor-ai-semantic-kernel` are preview and not on NuGet yet, so add `<ProjectReference>`s to the csharp-sdk projects (do not present `dotnet add package conductor-ai-semantic-kernel` as working today without that caveat); the WebFetch confirms the current state.",
+    "Step 3: Code: `using Conductor.AI; using Conductor.AI.SemanticKernel;` — `var agent = SemanticKernelAgent.From(\"calculator\", \"openai/gpt-4o-mini\", \"Use the calculator tools to answer.\", new CalculatorPlugin());` `await using var runtime = new AgentRuntime();` `var result = await runtime.RunAsync(agent, \"What is 12 * 7?\"); result.PrintResult();` — the existing `[KernelFunction, Description(...)]` methods are kept as-is.",
+    "Step 4: Prod split: `await runtime.PlanAsync(agent)` (inspect `RequiredWorkers`) and `await runtime.DeployAsync(agent)` in CI; `await runtime.ServeAsync(cancellationToken, agent)` as a long-lived service — `[KernelFunction]` methods run as local worker tools, so `ServeAsync` must be running or runs stall SCHEDULED (Rule 9 / F3). Never `conductor deploy`.",
+    "Step 5: Native alternative: `var agent = new Agent(\"calculator\") { Model = \"openai/gpt-4o-mini\", Instructions = \"...\", Tools = ToolRegistry.FromInstance(new CalculatorTools()) };` with `[Tool(\"Adds two numbers.\")]` methods, or `AgentBuilder` / `[AgentDef]` + `Agent.FromInstance`; `WithOutputType<T>()` for structured output.",
+    "Step 6: LangChain question: there is no LangChain or LangGraph bridge for .NET; the .NET SDK supports native agents, the OpenAI-style builder (`conductor-ai-openai`), Google ADK (`conductor-ai-google-adk`) and Semantic Kernel — Semantic Kernel is the closest plugin-style fit. Do not invent `Conductor.AI.LangChain`.",
+    "Step 7: Env and keys: `CONDUCTOR_SERVER_URL` (ends in `/api`), `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` if the server needs auth; the C# runtime's own env names must be confirmed from its README (repo source used `AGENTSPAN_*`; the TS SDK 4.x reads `CONDUCTOR_*`); the `OPENAI_API_KEY` lives on the Conductor server (compiled mode). Model is `provider/model` (F6).",
+    "Step 8: Bounds and testing: framework builders take no `max_turns`, so bound from the caller — `AGENT.maxDurationSeconds`, `RunAsync` timeout, workflow `timeoutSeconds` (F1); no mock kit ships for C# — unit-test `CalculatorPlugin` directly and assert `PlanAsync` compiles with the expected `RequiredWorkers`. Any `AGENT` task uses `agentType: \"conductor\"` + `name: \"calculator\"` — never `agentType: \"semantic_kernel\"`."
+  ],
+  "success_criteria": [
+    "Uses `SemanticKernelAgent.From(\"calculator\", \"openai/gpt-4o-mini\", \"<instructions>\", new CalculatorPlugin())` — name, provider-qualified model, instructions, plugin instance — keeping the `[KernelFunction, Description(...)]` methods as they are",
+    "States that `conductor-ai` / `conductor-ai-semantic-kernel` are preview and not yet on NuGet, so a project reference is needed (no bare `dotnet add package` presented as working today)",
+    "Plans to WebFetch the csharp-sdk `docs/agents` before pinning packages",
+    "Uses `await using var runtime = new AgentRuntime();` with `RunAsync` for the one-off, and `DeployAsync` + `ServeAsync` for prod",
+    "States that `[KernelFunction]` methods run as local worker tools, so `ServeAsync` must be running (worker gate)",
+    "Mentions that a native `[Tool]` + `ToolRegistry.FromInstance(...)` agent exists as the alternative to the Semantic Kernel bridge (showing its code is a plus)",
+    "States there is no LangChain / LangGraph bridge for .NET and names the supported .NET options (native, OpenAI-style, Google ADK, Semantic Kernel) without inventing a `Conductor.AI.LangChain`",
+    "Model is `provider/model` and the provider key is placed on the Conductor server",
+    "Never uses `conductor deploy` and stays in C# (no Python rewrite)",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never `agentType: \"semantic_kernel\"` — and bounds come from the caller (`maxDurationSeconds` / timeout) because framework builders take no `max_turns`"
+  ]
+}

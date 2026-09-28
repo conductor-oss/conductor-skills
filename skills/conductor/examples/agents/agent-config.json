@@ -1,0 +1,8 @@
+{
+  "name": "my_agent",
+  "description": "",
+  "model": "openai/gpt-4o-mini",
+  "instructions": "You are a helpful assistant. Keep answers brief.",
+  "maxTurns": 25,
+  "tools": []
+}

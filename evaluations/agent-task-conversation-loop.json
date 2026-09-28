@@ -1,0 +1,29 @@
+{
+  "name": "Multi-Round Conversation with a Deployed Agent Inside a DO_WHILE",
+  "skills": [
+    "conductor"
+  ],
+  "query": "I need a negotiation loop in one workflow: my deployed `buyer_agent` makes an offer, our pricing API (HTTP) returns a counter-offer, and the agent gets that counter-offer plus its own previous message for the next round. At most 5 rounds, and stop early as soon as the agent's reply contains ACCEPT. How do I build this?",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### DO_WHILE`, `### AGENT`, `### SET_VARIABLE`, `### INLINE`), references/graaljs-gotchas.md for the loop condition, and references/agents.md (§12 gotchas: `sessionId` groups but does not replay history; F1 bounds).",
+    "Step 2: Outer `DO_WHILE` with a bounded `loopCondition` (graaljs) such as `$.negotiate_ref['iteration'] < 5 && !$.eval_ref['accepted']` — never `true`/unbounded (B5). Reference loop-body outputs through the loop's `inputParameters`.",
+    "Step 3: Inside the loop: an `AGENT` task `{agentType: \"conductor\", name: \"buyer_agent\", prompt: \"Previous message: ${workflow.variables.last}. Counter-offer: ${workflow.variables.counter}. ...\", sessionId: \"${workflow.input.dealId}\", maxDurationSeconds: ...}` — the prompt carries the prior state because `sessionId` only groups executions, it does not replay earlier turns.",
+    "Step 4: An `HTTP` task calling the pricing API with the agent's `${offer_ref.output.text}` (or a value parsed from `${offer_ref.output.output.result}`), then an `INLINE` (graaljs) that computes `accepted = text.includes('ACCEPT')`, then `SET_VARIABLE` storing `last` (agent text), `counter` (API reply) and `accepted`.",
+    "Step 5: Inside a loop, task refs are suffixed with `__<iteration>` in the execution — read them via the DO_WHILE output (`${negotiate_ref.output.iteration}`, `${negotiate_ref.output.<iteration>.<ref>...}`) or via `workflow.variables`, not by bare ref after the loop.",
+    "Step 6: Bounds: every `AGENT` task sets `maxDurationSeconds`; the workflow sets `timeoutSeconds` + `timeoutPolicy` (F1, B2). Mention that each round is a new agent execution (`executionId` differs) unless the agent paused with `waiting: true`, in which case resume with `executionId` + `prompt` instead.",
+    "Step 7: Offer the simpler alternative (F4 spirit): give `buyer_agent` the pricing API as an `http_tool` and let the agent own the loop with `max_turns=5` and stop instructions; the hand-wired DO_WHILE is right when the API step must be a governed, visible workflow task or the agent cannot be changed.",
+    "Step 8: Write the JSON to a file, `conductor workflow create <file>`, run with `conductor workflow start -w ... --sync`, and check rounds in the UI (`executionId` links open the child agent executions)."
+  ],
+  "success_criteria": [
+    "Uses a `DO_WHILE` whose `loopCondition` is bounded to 5 iterations AND exits early on the accepted flag (no unbounded loop)",
+    "The loop body contains an `AGENT` task with `agentType: \"conductor\"`, `name: \"buyer_agent\"` and a `prompt` that interpolates the previous round's agent message and the API counter-offer",
+    "Carries the state explicitly between rounds (prompt / `context` / workflow variables) and, if `sessionId` is used, states that it only groups executions and does not replay earlier turns — N/A and passing on the sessionId part when it is not used",
+    "Stores per-round state with `SET_VARIABLE` (and computes the ACCEPT flag with an `INLINE`/graaljs or equivalent) rather than assuming the agent remembers",
+    "Calls the pricing API with an `HTTP` task inside the loop and feeds its response into the next round",
+    "Sets `maxDurationSeconds` on the AGENT task and a workflow-level `timeoutSeconds`/`timeoutPolicy`",
+    "Handles loop-scoped references correctly (loop outputs via the DO_WHILE output / `workflow.variables`, iteration suffix awareness) and does not read `${<ref>.output.result}`",
+    "Mentions the agent-owned alternative (pricing API as an `http_tool`/tool on the agent with `max_turns`) and when the hand-wired loop is the better fit",
+    "Writes the workflow JSON to a file before `conductor workflow create`",
+    "Does not put a framework name in `agentType` and does not invent an AGENT field for multi-turn memory"
+  ]
+}

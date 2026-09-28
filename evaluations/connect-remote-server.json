@@ -7,19 +7,19 @@
     "Step 2: Set CONDUCTOR_SERVER_URL to the provided URL",
     "Step 3: Test connectivity with `conductor workflow list`",
     "Step 4: If 401/403 error, inform user the server requires authentication",
-    "Step 5: Ask user for auth key and secret (or token)",
-    "Step 6: Set CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET (or CONDUCTOR_AUTH_TOKEN)",
+    "Step 5: Ask the user to inject the auth key and secret (or token) through their shell, CI secret store, or secure environment settings — never paste values into chat",
+    "Step 6: Confirm only that CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET (or CONDUCTOR_AUTH_TOKEN) are present; never print their values or put them in CLI arguments",
     "Step 7: Retry `conductor workflow list` to verify auth works",
-    "Step 8: Offer to save as a profile: `conductor config save --server <url> --auth-key <key> --auth-secret <secret> --profile <name>`",
+    "Step 8: Offer to save it interactively with `conductor config save --profile <name>` in the user's terminal; discover profiles with `conductor config list`, never by reading profile YAML",
     "Step 9: Confirm connection is working and report workflow count"
   ],
   "success_criteria": [
     "Server URL is set exactly as provided by user",
     "Auth is not assumed — connectivity is tested first",
     "Auth credentials are only requested after receiving 401/403",
-    "Credentials are set via env vars or --auth-key/--auth-secret flags",
+    "Credentials are supplied through pre-injected environment variables, never literal command arguments or chat",
     "Connection is verified with a real API call after auth setup",
-    "User is offered to save the config as a profile for future use",
+    "User is offered the current interactive `conductor config save --profile <name>` flow for future use",
     "Plan does not include commands that would print auth keys, secrets, or tokens to stdout"
   ]
 }

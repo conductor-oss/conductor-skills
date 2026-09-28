@@ -22,6 +22,8 @@ Always pair the diagram with a **1–2 sentence text summary of the flow** ("Fet
 | DO_WHILE (loop) | `loop[DO_WHILE: ref] --> body --> loop` with `body -->|done| next` |
 | SUB_WORKFLOW | `sub([Sub: workflow_name])` rounded node |
 | WAIT / HUMAN | `wait[/WAIT: ref/]` parallelogram (signals external input) |
+| AGENT (deployed agent or remote A2A) | `agent[[AGENT: agent_name]]` subroutine shape, labelled with `name` or the `agentUrl` host; a `waiting` SWITCH after it renders as a normal decision node |
+| CANCEL_AGENT / GET_AGENT_CARD | plain `[TYPE: ref]` nodes |
 
 ## Example
 

@@ -1,0 +1,26 @@
+{
+  "name": "Offline Unit Tests plus Nightly Live Correctness Eval for a Python Agent",
+  "skills": ["conductor"],
+  "query": "I want proper tests for my Python `support_triage` agent: fast offline unit tests that run in CI on every PR without hitting an LLM, plus a nightly live correctness eval against a real Conductor server. Set that up.",
+  "expected_behavior": [
+    "Step 1: Consult references/agents.md (testing section — the ladder: unit → trace assertions → live correctness → semantic → production monitoring; Python has the full `conductor.ai.agents.testing` module), references/agent-sdks.md, and examples/agent-deploy-and-invoke.md.",
+    "Step 2: WebFetch the Python SDK `docs/agents/` testing page before pinning; install `pip install 'conductor-python[agents]'` (dev extras as documented).",
+    "Step 3: Offline tests (`tests/test_support_triage.py`): `from conductor.ai.agents.testing import mock_run, MockEvent, expect`; `result = mock_run(agent, \"Where is order 123?\", events=[MockEvent.tool_call(\"lookup_order\", {\"order_id\": \"123\"}), MockEvent.tool_result(...), MockEvent.done(\"...\")])`; `expect(result).completed().used_tool(\"lookup_order\").no_errors()` (or `assert_tool_used` / `assert_no_errors`). State explicitly: no LLM call, no server.",
+    "Step 4: Also test the approval gate offline (a `MockEvent.waiting(...)` on `issue_refund`) and optionally use the pytest plugin fixtures (`mock_agent_run`, `event`) or `record()` / `replay()` for golden traces.",
+    "Step 5: Live eval (`tests/live/test_support_triage_eval.py`) marked `@pytest.mark.live` (skipped unless `CONDUCTOR_SERVER_URL` is set / run by a nightly job): fixture starts `runtime.serve(agent, blocking=False)` so worker tools execute; `CorrectnessEval(runtime).run([EvalCase(prompt=\"...\", expect_tools=[\"lookup_order\"], expect_output_contains=\"shipped\", expect_status=\"completed\")])` and assert the pass rate.",
+    "Step 6: State prerequisites for the live tier: reachable server with the agent runtime on, provider key configured on the server (`GET /api/providers/status`), no key literals in tests.",
+    "Step 7: CI wiring: PR job runs `pytest -m \"not live\"`; nightly job runs `pytest -m live` with server URL/auth from CI secrets. No invented `conductor agent test` command."
+  ],
+  "success_criteria": [
+    "Offline tests import from `conductor.ai.agents.testing` and use `mock_run(agent, prompt, events=[...])` with `MockEvent`s",
+    "The plan states explicitly that the offline tests make no LLM call and need no Conductor server",
+    "Assertions use `expect(result)...` chained checks (e.g. `.completed()`, `.used_tool(...)`, `.no_errors()`) and/or `assert_*` helpers from the testing module",
+    "Live tier uses `CorrectnessEval(runtime).run([...])` with `EvalCase` entries specifying expected tools / output content / status",
+    "Live tests are separated from unit tests (pytest marker such as `@pytest.mark.live`, a separate directory, an env-var gate, or a nightly workflow) and are described as requiring a real server plus a provider key configured on the server",
+    "The live fixture starts `runtime.serve(agent, blocking=False)` (or an equivalent non-blocking serve) so worker tools execute during the eval",
+    "Does not invent a `conductor agent test` CLI command",
+    "Describes the test ladder (unit/mock → trace assertions → live correctness → semantic judge → production monitoring) or at least the unit-vs-live split with its rationale",
+    "No provider API key literals appear; keys come from the server / CI secrets",
+    "Mentions at least one of: `record()` / `replay()`, the pytest plugin fixtures (`mock_agent_run`, `event`), or a semantic judge assertion (`assert_output_satisfies`) as an optional extension"
+  ]
+}

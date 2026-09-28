@@ -1,0 +1,27 @@
+{
+  "name": "Invoke a Deployed Conductor Agent from a Workflow and Use Its Answer Downstream",
+  "skills": ["conductor"],
+  "query": "I've already deployed a Conductor agent named `planner`. Add a step to my `content_pipeline` workflow that calls it with the workflow's `topic` input, then passes the planner's answer into the existing `write_draft` task.",
+  "expected_behavior": [
+    "Step 1: Consult references/workflow-definition.md (`### AGENT`, conductor mode: fields, outputs, status mapping), references/agents.md (HITL contract / `waiting`), and examples/agent-deploy-and-invoke.md.",
+    "Step 2: Verify the agent exists: `conductor agent list` and `conductor agent get planner` (name, version, model, whether it has approval/human tools).",
+    "Step 3: Fetch the current definition with `conductor workflow get content_pipeline` and insert before `write_draft`: `{\"name\":\"plan_content\",\"taskReferenceName\":\"plan_content\",\"type\":\"AGENT\",\"inputParameters\":{\"agentType\":\"conductor\",\"name\":\"planner\",\"prompt\":\"Create an outline for: ${workflow.input.topic}\",\"maxDurationSeconds\":1800}}`.",
+    "Step 4: Wire the answer: `write_draft.inputParameters.outline = ${plan_content.output.text}` (or `${plan_content.output.output.result}`) — never `${plan_content.output.result}`.",
+    "Step 5: Bounds: `maxDurationSeconds` on the AGENT task (default is 86400 ≈ unbounded) and/or workflow-level `timeoutSeconds` + `timeoutPolicy`.",
+    "Step 6: Mention that if `planner` has approval or human tools the task can complete with `waiting: true` + `pendingTool`; either confirm it has none or branch on `${plan_content.output.waiting}` (see agent-task-hitl-resume pattern).",
+    "Step 7: Explain that `AGENT` is a system task — no task definition or worker is registered for it; the agent's own tools are served by the agent's `serve()` process.",
+    "Step 8: Write the updated JSON to a file, `conductor workflow create <file>`, run once with `conductor workflow start -w content_pipeline --sync -i '{\"topic\":\"...\"}'`. Troubleshooting note: `AGENT requires 'agentUrl'` means `agentType` was omitted (defaults to `a2a`) or the agent runtime is off on the server."
+  ],
+  "success_criteria": [
+    "New task has `type: \"AGENT\"` with an explicit `agentType: \"conductor\"`",
+    "Task references the agent with `name: \"planner\"` — not `agentName`, `agent`, or `agentUrl`",
+    "`prompt` is populated from `${workflow.input.topic}` (directly or inside a template string)",
+    "`write_draft` reads the answer via `${<ref>.output.text}` or `${<ref>.output.output.result}` — not `${<ref>.output.result}`",
+    "Plan verifies the agent is deployed via `conductor agent list` and/or `conductor agent get planner` before wiring",
+    "Bounds are set: `maxDurationSeconds` on the AGENT task and/or workflow-level `timeoutSeconds` + `timeoutPolicy`",
+    "Mentions that the AGENT task may complete with `waiting: true` (HITL/approval boundary) and either confirms the agent has no such tools or branches on it",
+    "Updated workflow JSON is written to a file before `conductor workflow create` (never inline)",
+    "Does not register a task definition or scaffold a worker for the AGENT task itself",
+    "Explains that the error `AGENT requires 'agentUrl'` indicates `agentType` was omitted (default a2a) or the agent runtime is disabled — not a missing URL to add"
+  ]
+}

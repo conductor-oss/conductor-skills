@@ -1,0 +1,121 @@
+{
+  "name": "software_society_delivery",
+  "description": "Invoke the deployed software society, surface every approval-gated tool through a HUMAN task, and wait for the final result.",
+  "version": 1,
+  "schemaVersion": 2,
+  "ownerEmail": "software-platform@example.com",
+  "inputParameters": ["brief", "conductorApi"],
+  "timeoutSeconds": 2700,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "tasks": [
+    {
+      "name": "build_software",
+      "taskReferenceName": "build_software_ref",
+      "type": "AGENT",
+      "inputParameters": {
+        "agentType": "conductor",
+        "name": "software_society",
+        "prompt": "${workflow.input.brief}",
+        "pollIntervalSeconds": 5,
+        "maxDurationSeconds": 2400
+      }
+    },
+    {
+      "name": "approval_loop",
+      "taskReferenceName": "approval_loop_ref",
+      "type": "DO_WHILE",
+      "evaluatorType": "graaljs",
+      "loopCondition": "(function(){ return $.approval_loop_ref['iteration'] < 480 && !$.agent_status_ref['response']['body']['isComplete']; })();",
+      "inputParameters": {
+        "approval_loop_ref": "${approval_loop_ref.output}",
+        "agent_status_ref": "${agent_status_ref.output}"
+      },
+      "loopOver": [
+        {
+          "name": "agent_status",
+          "taskReferenceName": "agent_status_ref",
+          "type": "HTTP",
+          "inputParameters": {
+            "http_request": {
+              "uri": "${workflow.input.conductorApi}/agent/${build_software_ref.output.executionId}/status",
+              "method": "GET",
+              "accept": "application/json"
+            }
+          }
+        },
+        {
+          "name": "approval_gate",
+          "taskReferenceName": "approval_gate_ref",
+          "type": "SWITCH",
+          "evaluatorType": "value-param",
+          "expression": "waiting",
+          "inputParameters": {
+            "waiting": "${agent_status_ref.output.response.body.isWaiting}"
+          },
+          "decisionCases": {
+            "true": [
+              {
+                "name": "approve_agent_tool",
+                "taskReferenceName": "approve_agent_tool_ref",
+                "type": "HUMAN",
+                "inputParameters": {
+                  "executionId": "${build_software_ref.output.executionId}",
+                  "pendingTool": "${agent_status_ref.output.response.body.pendingTool}",
+                  "responseSchema": {
+                    "type": "object",
+                    "required": ["approved"],
+                    "properties": {
+                      "approved": {"type": "boolean"},
+                      "reason": {"type": "string"}
+                    }
+                  }
+                }
+              },
+              {
+                "name": "respond_to_agent",
+                "taskReferenceName": "respond_to_agent_ref",
+                "type": "HTTP",
+                "inputParameters": {
+                  "http_request": {
+                    "uri": "${workflow.input.conductorApi}/agent/${build_software_ref.output.executionId}/respond",
+                    "method": "POST",
+                    "contentType": "application/json",
+                    "accept": "application/json",
+                    "body": {
+                      "approved": "${approve_agent_tool_ref.output.approved}"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "defaultCase": []
+        },
+        {
+          "name": "poll_delay",
+          "taskReferenceName": "poll_delay_ref",
+          "type": "WAIT",
+          "inputParameters": {"duration": "5s"}
+        }
+      ]
+    },
+    {
+      "name": "final_agent_result",
+      "taskReferenceName": "final_agent_result_ref",
+      "type": "HTTP",
+      "inputParameters": {
+        "http_request": {
+          "uri": "${workflow.input.conductorApi}/agent/executions/${build_software_ref.output.executionId}",
+          "method": "GET",
+          "accept": "application/json"
+        }
+      }
+    }
+  ],
+  "outputParameters": {
+    "executionId": "${build_software_ref.output.executionId}",
+    "agentStatus": "${final_agent_result_ref.output.response.body.status}",
+    "result": "${final_agent_result_ref.output.response.body.output.result}",
+    "approvalCycles": "${approval_loop_ref.output.iteration}"
+  }
+}

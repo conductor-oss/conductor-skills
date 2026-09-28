@@ -9,9 +9,13 @@ on:
       - 'bin/**'
       - 'VERSION'
       - 'package.json'
+      - '.npmignore'
+      - 'pytest.ini'
+      - 'conftest.py'
       - 'install.sh'
       - 'install.ps1'
       - 'scripts/validate_plugin.py'
+      - 'scripts/verify-package.sh'
       - '.github/workflows/validate-plugin.yml'
   push:
     branches: [main]
@@ -41,3 +45,16 @@ jobs:
           # Ensure the bin script at least executes for --help
           node bin/conductor-skills.js --version
           node bin/conductor-skills.js --help > /dev/null
+
+      - name: Exercise installer matrix
+        run: npm run verify:quick
+
+      - name: Install Python agent example dependencies
+        run: python3 -m pip install 'conductor-python[agents]==2.0.0' pytest==9.0.3 truststore==0.10.4
+
+      - name: Run offline agent example tests
+        run: |
+          pytest -q skills/conductor/scripts/test_conductor_api.py
+          PYTHONPATH=skills/conductor/examples/agents/python pytest -q -m "not live" skills/conductor/examples/agents/python
+          PYTHONPATH=skills/conductor/examples/agent-society pytest -q -m "not live" skills/conductor/examples/agent-society
+          PYTHONPATH=skills/conductor/examples/bengaluru-writers-room pytest -q -m "not live" skills/conductor/examples/bengaluru-writers-room

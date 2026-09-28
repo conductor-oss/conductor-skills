@@ -1,0 +1,23 @@
+{
+  "name": "Review an Unbounded Agent (max_turns=100000, open-ended instructions, AGENT task with no bounds)",
+  "skills": ["conductor"],
+  "query": "Review this before I ship it. The agent:\n\n```python\nagent = Agent(\n    name=\"market_crawler\",\n    model=\"openai/gpt-4o\",\n    instructions=\"Keep browsing competitor sites until you have everything about their pricing.\",\n    tools=[fetch_page, extract_prices],\n    max_turns=100000,\n)\n```\n\nand the workflow task that calls it:\n\n```json\n{\n  \"name\": \"crawl\",\n  \"taskReferenceName\": \"crawl\",\n  \"type\": \"AGENT\",\n  \"inputParameters\": {\n    \"agentType\": \"conductor\",\n    \"name\": \"market_crawler\",\n    \"prompt\": \"${workflow.input.brief}\"\n  }\n}\n```\n\nThe workflow has no timeoutSeconds set. Anything wrong?",
+  "expected_behavior": [
+    "Step 1: Consult references/optimization.md (review flow step 2b and section F — F1 bounded agent loop, F2 side-effect tools, F3 serve(), F6 model, F7 agentType/name; plus B2 workflow timeout), references/agents.md (`Agent` fields, `maxDurationSeconds` default 86400), and the `/conductor-optimize` procedure.",
+    "Step 2: Load context as a reviewer would: `conductor agent get market_crawler` (compiled `maxTurns`, `timeoutSeconds`, tools) or `runtime.plan(agent)`; `conductor workflow get <wf>` for the caller.",
+    "Step 3: CRITICAL findings: F1 — `max_turns=100000` is absurd (compiler caps effectively unbounded); F1 — the AGENT task has no `maxDurationSeconds` (default 86400 s ≈ a day of polling) and the workflow has no `timeoutSeconds` / `timeoutPolicy` (B2); the instruction 'until you have everything' has no stop condition.",
+    "Step 4: WARN/INFO findings: agent-level `timeoutSeconds` not set; consider `max_tokens` / `context_window_budget` for a browsing agent; F2 — `fetch_page` / `extract_prices` are read-only so no approval gate is required (state this explicitly); F3 — the two `@tool` functions are worker tools, so a `serve()` process must be running (ask / verify); F6/F7 pass (`openai/gpt-4o` is provider-qualified; `agentType: \"conductor\"` + `name` correct).",
+    "Step 5: Recommended Changes checklist: set `max_turns` to 10–50; add `maxDurationSeconds` (e.g. 1800) to the AGENT task; add workflow `timeoutSeconds` + `timeoutPolicy: TIME_OUT_WF`; rewrite the instructions with an explicit completion criterion (e.g. 'stop after collecting pricing for the N competitors listed in the brief, or after 20 pages') and/or a `stopWhen` / `termination` config; optionally `maxCalls` on `fetch_page`.",
+    "Step 6: Group findings by severity with rule IDs and offer to apply the fixes one at a time — do not rewrite the agent or workflow silently."
+  ],
+  "success_criteria": [
+    "Flags `max_turns=100000` as CRITICAL under rule F1",
+    "Flags the missing `maxDurationSeconds` on the AGENT task (default 86400 seconds ≈ unbounded) and the missing workflow-level `timeoutSeconds` / `timeoutPolicy` (F1 / B2)",
+    "Flags the open-ended instruction ('until you have everything') and recommends an explicit stop condition in the instructions and/or a `stopWhen` / `termination` configuration",
+    "The proposed fix sets all three bounds: a bounded `max_turns` (roughly 10–50), `maxDurationSeconds` on the AGENT task, and a workflow-level timeout",
+    "Findings are grouped by severity (CRITICAL / WARN / INFO) and each cites a rule ID (F1, B2, F2, F3, etc.)",
+    "Output includes a Recommended Changes checklist (or an equivalent structured list of fixes)",
+    "Offers to apply fixes one at a time and does not silently rewrite the agent code or workflow",
+    "Assesses F2 for the tools (states `fetch_page` / `extract_prices` are read-only so no approval gate is required, or asks) and notes F3 (a `serve()` process must run for the `@tool` worker tools)"
+  ]
+}

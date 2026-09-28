@@ -1,0 +1,106 @@
+{
+  "name": "bengaluru_writers_room_delivery",
+  "description": "Run 120 specialists in isolated research, development, drafting, and review phases, then approve and publish the final original-fiction package.",
+  "version": 1,
+  "schemaVersion": 2,
+  "ownerEmail": "creative-platform@example.com",
+  "inputParameters": ["mission", "conductorApi"],
+  "timeoutSeconds": 28800,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "tasks": [
+    {
+      "name": "research_phase",
+      "taskReferenceName": "research_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_research_federation", "prompt": "Mission: ${workflow.input.mission}\nProduce the bounded research packet for the next phase.", "pollIntervalSeconds": 15, "maxDurationSeconds": 3600}
+    },
+    {
+      "name": "development_phase",
+      "taskReferenceName": "development_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_development_federation", "prompt": "Mission: ${workflow.input.mission}\nResearch packet:\n${research_phase_ref.output.text}\nCreate a self-contained, compact series-development packet for drafting.", "pollIntervalSeconds": 15, "maxDurationSeconds": 3600}
+    },
+    {
+      "name": "drafting_phase",
+      "taskReferenceName": "drafting_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_drafting_federation", "prompt": "Mission: ${workflow.input.mission}\nApproved development packet:\n${development_phase_ref.output.text}\nCreate a self-contained pilot beat sheet and scene-draft packet for review.", "pollIntervalSeconds": 15, "maxDurationSeconds": 3600}
+    },
+    {
+      "name": "review_phase",
+      "taskReferenceName": "review_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_review_federation", "prompt": "Mission: ${workflow.input.mission}\nDraft packet:\n${drafting_phase_ref.output.text}\nReturn a compact prioritized revision brief; do not repeat the full draft.", "pollIntervalSeconds": 15, "maxDurationSeconds": 2700}
+    },
+    {
+      "name": "showrunner_phase",
+      "taskReferenceName": "showrunner_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_final_showrunner", "prompt": "Mission: ${workflow.input.mission}\nDraft packet:\n${drafting_phase_ref.output.text}\nRevision brief:\n${review_phase_ref.output.text}\nProduce the final self-contained delivery package.", "pollIntervalSeconds": 15, "maxDurationSeconds": 2400}
+    },
+    {
+      "name": "publisher_phase",
+      "taskReferenceName": "publisher_phase_ref",
+      "type": "AGENT",
+      "inputParameters": {"agentType": "conductor", "name": "namma_artifact_publisher", "prompt": "Publish this final package exactly as instructed:\n${showrunner_phase_ref.output.text}", "pollIntervalSeconds": 15, "maxDurationSeconds": 2400}
+    },
+    {
+      "name": "publisher_approval_loop",
+      "taskReferenceName": "publisher_approval_loop_ref",
+      "type": "DO_WHILE",
+      "evaluatorType": "graaljs",
+      "loopCondition": "(function(){ return $.publisher_approval_loop_ref['iteration'] < 1680 && !$.publisher_status_ref['response']['body']['isComplete']; })();",
+      "inputParameters": {"publisher_approval_loop_ref": "${publisher_approval_loop_ref.output}", "publisher_status_ref": "${publisher_status_ref.output}"},
+      "loopOver": [
+        {
+          "name": "publisher_status",
+          "taskReferenceName": "publisher_status_ref",
+          "type": "HTTP",
+          "inputParameters": {"http_request": {"uri": "${workflow.input.conductorApi}/agent/${publisher_phase_ref.output.executionId}/status", "method": "GET", "accept": "application/json"}}
+        },
+        {
+          "name": "publisher_gate",
+          "taskReferenceName": "publisher_gate_ref",
+          "type": "SWITCH",
+          "evaluatorType": "value-param",
+          "expression": "waiting",
+          "inputParameters": {"waiting": "${publisher_status_ref.output.response.body.isWaiting}"},
+          "decisionCases": {
+            "true": [
+              {
+                "name": "approve_story_package",
+                "taskReferenceName": "approve_story_package_ref",
+                "type": "HUMAN",
+                "inputParameters": {
+                  "executionId": "${publisher_phase_ref.output.executionId}",
+                  "pendingTool": "${publisher_status_ref.output.response.body.pendingTool}",
+                  "responseSchema": {"type": "object", "required": ["approved"], "properties": {"approved": {"type": "boolean"}, "reason": {"type": "string"}}}
+                }
+              },
+              {
+                "name": "respond_to_publisher",
+                "taskReferenceName": "respond_to_publisher_ref",
+                "type": "HTTP",
+                "inputParameters": {"http_request": {"uri": "${workflow.input.conductorApi}/agent/${publisher_phase_ref.output.executionId}/respond", "method": "POST", "contentType": "application/json", "accept": "application/json", "body": {"approved": "${approve_story_package_ref.output.approved}"}}}
+              }
+            ]
+          },
+          "defaultCase": []
+        },
+        {"name": "publisher_poll_delay", "taskReferenceName": "publisher_poll_delay_ref", "type": "WAIT", "inputParameters": {"duration": "15s"}}
+      ]
+    },
+    {
+      "name": "final_publisher_result",
+      "taskReferenceName": "final_publisher_result_ref",
+      "type": "HTTP",
+      "inputParameters": {"http_request": {"uri": "${workflow.input.conductorApi}/agent/executions/${publisher_phase_ref.output.executionId}", "method": "GET", "accept": "application/json"}}
+    }
+  ],
+  "outputParameters": {
+    "executionId": "${publisher_phase_ref.output.executionId}",
+    "agentStatus": "${final_publisher_result_ref.output.response.body.status}",
+    "result": "${final_publisher_result_ref.output.response.body.output.result}",
+    "approvalCycles": "${publisher_approval_loop_ref.output.iteration}"
+  }
+}

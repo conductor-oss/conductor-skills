@@ -12,9 +12,10 @@
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `conductor: command not found` | CLI not installed | Run `npx @conductor-oss/conductor-cli ...`, or ask the user before global install (see [setup.md](setup.md)). If npm itself is missing, fall back to `scripts/conductor_api.py`. |
-| `Connection refused` / `URLError` | Server not running, or wrong URL | Verify `CONDUCTOR_SERVER_URL`. For local servers run `conductor server status`. |
-| `401 Unauthorized` | Missing or invalid auth | Check `CONDUCTOR_AUTH_TOKEN` (or `CONDUCTOR_AUTH_KEY` + `_SECRET` with the CLI). Re-run `conductor workflow list` to confirm. |
+| `Connection refused` / `URLError` | Server not running, or wrong URL | Verify `CONDUCTOR_SERVER_URL`. A remote root/UI URL normally needs `/api` appended exactly once. For local servers run `conductor server status`. |
+| `401 Unauthorized` | Missing, incomplete, or invalid auth | Securely inject either `CONDUCTOR_AUTH_TOKEN` or both `CONDUCTOR_AUTH_KEY` + `CONDUCTOR_AUTH_SECRET`; the CLI, SDKs, and Python fallback exchange an Orkes key pair automatically. Never print the values. Re-run `conductor workflow list` to confirm. |
 | `403 Forbidden` | Token valid but lacks permissions | Confirm with the user that the credentials have access to the target workflow/namespace. |
+| `404 Not Found` from `/token` during key/secret auth | Wrong API base or a non-Orkes server | Normalize the Orkes root URL to end in `/api` and set `CONDUCTOR_SERVER_TYPE=Enterprise` for the CLI. Plain OSS servers do not provide the Orkes token-exchange endpoint. |
 | `404 Not Found` | Wrong workflow name, version, or execution ID | Run `conductor workflow list` or `conductor workflow search` to find the correct identifier. |
 | Workflow stuck on a SIMPLE task | No worker polling for that task type | Run `conductor task queue-size --task-type {name}` — if size > 0 and growing, no worker is consuming. Scaffold a worker (see [workers.md](workers.md)). |
 | `409 Conflict` on workflow create | Definition with that name+version already exists | Bump version, or use update instead of create. |
@@ -49,6 +50,26 @@ These show up in INLINE, DO_WHILE `loopCondition`, or SWITCH with a JS evaluator
 | Extended thinking / `thinkingTokenLimit` has no effect | Wrong provider, or model isn't a thinking/reasoning-capable variant. `thinkingTokenLimit` is Anthropic and Gemini; OpenAI uses `reasoningEffort: low\|medium\|high` via the Responses API. | Pick the right knob for the provider, and confirm the chosen model is one of the provider's thinking-capable models. To surface the chain-of-thought, set `reasoningSummary` and read `output.reasoning`. |
 | `webSearch` / `codeInterpreter` returns "feature not supported" | Provider doesn't expose that built-in tool. `webSearch` and `codeInterpreter` work on OpenAI/Anthropic/Gemini; `fileSearchVectorStoreIds` is OpenAI-only; `googleSearchRetrieval` is Gemini-only. | Check the provider matrix in [workflow-definition.md](workflow-definition.md) LLM_CHAT_COMPLETE section. |
 
+## Agent errors (`AGENT` task, deployed agents — see [agents.md](agents.md))
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `AGENT requires 'agentUrl'` on a task meant for a deployed agent | `agentType` omitted (defaults to `a2a`), or the server's agent runtime is disabled so `conductor` is not a known type | Set `agentType: "conductor"`; enable `conductor.integrations.ai.enabled=true` (+ `agentspan.embedded=true`) — `conductor server start` sets both. Check with `conductor agent list`. |
+| `Agent not found` → task FAILED | Not deployed, wrong `name` or `version` | `conductor agent list` / `conductor agent get {name}`; run `runtime.deploy(agent)`. |
+| `AGENT requires 'prompt'` / `... when resuming an execution` → FAILED_WITH_TERMINAL_ERROR | `prompt` missing on start or on resume | Always pass `prompt`; on resume wire the human answer (`${collect_answer_ref.output.answer}`). |
+| `Invalid model format ... Expected 'provider/model'` on deploy/start | Bare model name, or relying on `CONDUCTOR_AGENT_LLM_MODEL` | `model="openai/gpt-4o-mini"` (etc.) explicitly. |
+| First LLM turn fails / `No configuration found for: <provider>` | Provider key not on the server | `python3 "$CONDUCTOR_API" providers-status`; set `OPENAI_API_KEY` etc. in the server environment. |
+| Execution sits IN_PROGRESS forever; a tool task is SCHEDULED | `requiredWorkers` unserved, or a passthrough framework (plain LangChain, Claude Agent SDK) with no `serve()` | Run `runtime.serve(agent)` as a long-lived process (rule F3). `conductor workflow get-execution {executionId} -c` names the stuck task. |
+| `AGENT` task COMPLETED but the answer is empty; output has `waiting: true` | The agent paused at a human gate and the workflow did not branch on it | SWITCH on `${ref.output.waiting}`; inspect `pendingTool`. |
+| Approved via a resume task: verdict wrong, or an extra `<agent>_approval_human_normalizer` LLM task appears | Resume posts `{"result": ...}`; the gate feeds that text to an LLM normalizer to guess approve/deny | `conductor agent respond {executionId} --approve` / `POST /api/agent/{id}/respond {"approved": true}` / SDK `approve()`; check `pendingTool.response_schema` first |
+| Task ends `CANCELED`, agent `state: canceled` | Parent TERMINATE, `CANCEL_AGENT`, or an operator cancel | Expected — cancellation, not an error. |
+| `AGENT exceeded max duration of Ns` → FAILED_WITH_TERMINAL_ERROR | `maxDurationSeconds` reached (default 86400) | Raise the bound or fix the slow tool; the child run was cancelled best-effort. |
+| MCP / OpenAPI tool discovery blocked (connection refused / denied origin) | Outbound allow-list is deny-all | `conductor.ai.outbound.allowed-origins=...`; `conductor.ai.outbound.allow-private-networks=true` for localhost in dev. |
+| `404` on `/api/skills/...` or `/api/a2a/agent/...` | `agentspan.skills.enabled` / `conductor.a2a.server.enabled` unset | Enable them on the server or avoid the skills / A2A-server features. |
+| `conductor deploy` fails: module `agentspan` not found | The CLI command targets a package that does not ship | Use SDK `runtime.deploy()` (Rule 13). |
+| `${workflow.secrets.X}` arrives empty | Secret missing on the server, wrong sub-key, or the task input was externalized to payload storage | OSS: `CONDUCTOR_SECRET_X` env on the server (JSON object for sub-keys); Orkes: secret manager. Keep large inputs out of tasks that reference secrets. |
+| a2a task polls forever despite `pushNotification: true` | `conductor.a2a.callback.url` unset → silent fallback to polling | Configure the callback URL or drop `pushNotification`. |
+
 ## Diagnosis flow for failed workflows
 
 1. `conductor workflow get-execution {id} -c` — full task list with statuses.
@@ -57,6 +78,15 @@ These show up in INLINE, DO_WHILE `loopCondition`, or SWITCH with a JS evaluator
    - `TIMED_OUT` with retries remaining → `conductor workflow retry {id}`.
    - `FAILED_WITH_TERMINAL_ERROR` → not retryable; fix root cause first.
    - Persistent timeouts → recommend raising `responseTimeoutSeconds` on the task definition.
+4. For an `AGENT` task, the child run is `output.executionId` (a workflow id) — follow the agent triage flow below on it.
+
+## Triage flow for a stuck or failing agent run
+
+1. `conductor agent execution --name {agent} --since 1h [--status FAILED]` — recent runs; `conductor agent get {agent}` for `maxTurns` / `timeoutSeconds`.
+2. `conductor agent status {id}` — `isWaiting: true` + `pendingTool` = a human gate, not a hang: `conductor agent respond {id} --approve|-m` or the parent's HUMAN task.
+3. `conductor workflow get-execution {id} -c` (the id is a workflow id) — a tool task SCHEDULED with no `waiting` = unserved workers: `runtime.serve(agent)` (F3).
+4. `LLM_CHAT_COMPLETE` FAILED → `python3 "$CONDUCTOR_API" providers-status`; `model` must be `provider/model` with that provider `configured: true` (F6).
+5. `conductor agent stream {id}` replays the events (`thinking`, `tool_call`, `tool_result`, `waiting`, `error`, `done`); UI: `/agentExecutions/{id}`.
 
 ## Docs
 

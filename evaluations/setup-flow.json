@@ -10,7 +10,7 @@
     "Step 5: User stated 'run it locally' — proceed with the local-server option (Option A: `conductor server start`). The agent may briefly mention the remote-server option exists, but should not block on a choice the user has already made.",
     "Step 6: Start the local server when the user chooses Option A, then verify with `conductor server status`",
     "Step 7: Test connectivity with `conductor workflow list`",
-    "Step 8: If 401/403, ask the user for credentials (CONDUCTOR_AUTH_KEY+SECRET or CONDUCTOR_AUTH_TOKEN) and set via env vars; never echo the values",
+    "Step 8: If 401/403, ask the user to inject CONDUCTOR_AUTH_KEY+CONDUCTOR_AUTH_SECRET or CONDUCTOR_AUTH_TOKEN through their shell, CI secret store, or secure environment settings; never request the values in chat, place them in CLI arguments, or echo them",
     "Step 9: Confirm setup with a final `conductor workflow list` and report success"
   ],
   "success_criteria": [

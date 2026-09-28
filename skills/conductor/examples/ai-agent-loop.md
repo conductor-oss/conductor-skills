@@ -1,4 +1,7 @@
-# Example: Autonomous Agent Loop (ReAct Pattern)
+# Example: Hand-wired agent loop (ReAct) — under the hood / manual control
+
+> **The default way to build an agent is now a Conductor Agent** — see [../references/agents.md](../references/agents.md) and [agent-deploy-and-invoke.md](agent-deploy-and-invoke.md). The server's compiler emits exactly the shape below (`{name}_init_state` SET_VARIABLE → `{name}_loop` DO_WHILE { `{name}_llm` → guardrails → tool SWITCH → FORK_JOIN_DYNAMIC → merge } → `{name}_synth_output`), so this page is also how you read a compiled agent's execution view. Hand-wire only when the compiler cannot express what you need: (a) a custom termination predicate or non-LLM routing between iterations, (b) OpenAI `previousResponseId` chaining, (c) several models per iteration, (d) the server has agents disabled or you must ship a single JSON file. Say which reason applies (optimization rule F4). This page remains the worked example for [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) and [../references/template-resolution.md](../references/template-resolution.md).
+
 
 An LLM-driven agent that **thinks**, **acts**, and **observes** in a loop until it decides it's done. Built with `DO_WHILE` wrapping an `LLM_CHAT_COMPLETE → SWITCH → tool task` inner sequence.
 
@@ -139,163 +142,43 @@ See [workflows/ai-agent-loop.json](workflows/ai-agent-loop.json) for the full fi
 
 ## Why each piece is shaped the way it is
 
-The agentic loop touches every Conductor gotcha at once. Each line of the example exists because the obvious alternative fails subtly.
+Each line exists because the obvious alternative fails subtly (the agent compiler makes the same choices for you).
 
-### 1. `evaluatorType: "graaljs"` on the DO_WHILE task
-
-For INLINE tasks, the platform aliases `"javascript"` and `"graaljs"`. For DO_WHILE's `loopCondition`, the alias has been reported to fail on some cluster versions — set `"graaljs"` explicitly here. Older docs omit it; that's where most "loop condition fails at runtime" reports trace back to.
-
-### 2. IIFE `loopCondition` with iteration cap
-
-```javascript
-(function(){ return $.agent_loop['iteration'] < $.max_iterations && $.final_response === ''; })();
-```
-
-- **IIFE** returns a clean boolean. The `if (x) { true; } else { false; }` statement form is fragile across cluster versions.
-- **Iteration cap** is mandatory. The optimization checklist flags unbounded loops as CRITICAL (rule B5).
-- **`$.final_response === ''` early-exit** lets the loop terminate the moment the `finalize` branch fires, instead of running another empty iteration. `final_response` is read via `${workflow.variables.final_response}` — `$.workflow.*` is **not** in scope inside the condition, so we plumb it through `inputParameters`.
-
-### 3. `inputParameters` wires for `loopCondition`
-
-```json
-"inputParameters": {
-  "agent_loop": "${agent_loop.output}",
-  "max_iterations": "${workflow.input.max_iterations}",
-  "final_response": "${workflow.variables.final_response}"
-}
-```
-
-`agent_loop: "${agent_loop.output}"` is the canonical self-reference pattern — it looks like a typo (referencing the task before it has output), but Conductor resolves it lazily each iteration, exposing `iteration` and per-iteration body outputs.
-
-`max_iterations` and `final_response` are plumbed in because `$.workflow.input.*` and `$.workflow.variables.*` are **NOT in scope** inside `loopCondition`. Reading them with `$` would throw `TypeError: Cannot read property "input"/"variables" from undefined`.
-
-### 4. `LLM_CHAT_COMPLETE` with `jsonOutput: true`
-
-`output.result` is the **parsed object** when `jsonOutput: true`, the **raw string** when `false`. Downstream SWITCH branches on `action`, so a parsed object is what we want.
-
-**Caveats:**
-
-- Conductor's strict Jackson parse fails hard on markdown fences (`` ```json ... ``` ``). Claude emits these regardless of system-prompt instructions. If you target Claude, prefer provider-native structured output (Anthropic tool-use) or keep `jsonOutput: false` and substring-extract the JSON downstream.
-- The `messages` schema is `{role, message}` — **NOT** `{role, content}` (which is what Anthropic and OpenAI's native APIs use). Mixing this up gives `Content must not be null for SYSTEM or USER messages`.
-- `messages` must contain **strings** in the `message` field, never structured objects. Conductor will Java-`toString` an object into `{key=value}` on the way to the provider, producing garbage in the chat history. To embed tool results, route through `JSON_JQ_TRANSFORM` with `tojson` first (step 6 below).
-
-### 5. SWITCH with empty `defaultCase`
-
-```json
-"defaultCase": []
-```
-
-Leave `defaultCase` empty unless you have a meaningful no-op handler. A `defaultCase` that calls `finalize` will fire whenever the LLM emits an unrecognized action, **overwriting `final_response` with garbage**. With an empty defaultCase, junk replies are silently skipped and the loop tries again next iteration.
-
-### 6. `JSON_JQ_TRANSFORM` to stringify AND accumulate in one step
-
-```json
-{
-  "type": "JSON_JQ_TRANSFORM",
-  "inputParameters": {
-    "current": "${workflow.variables.messages}",
-    "tool_result": "${call_weather.output.response.body}",
-    "queryExpression": ".current + [{\"role\": \"assistant\", \"message\": \"Called get_weather.\"}, {\"role\": \"user\", \"message\": (\"Tool result: \" + (.tool_result | tojson))}]"
-  }
-}
-```
-
-Two things happen in this single JQ task:
-
-1. **The structured HTTP body is stringified** via `(.tool_result | tojson)`. This is essential — embedding the raw Java-Map-backed object in a `message` field would Java-`toString` it into `{key=value}` garbage. The obvious INLINE alternative also fails: `JSON.stringify` on a Java-Map-backed proxy returns `"{}"`, `String(...)` returns `{k=v}` (Java's `Map.toString`). JQ operates on JSON natively and bypasses the entire JS/Java-proxy stack.
-2. **The new messages are concatenated onto the existing chat history** via `.current + [...]`. This preserves the system prompt and prior turns. The naive `SET_VARIABLE` that writes a fresh two-entry array **replaces** the variable instead of appending — every iteration the LLM would lose its history and produce nonsense.
-
-The output (`${build_next_messages.output.result}`) is the full new messages array; `update_messages` (SET_VARIABLE) writes it back to `workflow.variables.messages`. Next iteration's `think` sees the complete grown history.
-
-JQ input semantics: the entire `inputParameters` map (minus `queryExpression`) is the JQ input — reference fields as `.current`, `.tool_result`. See [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) Rule 3 and [../references/template-resolution.md](../references/template-resolution.md) Pitfall 2.
-
-### 7. HTTP tool task: `optional: true` + retry on the task def
-
-```json
-{ "type": "HTTP", "optional": true, ... }
-```
-
-`optional: true` keeps the loop alive if the external service flakes. Combined with `retryCount` on the HTTP task definition (or accepting that a 5xx is recoverable next iteration), the agent treats tool failure as a signal to retry or pick a different action, not a workflow-killing error.
-
-For more sophisticated failure handling, branch `route` on `call_weather.output.response.statusCode` and prepare a "service unavailable" message for the LLM instead of appending the raw error.
-
-### 8. Workflow `variables` for chat history accumulation
-
-Each iteration grows `workflow.variables.messages` via the JQ-concat-then-SET_VARIABLE pair from step 6. We persist chat history in a workflow variable, outside the loop's per-iteration outputs, because:
-
-- The LLM needs the full conversation each iteration.
-- Reading `${workflow.variables.messages}` from inside the loop is clean and unambiguous; pulling from the loop's nested per-iteration outputs is fragile.
-- It survives a workflow restart.
-
-The trade-off: variables are global to the workflow. Don't put one-shot data there — only state that needs to span iterations.
+1. **`evaluatorType: "graaljs"` on the DO_WHILE.** The `"javascript"` alias works for INLINE but has failed for `loopCondition` on some cluster versions; set `"graaljs"` explicitly.
+2. **IIFE `loopCondition` with an iteration cap:** `(function(){ return $.agent_loop['iteration'] < $.max_iterations && $.final_response === ''; })();` — an IIFE returns a clean boolean (the `if {true} else {false}` statement form is fragile); the cap is mandatory (rule B5); `$.final_response === ''` exits the moment `finalize` fires.
+3. **`inputParameters` wires for the condition:** `"agent_loop": "${agent_loop.output}"` (the canonical lazy self-reference exposing `iteration`), plus `max_iterations` and `final_response` plumbed in explicitly — `$.workflow.input.*` / `$.workflow.variables.*` are **not in scope** inside `loopCondition` (`TypeError: Cannot read property "input" from undefined`).
+4. **`LLM_CHAT_COMPLETE` with `jsonOutput: true`** makes `output.result` a parsed object so the SWITCH can branch on `action`. Caveats: the strict Jackson parse fails on markdown fences (Claude emits them — prefer provider-native structured output or `jsonOutput: false` + substring extraction); the `messages` schema is `{role, message}` not `{role, content}` (`Content must not be null for SYSTEM or USER messages`); `message` must be a **string** — an object is Java-`toString`ed into `{key=value}` garbage, so stringify tool results with JQ first (step 6).
+5. **SWITCH with `defaultCase: []`.** A default that calls `finalize` would overwrite `final_response` with garbage whenever the model emits an unknown action; an empty default skips the junk and the loop tries again.
+6. **`JSON_JQ_TRANSFORM` stringifies and accumulates in one step:** `.current + [{"role":"assistant","message":"Called get_weather."}, {"role":"user","message":("Tool result: " + (.tool_result | tojson))}]`. `tojson` avoids the Java-Map proxy trap (`JSON.stringify` on a proxy returns `"{}"`, `String(...)` returns `{k=v}`); `.current + [...]` appends to the history instead of replacing it (a fresh two-entry `SET_VARIABLE` would wipe prior turns). The JQ input is the whole `inputParameters` map minus `queryExpression` — see [../references/graaljs-gotchas.md](../references/graaljs-gotchas.md) Rule 3 and [../references/template-resolution.md](../references/template-resolution.md) Pitfall 2.
+7. **HTTP tool task `optional: true`** (+ `retryCount` on its task def) keeps the loop alive when the service flakes; for finer control branch `route` on `call_weather.output.response.statusCode` and feed the model a "service unavailable" message.
+8. **Chat history in `workflow.variables`** (JQ-concat then `SET_VARIABLE`): the model needs the full conversation every iteration, `${workflow.variables.messages}` is unambiguous from inside the loop, and it survives a restart. Variables are workflow-global — keep only cross-iteration state there.
 
 ## Run
 
 ```bash
 conductor workflow create examples/workflows/ai-agent-loop.json
-conductor workflow start -w autonomous_agent -i '{
-  "question": "What is the weather in San Francisco?",
-  "max_iterations": 5
-}' --sync
+conductor workflow start -w autonomous_agent --sync -i '{"question":"What is the weather in San Francisco?","max_iterations":5}'
 ```
 
 ## OpenAI optimization — `previousResponseId` chaining
 
-If your loop is committed to OpenAI (or Azure OpenAI), you can reduce per-iteration token cost by chaining via the Responses API instead of sending the accumulated `messages` array every iteration. Each chat task sends only the new content and references the prior turn's `responseId`. The savings scale with how much prior context you'd otherwise be re-sending — meaningful for long loops with a substantial system prompt; marginal for short ones.
-
-**Changes from the canonical scaffold above:**
-
-1. Add `previous_response_id` to `workflow.variables` (initialized empty).
-2. In the `think` task, add `"previousResponseId": "${workflow.variables.previous_response_id}"`. On iteration 1 this is empty and the provider treats it as a fresh chain; on subsequent iterations it points at the prior task's `responseId`.
-3. After `think`, add a `SET_VARIABLE` that updates `workflow.variables.previous_response_id = ${think.output.responseId}`.
-4. Shrink `messages` — on each iteration you only need the latest user content (the tool result, the next instruction), not the system prompt or prior turns.
-
-The full message-accumulation scaffold above remains the right default for **portable** workflows (mixed providers, base URLs / proxies without Responses API, long-running workflows that outlive OpenAI's response retention window — currently ~30 days). Use chaining only when you're committed to OpenAI and the savings matter.
-
-See [llm-chaining.md](llm-chaining.md) for the full pattern, caveats around provider lock-in, and the `responseId` lifetime.
+Committed to OpenAI / Azure OpenAI? Chain turns through the Responses API instead of re-sending the accumulated `messages` every iteration: keep `previous_response_id` in `workflow.variables` (empty at first), pass `"previousResponseId": "${workflow.variables.previous_response_id}"` into `think`, `SET_VARIABLE` it to `${think.output.responseId}` after each turn, and send only the new content in `messages`. Savings scale with how much context you would otherwise re-send. Keep the message-accumulation scaffold for portable workflows (mixed providers, proxies without the Responses API, runs that outlive OpenAI's ~30-day response retention). Full pattern and caveats: [llm-chaining.md](llm-chaining.md).
 
 ## A simpler MCP variant
 
-If you have an MCP server and don't need the chat-history-accumulation pattern, the loop collapses considerably — system message includes `Previous results: ${agent_loop.output}` and the tool branch is just a single `CALL_MCP_TOOL`. That was the previous shape of this example; it works for simple flows but breaks down for longer chains and harder failure modes.
-
-```json
-"loopOver": [
-  { "type": "LLM_CHAT_COMPLETE", "...": "...passes ${agent_loop.output} into the prompt..." },
-  { "type": "SWITCH", "decisionCases": {
-      "call_tool": [{ "type": "CALL_MCP_TOOL", "...": "..." }],
-      "answer":    [{ "type": "NOOP", "...": "..." }]
-  }, "defaultCase": [] }
-]
-```
-
-Choose the variant by how the loop terminates: if the LLM reliably emits `{ action: "answer", ... }` and you only ever route on the latest LLM call, the MCP variant is enough. If you need durable chat history, retries, or paranoid handling of malformed LLM output, use the full scaffold above.
+Without history accumulation the loop collapses to `LLM_CHAT_COMPLETE` (prompt carries `Previous results: ${agent_loop.output}`) → `SWITCH` → one `CALL_MCP_TOOL` or `NOOP`, `defaultCase: []`. Enough when the model reliably emits `{action: "answer"}`; use the full scaffold for durable history, retries, or malformed-output handling.
 
 ## Critical guardrails
 
-- **Cap iterations.** Both as an explicit `$.iteration < N` clause in the condition AND an `early-exit on final_response` predicate. Without a cap, a buggy "I'm not done yet" reply spins forever and burns LLM budget.
-- **Set a workflow timeout** (`timeoutSeconds` + `timeoutPolicy: TIME_OUT_WF`). A 10-iteration cap with no per-iteration timeout can still hang on a slow tool call.
-- **Token budget per iteration is enforced by `maxTokens`** — the loop itself has no token budget. For cost control, multiply: 10 iterations × 500 max tokens × $/token.
-- **No secrets in `workflow.input`.** API keys, signing secrets, etc. go in `${workflow.secrets.X}` (Orkes) or worker env. Workflow inputs are visible in the execution view.
-- **Empty SWITCH `defaultCase`** unless you have a real no-op handler.
+Cap iterations (`$.iteration < N` **and** the early-exit predicate) or a buggy "not done yet" reply spins forever; set `timeoutSeconds` + `timeoutPolicy: TIME_OUT_WF` (a slow tool call can still hang a capped loop); cost = iterations × `maxTokens` — the loop has no token budget of its own; no secrets in `workflow.input` (use `${workflow.secrets.X}` or worker env — inputs show in the execution view); keep `defaultCase` empty.
 
 ## Built-in tools as an alternative to MCP
 
-Recent Conductor releases let `LLM_CHAT_COMPLETE` enable provider-native tools with a boolean — no MCP server or worker needed:
-
-- `webSearch: true` (OpenAI / Anthropic / Gemini) — real-time information
-- `codeInterpreter: true` (OpenAI / Anthropic / Gemini) — sandboxed Python/JS execution
-- `fileSearchVectorStoreIds: ["vs_..."]` (OpenAI) — search through pre-uploaded documents
-- `googleSearchRetrieval: true` (Gemini) — Google Search grounding
-
-For agent loops where the "tools" are just "web search and run some code," skip the MCP server entirely and set these on every `think` task. Combine with `tools: [...]` (function calling) for custom tools alongside the built-ins.
-
-See [llm-chat.md](llm-chat.md) for the full list and provider matrix.
+`LLM_CHAT_COMPLETE` enables provider-native tools with a boolean — `webSearch`, `codeInterpreter`, `fileSearchVectorStoreIds` (OpenAI), `googleSearchRetrieval` (Gemini) — so a "search and run code" loop needs no MCP server; add `tools: [...]` for custom functions. Matrix: [llm-chat.md](llm-chat.md).
 
 ## When to use the loop vs the single-shot
 
-| Use single-shot ([ai-agent-mcp.md](ai-agent-mcp.md)) | Use the loop |
-|------------------------------------------------------|--------------|
-| Answer always needs exactly one tool call | Answer needs an unknown number of tool calls |
-| You can constrain the model to pick ONE action | Tasks chain — output of one tool informs the next |
-| You want strict, audit-friendly determinism | Some exploration is acceptable |
-| Latency matters (one LLM call + one tool call) | Total budget tolerates 5–10 LLM round trips |
+| Use single-shot ([ai-agent-mcp.md](ai-agent-mcp.md)) | Use a Conductor Agent ([agents.md](../references/agents.md)) | Use this hand-wired loop |
+|---|---|---|
+| Answer always needs exactly one tool call | Unknown number of tool calls; tools are functions in your code; approval gates, guardrails, multi-agent, streaming, reuse by name | Same, but you need a custom loop condition, non-LLM steps between turns, `previousResponseId`, or JSON-only |
+| Model constrained to ONE action; latency matters | Native function calling; budget tolerates N round trips (`max_turns`) | JSON `{action}` routing convention you own and maintain |

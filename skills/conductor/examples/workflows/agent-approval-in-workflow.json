@@ -1,0 +1,120 @@
+{
+  "name": "agent_approval_in_workflow",
+  "description": "Approve a Conductor Agent's gated tool from inside the workflow \u2014 deterministic (no LLM normalizer) \u2014 then wait for the run to finish. Verified live on conductor-server 3.32.1.",
+  "version": 1,
+  "schemaVersion": 2,
+  "ownerEmail": "team@example.com",
+  "timeoutSeconds": 1800,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "inputParameters": [
+    "prompt",
+    "conductorApi"
+  ],
+  "tasks": [
+    {
+      "name": "run_agent",
+      "taskReferenceName": "run_agent_ref",
+      "type": "AGENT",
+      "inputParameters": {
+        "agentType": "conductor",
+        "name": "weather_agent",
+        "prompt": "${workflow.input.prompt}",
+        "pollIntervalSeconds": 5,
+        "maxDurationSeconds": 900
+      }
+    },
+    {
+      "name": "gate",
+      "taskReferenceName": "gate_ref",
+      "type": "SWITCH",
+      "evaluatorType": "value-param",
+      "expression": "waiting",
+      "inputParameters": {
+        "waiting": "${run_agent_ref.output.waiting}"
+      },
+      "decisionCases": {
+        "true": [
+          {
+            "name": "approve",
+            "taskReferenceName": "approve_ref",
+            "type": "HUMAN",
+            "inputParameters": {
+              "pendingTool": "${run_agent_ref.output.pendingTool}"
+            }
+          },
+          {
+            "name": "respond",
+            "taskReferenceName": "respond_ref",
+            "type": "HTTP",
+            "inputParameters": {
+              "http_request": {
+                "uri": "${workflow.input.conductorApi}/agent/${run_agent_ref.output.executionId}/respond",
+                "method": "POST",
+                "contentType": "application/json",
+                "accept": "application/json",
+                "body": {
+                  "approved": "${approve_ref.output.approved}",
+                  "reason": "${approve_ref.output.reason}"
+                }
+              }
+            }
+          },
+          {
+            "name": "wait_for_agent",
+            "taskReferenceName": "wait_ref",
+            "type": "DO_WHILE",
+            "evaluatorType": "graaljs",
+            "loopCondition": "(function(){ return $.wait_ref['iteration'] < 120 && !$.status_ref['response']['body']['isComplete']; })();",
+            "inputParameters": {
+              "wait_ref": "${wait_ref.output}",
+              "status_ref": "${status_ref.output}"
+            },
+            "loopOver": [
+              {
+                "name": "pause",
+                "taskReferenceName": "pause_ref",
+                "type": "WAIT",
+                "inputParameters": {
+                  "duration": "5s"
+                }
+              },
+              {
+                "name": "status",
+                "taskReferenceName": "status_ref",
+                "type": "HTTP",
+                "inputParameters": {
+                  "http_request": {
+                    "uri": "${workflow.input.conductorApi}/agent/${run_agent_ref.output.executionId}/status",
+                    "method": "GET",
+                    "accept": "application/json"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "final_result",
+            "taskReferenceName": "final_ref",
+            "type": "HTTP",
+            "inputParameters": {
+              "http_request": {
+                "uri": "${workflow.input.conductorApi}/agent/executions/${run_agent_ref.output.executionId}",
+                "method": "GET",
+                "accept": "application/json"
+              }
+            }
+          }
+        ]
+      },
+      "defaultCase": []
+    }
+  ],
+  "outputParameters": {
+    "executionId": "${run_agent_ref.output.executionId}",
+    "waited": "${run_agent_ref.output.waiting}",
+    "approved": "${approve_ref.output.approved}",
+    "agentStatus": "${final_ref.output.response.body.status}",
+    "result": "${final_ref.output.response.body.output.result}",
+    "directResult": "${run_agent_ref.output.text}"
+  }
+}

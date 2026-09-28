@@ -1,0 +1,25 @@
+{
+  "name": "Developer / Reviewer / Approver Rotation With Allowed Transitions and Termination (Strategy.ROUND_ROBIN)",
+  "skills": ["conductor"],
+  "query": "Code-review loop as an agent: a `developer` proposes a patch, a `reviewer` critiques it, and an `approver` signs off. They take turns in a fixed order — the developer can only be followed by the reviewer, and the reviewer can send it back to the developer or forward to the approver. It must stop when the approver says APPROVED or after a dozen messages, whichever comes first. Python.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §6 (the `round_robin` row: fixed rotation; `allowed_transitions` constrains who may follow whom; stop rules `termination=TextMentionTermination(\"...\") | MaxMessageTermination(n)`, `&`, `StopMessageTermination`, `TokenUsageTermination`), references/agents.md §4 (`allowed_transitions`, `termination`, `max_turns`), references/optimization.md F1/F3, and WebFetch the Python SDK `docs/agents/` before pinning the install.",
+    "Step 2: Three children with unique names, `provider/model`, their own instructions and `max_turns`: `developer`, `reviewer`, `approver` (e.g. `max_turns=4` each).",
+    "Step 3: `review = Agent(name=\"code_review\", model=\"openai/gpt-4o-mini\", agents=[developer, reviewer, approver], strategy=Strategy.ROUND_ROBIN, max_turns=6, allowed_transitions={\"developer\": [\"reviewer\"], \"reviewer\": [\"developer\", \"approver\"]}, termination=TextMentionTermination(\"APPROVED\") | MaxMessageTermination(12))` with `from conductor.ai.agents import Agent, AgentRuntime, Strategy, TextMentionTermination, MaxMessageTermination`.",
+    "Step 4: Explain the semantics: ROUND_ROBIN rotates through the children in order; `allowed_transitions` is an allow-list of who may follow whom (a transition not listed is refused); `|` composes termination so either condition ends the run (`&` would require both); `max_turns` is the hard cap on model turns independent of the message-count rule (F1).",
+    "Step 5: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(review, \"Add input validation to /login\")`; `runtime.plan(review)` → `requiredWorkers`; `runtime.deploy(review)` in CI; `runtime.serve(review)` long-lived if any child has `@tool` workers (Rule 9 / F3). Never `conductor deploy`.",
+    "Step 6: Optional workflow call: `AGENT` with `agentType: \"conductor\"`, `name: \"code_review\"`, `prompt`, `maxDurationSeconds`; never `agentType: \"round_robin\"`.",
+    "Step 7: Tests: `mock_run(review, prompt, events=[...])` with `assert_event_sequence` / `assert_agent_ran(\"approver\")`, and `validate_strategy` (raises `StrategyViolation`) to check the transition rules offline."
+  ],
+  "success_criteria": [
+    "Uses `strategy=Strategy.ROUND_ROBIN` (or `\"round_robin\"`) with the three named children",
+    "Sets `allowed_transitions={\"developer\": [\"reviewer\"], \"reviewer\": [\"developer\", \"approver\"]}` (or an equivalent dict expressing exactly those rules)",
+    "Sets `termination=TextMentionTermination(\"APPROVED\") | MaxMessageTermination(12)` — the two conditions composed with `|`",
+    "Sets `max_turns` on the parent and on each child (F1)",
+    "Explains the semantics: fixed rotation, transitions are allow-listed, and either termination condition ends the run",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Deploys with `runtime.deploy(...)` and states whether a `runtime.serve(...)` process is needed for `@tool` workers — never `conductor deploy`",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name: \"code_review\"` — never `agentType: \"round_robin\"` or a framework name",
+    "Mentions an offline verification (`mock_run` + `assert_event_sequence` / `assert_agent_ran`, or `validate_strategy`)"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Data-Analyst Agent With Code Execution and an Ops Agent With Allow-Listed CLI Commands",
+  "skills": ["conductor"],
+  "query": "Two agents in Python. A `data_analyst` that writes and runs Python snippets against CSVs we hand it — ideally sandboxed. And an `ops_agent` that can run `gh` and `aws` CLI commands (it needs a GitHub token) to triage incidents — nothing else, and no arbitrary shell. What guardrails does the SDK give me, and where do the credentials go?",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md §7 (`local_code_execution=True, allowed_languages=[\"python\"], allowed_commands=[\"python3\"]`; `code_execution=CodeExecutionConfig(executor=DockerCodeExecutor(image=\"python:3.12-slim\"))` — also Jupyter / Serverless executors; `cli_commands=True, cli_allowed_commands=[\"gh\", \"aws\"], credentials=[\"GH_TOKEN\"]` or `cli_config=CliConfig(allowed_commands=[...], timeout=60, working_dir=\"/work\", allow_shell=False)`), references/agents.md §4 (`cli_commands` / `cli_allowed_commands` / `cli_config`; `local_code_execution` / `allowed_languages` / `code_execution`; `credentials[]`), §5 (`cli` → server-side sandboxed `run_command` tool with an allow-list; `LocalCodeExecutor` / `DockerCodeExecutor` / `JupyterCodeExecutor` / `ServerlessCodeExecutor`), §8 secrets, references/optimization.md F2 (shell/code tools need allow-lists — `cliConfig` / `codeExecution` with empty allow-lists is CRITICAL), F5, F1.",
+    "Step 2: `coder = Agent(name=\"data_analyst\", model=\"openai/gpt-4o-mini\", instructions=\"Write and run Python to answer questions about the provided CSV.\", local_code_execution=True, allowed_languages=[\"python\"], allowed_commands=[\"python3\"], max_turns=10)`; sandboxed variant: `Agent(name=\"data_analyst\", ..., code_execution=CodeExecutionConfig(executor=DockerCodeExecutor(image=\"python:3.12-slim\")), max_turns=10)` with `from conductor.ai.agents import CodeExecutionConfig, DockerCodeExecutor` — recommend Docker for untrusted snippets; mention Jupyter / Serverless executors exist.",
+    "Step 3: `ops = Agent(name=\"ops_agent\", model=\"openai/gpt-4o-mini\", instructions=\"Triage incidents using gh and aws.\", cli_commands=True, cli_allowed_commands=[\"gh\", \"aws\"], credentials=[\"GH_TOKEN\"], max_turns=12)` or the explicit `cli_config=CliConfig(allowed_commands=[\"gh\", \"aws\"], timeout=60, working_dir=\"/work\", allow_shell=False)`; the agent gets a single sandboxed `run_command` tool restricted to the allow-list; `allow_shell=False` means no `sh -c`, pipes or arbitrary binaries.",
+    "Step 4: Guardrails (F2): allow-lists are mandatory — `allowed_languages` / `allowed_commands` / `cli_allowed_commands` empty is CRITICAL; for destructive verbs (`aws ... delete`, `gh repo delete`) add an input `RegexGuardrail(patterns=[...], mode=block, position=INPUT)`, narrow the allow-list, or cap with `max_calls`; consider `approval_required` on any separate write tool.",
+    "Step 5: Credentials (F5): `credentials=[\"GH_TOKEN\"]` lists the NAME; the value is stored server-side (`CONDUCTOR_SECRET_GH_TOKEN` env on OSS, `/api/secrets` when writable, UI `/agentSecrets`, or Orkes) and injected at call time — never in `instructions`, `prompt` or code.",
+    "Step 6: Lifecycle under `if __name__ == \"__main__\":` — `runtime.run(...)`; `runtime.plan(...)` and check `requiredWorkers` (state that if it is non-empty a `runtime.serve(...)` process is needed — Rule 9 / F3); `runtime.deploy(coder, ops)` in CI. Never `conductor deploy`.",
+    "Step 7: Bounds (F1): `max_turns` on both agents; `timeout` in `CliConfig`; `maxDurationSeconds` + workflow timeout on any `AGENT` caller (`agentType: \"conductor\"`, `name`)."
+  ],
+  "success_criteria": [
+    "`data_analyst` uses `local_code_execution=True` with `allowed_languages=[\"python\"]` (and `allowed_commands=[...]`), or `code_execution=CodeExecutionConfig(executor=DockerCodeExecutor(image=...))`",
+    "Offers `DockerCodeExecutor` as the sandboxed option (optionally mentioning Jupyter / Serverless executors)",
+    "`ops_agent` uses `cli_commands=True, cli_allowed_commands=[\"gh\", \"aws\"]` or `cli_config=CliConfig(allowed_commands=[\"gh\", \"aws\"], ...)`",
+    "States `allow_shell=False` (no arbitrary shell) and that allow-lists are required — empty allow-lists are CRITICAL under F2",
+    "`credentials=[\"GH_TOKEN\"]` by NAME with the value in the server-side secret store; no token in `instructions` / prompt / code (F5)",
+    "Adds a further gate for destructive commands (input guardrail, narrower allow-list, `max_calls`, or `approval_required`) or explicitly calls out the F2 risk",
+    "Every `model` is provider-qualified (`provider/model`), never bare",
+    "Sets `max_turns` on both agents (F1)",
+    "Deploys with `runtime.deploy(...)` — never `conductor deploy` — and checks `plan()`'s `requiredWorkers` / states when `serve()` is needed",
+    "Any `AGENT` task uses `agentType: \"conductor\"` + `name` — never a framework name"
+  ]
+}

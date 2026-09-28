@@ -2,7 +2,8 @@
 """Conductor REST API fallback — stdlib only, no third-party packages.
 
 Use when the `conductor` CLI is not installed.
-Requires CONDUCTOR_SERVER_URL env var. CONDUCTOR_AUTH_TOKEN is optional.
+Requires CONDUCTOR_SERVER_URL. Authentication accepts CONDUCTOR_AUTH_TOKEN or
+CONDUCTOR_AUTH_KEY + CONDUCTOR_AUTH_SECRET (exchanged at POST /api/token).
 """
 
 import argparse
@@ -18,12 +19,61 @@ import urllib.request
 # Helpers
 # ---------------------------------------------------------------------------
 
-def get_config():
-    base = os.environ.get("CONDUCTOR_SERVER_URL", "").rstrip("/")
-    if not base:
+def normalize_server_url(value):
+    """Return an API base URL without guessing over a custom deployment path."""
+    raw = (value or "").strip()
+    if not raw:
         print("Error: CONDUCTOR_SERVER_URL is not set.", file=sys.stderr)
         sys.exit(1)
-    token = os.environ.get("CONDUCTOR_AUTH_TOKEN", "")
+
+    parsed = urllib.parse.urlsplit(raw)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        print(
+            "Error: CONDUCTOR_SERVER_URL must be an absolute http(s) URL.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if parsed.query or parsed.fragment:
+        print(
+            "Error: CONDUCTOR_SERVER_URL must not include a query or fragment.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    path = parsed.path.rstrip("/")
+    if not path:
+        path = "/api"
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+
+
+def exchange_auth_token(base, key, secret):
+    """Exchange an Orkes application key/secret for a JWT, kept in memory only."""
+    result = request_json(
+        build_url(base, "/token"),
+        "",
+        method="POST",
+        body={"keyId": key, "keySecret": secret},
+    )
+    token = result.get("token", "") if isinstance(result, dict) else ""
+    if not token:
+        print("Error: /token response did not include a token.", file=sys.stderr)
+        sys.exit(1)
+    return token
+
+
+def get_config():
+    base = normalize_server_url(os.environ.get("CONDUCTOR_SERVER_URL", ""))
+    token = os.environ.get("CONDUCTOR_AUTH_TOKEN", "").strip()
+    key = os.environ.get("CONDUCTOR_AUTH_KEY", "")
+    secret = os.environ.get("CONDUCTOR_AUTH_SECRET", "")
+    if bool(key) != bool(secret):
+        print(
+            "Error: set both CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if not token and key and secret:
+        token = exchange_auth_token(base, key, secret)
     return base, token
 
 
@@ -105,7 +155,9 @@ def handle_create_workflow(args):
     base, token = get_config()
     with open(args.file) as f:
         body = json.load(f)
-    url = build_url(base, "/metadata/workflow")
+    # --overwrite maps to POST /metadata/workflow?overwrite=true (needed to re-register an existing
+    # version, e.g. a workflow whose `metadata.a2a.enabled` the CLI would drop).
+    url = build_url(base, "/metadata/workflow", {"overwrite": "true"} if getattr(args, "overwrite", False) else None)
     result = request_json(url, token, method="POST", body=body)
     if result:
         output(result)
@@ -280,6 +332,114 @@ def handle_queue_size(args):
     output(result)
 
 
+
+# ---------------------------------------------------------------------------
+# Agent runtime handlers (no CLI equivalent for several of these; see
+# references/agents.md and references/fallback-cli.md)
+# ---------------------------------------------------------------------------
+
+def handle_providers_status(args):
+    base, token = get_config()
+    url = build_url(base, "/providers/status")
+    output(request_json(url, token))
+
+
+def handle_agent_list(args):
+    base, token = get_config()
+    url = build_url(base, "/agent/list")
+    output(request_json(url, token))
+
+
+def handle_agent_get(args):
+    base, token = get_config()
+    params = {"version": args.version} if args.version else None
+    url = build_url(base, f"/agent/{urllib.parse.quote(args.name)}", params)
+    output(request_json(url, token))
+
+
+def handle_agent_deploy_config(args):
+    """POST /agent/deploy with {"agentConfig": <file contents>} — registers only, never runs."""
+    base, token = get_config()
+    with open(args.file) as f:
+        config = json.load(f)
+    body = config if "agentConfig" in config or "framework" in config else {"agentConfig": config}
+    url = build_url(base, "/agent/deploy")
+    output(request_json(url, token, method="POST", body=body))
+
+
+def handle_agent_start(args):
+    base, token = get_config()
+    body = {"name": args.name, "prompt": args.prompt}
+    if args.version:
+        body["version"] = int(args.version)
+    if args.session_id:
+        body["sessionId"] = args.session_id
+    url = build_url(base, "/agent/start")
+    output(request_json(url, token, method="POST", body=body))
+
+
+def handle_agent_status(args):
+    base, token = get_config()
+    url = build_url(base, f"/agent/{urllib.parse.quote(args.id)}/status")
+    output(request_json(url, token))
+
+
+def handle_agent_executions(args):
+    base, token = get_config()
+    params = {
+        "agentName": args.name,
+        "status": args.status,
+        "start": 0,
+        "size": args.size,
+        "sort": "startTime:DESC",
+    }
+    url = build_url(base, "/agent/executions", params)
+    output(request_json(url, token))
+
+
+def handle_agent_execution(args):
+    base, token = get_config()
+    url = build_url(base, f"/agent/execution/{urllib.parse.quote(args.id)}")
+    output(request_json(url, token))
+
+
+def handle_agent_respond(args):
+    """Answer a human gate. --approve / --deny for approval_required tools; --message for a question."""
+    base, token = get_config()
+    if args.approve and args.deny:
+        print("Error: --approve and --deny are mutually exclusive.", file=sys.stderr)
+        sys.exit(1)
+    body = {}
+    if args.approve:
+        body["approved"] = True
+    if args.deny:
+        body["approved"] = False
+    if args.reason:
+        body["reason"] = args.reason
+    if args.message:
+        body["message"] = args.message
+    if not body:
+        print("Error: pass --approve, --deny, or --message.", file=sys.stderr)
+        sys.exit(1)
+    url = build_url(base, f"/agent/{urllib.parse.quote(args.id)}/respond")
+    result = request_json(url, token, method="POST", body=body)
+    output(result if result is not None else {"status": "ok", "executionId": args.id})
+
+
+def handle_agent_cancel(args):
+    base, token = get_config()
+    params = {"reason": args.reason} if args.reason else None
+    url = build_url(base, f"/agent/{urllib.parse.quote(args.id)}/cancel", params)
+    result = request_json(url, token, method="DELETE")
+    output(result if result is not None else {"status": "canceled", "executionId": args.id})
+
+
+def handle_agent_stop(args):
+    base, token = get_config()
+    url = build_url(base, f"/agent/{urllib.parse.quote(args.id)}/stop")
+    result = request_json(url, token, method="POST")
+    output(result if result is not None else {"status": "stop-requested", "executionId": args.id})
+
 # ---------------------------------------------------------------------------
 # CLI definition
 # ---------------------------------------------------------------------------
@@ -297,8 +457,9 @@ def main():
     p.add_argument("--name", required=True)
     p.add_argument("--version", default=None)
 
-    p = sub.add_parser("create-workflow", help="Create a workflow definition from JSON file")
+    p = sub.add_parser("create-workflow", help="Create a workflow definition from JSON file (keeps `metadata`, unlike the CLI)")
     p.add_argument("--file", required=True)
+    p.add_argument("--overwrite", action="store_true", help="POST ...?overwrite=true to replace an existing version")
 
     p = sub.add_parser("update-workflow", help="Update a workflow definition from JSON file")
     p.add_argument("--file", required=True)
@@ -362,6 +523,49 @@ def main():
     p = sub.add_parser("queue-size", help="Get task queue size")
     p.add_argument("--task-type", default=None)
 
+    # -- Agents (references/agents.md) --
+    sub.add_parser("providers-status", help="Which LLM providers are configured on the server (GET /providers/status)")
+
+    sub.add_parser("agent-list", help="List deployed Conductor Agents")
+
+    p = sub.add_parser("agent-get", help="Get a deployed agent definition")
+    p.add_argument("--name", required=True)
+    p.add_argument("--version", default=None)
+
+    p = sub.add_parser("agent-deploy-config", help="Deploy an agent config file (POST /agent/deploy); registers only")
+    p.add_argument("--file", required=True)
+
+    p = sub.add_parser("agent-start", help="Start a deployed agent (POST /agent/start)")
+    p.add_argument("--name", required=True)
+    p.add_argument("--prompt", required=True)
+    p.add_argument("--version", default=None)
+    p.add_argument("--session-id", default=None)
+
+    p = sub.add_parser("agent-status", help="Agent execution status")
+    p.add_argument("--id", required=True)
+
+    p = sub.add_parser("agent-executions", help="Search agent executions")
+    p.add_argument("--name", default=None, help="agentName filter")
+    p.add_argument("--status", default=None, help="RUNNING, COMPLETED, FAILED, ...")
+    p.add_argument("--size", type=int, default=20)
+
+    p = sub.add_parser("agent-execution", help="Agent execution detail with token usage")
+    p.add_argument("--id", required=True)
+
+    p = sub.add_parser("agent-respond", help="Answer a waiting agent: --approve/--deny a tool, or --message an answer")
+    p.add_argument("--id", required=True)
+    p.add_argument("--approve", action="store_true")
+    p.add_argument("--deny", action="store_true")
+    p.add_argument("--reason", default=None)
+    p.add_argument("--message", default=None)
+
+    p = sub.add_parser("agent-cancel", help="Cancel an agent execution (DELETE /agent/{id}/cancel)")
+    p.add_argument("--id", required=True)
+    p.add_argument("--reason", default=None)
+
+    p = sub.add_parser("agent-stop", help="Request a graceful stop after the current iteration")
+    p.add_argument("--id", required=True)
+
     args = parser.parse_args()
 
     handlers = {
@@ -382,6 +586,17 @@ def main():
         "signal-task-sync": handle_signal_task_sync,
         "poll-task": handle_poll_task,
         "queue-size": handle_queue_size,
+        "providers-status": handle_providers_status,
+        "agent-list": handle_agent_list,
+        "agent-get": handle_agent_get,
+        "agent-deploy-config": handle_agent_deploy_config,
+        "agent-start": handle_agent_start,
+        "agent-status": handle_agent_status,
+        "agent-executions": handle_agent_executions,
+        "agent-execution": handle_agent_execution,
+        "agent-respond": handle_agent_respond,
+        "agent-cancel": handle_agent_cancel,
+        "agent-stop": handle_agent_stop,
     }
 
     handler = handlers.get(args.command)

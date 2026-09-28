@@ -11,8 +11,11 @@ Flat verb-to-CLI lookup. For fallback equivalents see [fallback-cli.md](fallback
 | Create | `conductor workflow create file.json` |
 | Update | `conductor workflow update file.json` |
 | Delete | `conductor workflow delete {name} {version}` |
-| List task defs | `conductor taskDef list` |
-| Create task def | `conductor taskDef create file.json` |
+| List task defs | `conductor task list --json` |
+| Get task def | `conductor task get {name}` |
+| Create task def | `conductor task create file.json` |
+| Update task def | `conductor task update file.json` |
+| Delete task def | `conductor task delete {name}` |
 
 ## Execution
 
@@ -77,6 +80,39 @@ Task statuses for signaling: `COMPLETED`, `FAILED`, `FAILED_WITH_TERMINAL_ERROR`
 | Resume | `conductor schedule resume {name}` |
 
 Schedules are part of OSS. See [schedules.md](schedules.md) for the JSON schema, cron format, and patterns.
+
+## Agents (deployed Conductor Agents and their executions)
+
+Contract and lifecycle in [agents.md](agents.md); per-language SDK verbs (`plan / run / deploy / serve`) in [agent-sdks.md](agent-sdks.md).
+
+| Verb | CLI |
+|------|-----|
+| List deployed agents | `conductor agent list` |
+| Get / delete a definition | `conductor agent get {name} [--version N]` · `conductor agent delete {name} [--version N]` |
+| Compile a config file (dry run) | `conductor agent compile {config.yaml\|json}` |
+| Scaffold a config file (no server) | `conductor agent init {name} --model provider/model [-s strategy] [-f yaml\|json]` |
+| Run a deployed agent (streams) | `conductor agent run --name {name} "prompt" [--session {id}] [--no-stream]` |
+| Run a config file | `conductor agent run --config {file} "prompt"` |
+| Search executions | `conductor agent execution [--name {agent}] [--status RUNNING\|COMPLETED\|FAILED] [--since 1h] [--window now-7d] [--json]` |
+| Status of one execution | `conductor agent status {executionId}` |
+| Live events (SSE) | `conductor agent stream {executionId} [--last-event-id N]` |
+| Answer a human gate | `conductor agent respond {executionId} --approve\|--deny [--reason "..."]` · `conductor agent respond {executionId} -m "answer text"` |
+| Prune old executions | `conductor agent prune --older-than 30 [--archive] [--dry-run]` |
+| Cancel / pause / inspect the compiled run | `conductor workflow terminate\|pause\|resume\|get-execution {executionId}` — an agent execution id **is** a workflow id |
+
+Not available as CLI verbs (use REST or the fallback script): deploy (`runtime.deploy()` in the SDK, or `python3 "$CONDUCTOR_API" agent-deploy-config --file {file}`), cancel (`python3 "$CONDUCTOR_API" agent-cancel --id {id}` / `DELETE /api/agent/{id}/cancel`), stop, signal, provider status (`python3 "$CONDUCTOR_API" providers-status`). **Do not use `conductor deploy`** — it shells to a module that does not ship with the SDKs (SKILL.md Rule 13).
+
+## Skills (agentskills.io `SKILL.md` packages run as agents)
+
+Requires `agentspan.skills.enabled=true` on the server (off by default). A skill *is* an agent (`framework: "skill"`); `skill load` deploys it, after which `conductor agent run --name {skill}` works.
+
+| Verb | CLI |
+|------|-----|
+| List / get / pull / delete | `conductor skill list [--all-versions]` · `skill get {name} [version]` · `skill pull {name} [dest]` · `skill delete {name} [version]` |
+| Register a package | `conductor skill register {path} [--version v] [--model provider/model] [--agent-model name=model]` |
+| Deploy as an agent (no run) | `conductor skill load {path} --model provider/model [--agent-model ...] [--search-path ...]` |
+| Run once with local tool workers | `conductor skill run {path-or-name} "prompt" --model provider/model [--param k=v] [--workspace dir]` |
+| Serve a skill's tools (run from UI/elsewhere) | `conductor skill serve {path-or-name}` |
 
 ## Server (local)
 

@@ -1,0 +1,21 @@
+{
+  "name": "Fix agentName → name and the Output Path on an AGENT Task",
+  "skills": ["conductor"],
+  "query": "Register this workflow for me:\n\n```json\n{\n  \"name\": \"plan_then_build\",\n  \"version\": 1,\n  \"schemaVersion\": 2,\n  \"timeoutSeconds\": 3600,\n  \"timeoutPolicy\": \"TIME_OUT_WF\",\n  \"tasks\": [\n    {\n      \"name\": \"run_planner\",\n      \"taskReferenceName\": \"run\",\n      \"type\": \"AGENT\",\n      \"inputParameters\": {\n        \"agentType\": \"conductor\",\n        \"agentName\": \"planner\",\n        \"prompt\": \"${workflow.input.goal}\",\n        \"maxDurationSeconds\": 1800\n      }\n    }\n  ],\n  \"outputParameters\": {\n    \"plan\": \"${run.output.result}\"\n  }\n}\n```",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 10, references/workflow-definition.md (`### AGENT` conductor mode: input is `name`, outputs are `executionId`, `agentName`, `state`, `text`, `output{result,...}`, `waiting`), and references/optimization.md rule F7.",
+    "Step 2: Do not register as-given. Two defects: (a) `agentName` is not an accepted input on the AGENT task's conductor branch — the field is `name`; `agentName` exists only as an OUTPUT field and as an alias on the REST `AgentStartRequest`. (b) `${run.output.result}` is the wrong path — the agent's own outputs are nested under `output`, so the answer is `${run.output.text}` or `${run.output.output.result}`.",
+    "Step 3: Verify the agent is deployed: `conductor agent list` / `conductor agent get planner`.",
+    "Step 4: Corrected task: `{\"agentType\":\"conductor\",\"name\":\"planner\",\"prompt\":\"${workflow.input.goal}\",\"maxDurationSeconds\":1800}`; corrected `outputParameters`: `{\"plan\":\"${run.output.text}\"}` (or `${run.output.output.result}`). Keep `agentType: \"conductor\"`, `prompt`, and the existing workflow timeout.",
+    "Step 5: Write the corrected JSON to a file, `conductor workflow create <file>`, and run once with `conductor workflow start -w plan_then_build --sync -i '{\"goal\":\"...\"}'` to confirm `output.plan` is populated."
+  ],
+  "success_criteria": [
+    "Replaces `agentName` with `name` in the AGENT task input",
+    "Explains that `agentName` is an output field / REST request alias and is not accepted as the AGENT task's input for the deployed-agent reference",
+    "Fixes the output path to `${run.output.text}` or `${run.output.output.result}` and explains why `${run.output.result}` is wrong (agent outputs are nested under `output`)",
+    "Does not register the workflow as-given",
+    "Verifies the `planner` agent is deployed with `conductor agent list` and/or `conductor agent get planner`",
+    "Keeps `agentType: \"conductor\"`, `prompt`, `maxDurationSeconds` and the workflow-level timeout in the corrected version",
+    "Writes the corrected JSON to a file before `conductor workflow create` (cites F7 or Rule 10 as the source of the fix — optional but preferred)"
+  ]
+}

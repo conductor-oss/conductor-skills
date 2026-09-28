@@ -1,0 +1,26 @@
+{
+  "name": "Schedule a Deployed Conductor Agent (weekdays at 6am with a fixed prompt)",
+  "skills": ["conductor"],
+  "query": "Run my deployed `daily_digest` agent every weekday at 6am with the prompt 'Summarize yesterday's support tickets and post the digest to #support-digest'.",
+  "expected_behavior": [
+    "Step 1: Consult references/schedules.md (schedule JSON + Quartz cron; 'Scheduling a deployed agent' note), references/agents.md (a deployed agent IS a workflow named after the agent; schedule section), and references/cli-index.md.",
+    "Step 2: `conductor agent list` / `conductor agent get daily_digest` to confirm the agent is deployed and to see whether it has worker tools (`requiredWorkers`) or is a passthrough framework agent.",
+    "Step 3: Schedule JSON written to a file: `{\"name\":\"daily_digest-weekday-6am\",\"cronExpression\":\"0 0 6 ? * MON-FRI\",\"startWorkflowRequest\":{\"name\":\"daily_digest\",\"input\":{\"prompt\":\"Summarize yesterday's support tickets and post the digest to #support-digest\"}},\"paused\":false}` — six-field Quartz, `?` for day-of-month because day-of-week is specified.",
+    "Step 4: Explain schedules are an OSS feature (not Orkes-only) and register with `conductor schedule create <file>`.",
+    "Step 5: State the worker gate: if the agent has worker tools or is passthrough, a `runtime.serve(agent)` process must be running when the schedule fires or the run will sit SCHEDULED; not applicable if the agent has only server-side tools.",
+    "Step 6: Do not invent a `conductor agent schedule` verb — there is none; the agent's compiled workflow is scheduled like any workflow.",
+    "Step 7: Verify: `conductor schedule list`, then after the first fire `conductor agent execution --name daily_digest --since 24h` (or `conductor workflow search -w daily_digest`) and `conductor agent status <id>`."
+  ],
+  "success_criteria": [
+    "`startWorkflowRequest.name` is the agent name `daily_digest` (the deployed agent's workflow) and `startWorkflowRequest.input.prompt` carries the requested prompt",
+    "Cron expression is a six-field Quartz expression for weekdays at 06:00 (e.g. `0 0 6 ? * MON-FRI`) and the day-of-month vs day-of-week `?` quirk is respected",
+    "Schedules are correctly described as an OSS feature (not Orkes-only)",
+    "Schedule JSON is written to a file and registered with `conductor schedule create <file>` (flag-based form is acceptable) — not `conductor workflow create`",
+    "Plan runs `conductor agent list` and/or `conductor agent get daily_digest` before scheduling",
+    "States that a `serve()` process must be running at fire time if the agent has worker tools or is a passthrough framework agent (and that this is not needed when it has only server-side tools)",
+    "Does not invent a `conductor agent schedule` command",
+    "Verification uses `conductor schedule list` and `conductor agent execution --name daily_digest ...` (or `conductor workflow search`/`get-execution`)",
+    "Schedule has a descriptive name (e.g. `daily_digest-weekday-6am`) and `paused: false`",
+    "Does not create an unnecessary wrapper workflow around an AGENT task — the agent's own workflow is scheduled directly (a wrapper is acceptable only with a stated reason)"
+  ]
+}

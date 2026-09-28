@@ -1,0 +1,21 @@
+{
+  "name": "Unsupported Language × Framework Cells: Vercel AI in Python, LangChain in .NET",
+  "skills": ["conductor"],
+  "query": "Two asks: our Python team wants to use Vercel AI SDK tools with a Conductor agent, and our .NET team wants to use LangChain with Conductor. Give me the install commands for both.",
+  "expected_behavior": [
+    "Step 1: Consult references/agent-sdks.md (language × framework matrix and the verbatim unsupported-cell messages) and references/agents.md (decision table).",
+    "Step 2: Python + Vercel AI: state that the Vercel AI SDK bridge is TypeScript-only (`ai` + `zod` are npm packages; `tool()` objects go into a TS `Agent.tools`). There is no `conductor-python[vercel]` extra. Nearest paths: (a) write the tools as native `@tool` functions on a Conductor `Agent` in Python (`pip install 'conductor-python[agents]'`), or (b) build that agent in TypeScript with `@io-orkes/conductor-javascript/agents` and reuse the Vercel `tool()` objects.",
+    "Step 3: .NET + LangChain: state that LangChain has no .NET bridge (LangChain4j is the Java port, bridged only in the Java SDK). There is no `Conductor.AI.LangChain` package. Nearest .NET paths: native `[Tool]` + `AgentRuntime` (`conductor-ai`), the OpenAI-style builder (`conductor-ai-openai`), Google ADK (`conductor-ai-google-adk`), or Semantic Kernel (`conductor-ai-semantic-kernel`) as the closest plugin-style fit.",
+    "Step 4: Note the .NET packages are preview / not yet published — consumed by project reference — and WebFetch the C# SDK repo `docs/agents/` to confirm before committing.",
+    "Step 5: Do not improvise a bridge or invent install commands; ask each team which supported cell they want and offer to scaffold it (via `/conductor-scaffold-agent`)."
+  ],
+  "success_criteria": [
+    "States that the Vercel AI SDK bridge is TypeScript-only and does not invent a Python package/extra such as `conductor-python[vercel]`",
+    "Offers at least one nearest path for the Python team: native `@tool` on a Conductor `Agent` in Python, or building that agent in TypeScript with the Vercel `tool()` objects",
+    "States that LangChain is not supported for .NET (LangChain4j is Java-only) and does not invent a `Conductor.AI.LangChain` or similar NuGet package",
+    "Offers at least one nearest path for the .NET team: native `[Tool]`, the OpenAI-style builder, Google ADK, or Semantic Kernel",
+    "Notes that the .NET agent packages are preview / project-reference and should be confirmed from the C# SDK repo (WebFetch) before committing",
+    "Asks the teams to choose among supported cells rather than improvising a bridge",
+    "Does not present any fabricated install command as real"
+  ]
+}

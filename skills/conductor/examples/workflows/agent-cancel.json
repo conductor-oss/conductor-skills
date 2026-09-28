@@ -1,0 +1,55 @@
+{
+  "name": "conductor_agent_cancel",
+  "version": 1,
+  "schemaVersion": 2,
+  "description": "Framework-agnostic Conductor Agents recipe: a FORK_JOIN gives an agent 20 minutes, then TERMINATEs the workflow if it is still running. Termination propagates cancellation to the in-flight agent task.",
+  "timeoutSeconds": 1800,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "tasks": [
+    {
+      "name": "fork_cancel",
+      "taskReferenceName": "fork_cancel_ref",
+      "type": "FORK_JOIN",
+      "forkTasks": [
+        [
+          {
+            "name": "run_long_agent",
+            "taskReferenceName": "run_long_agent_ref",
+            "type": "AGENT",
+            "inputParameters": {
+              "agentType": "conductor",
+              "name": "planner",
+              "prompt": "${workflow.input.prompt}",
+              "maxDurationSeconds": 1500
+            }
+          }
+        ],
+        [
+          {
+            "name": "wait_before_cancel",
+            "taskReferenceName": "wait_before_cancel_ref",
+            "type": "WAIT",
+            "inputParameters": {
+              "duration": "20m"
+            }
+          },
+          {
+            "name": "cancel_run",
+            "taskReferenceName": "cancel_run_ref",
+            "type": "TERMINATE",
+            "inputParameters": {
+              "terminationStatus": "TERMINATED",
+              "terminationReason": "Cancelling the in-flight conductor agent run"
+            }
+          }
+        ]
+      ]
+    },
+    {
+      "name": "join_cancel",
+      "taskReferenceName": "join_cancel_ref",
+      "type": "JOIN",
+      "joinOn": ["run_long_agent_ref", "cancel_run_ref"]
+    }
+  ]
+}

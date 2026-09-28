@@ -1,0 +1,22 @@
+{
+  "name": "Refuse the Broken `conductor deploy` CLI — Deploy via SDK deploy()",
+  "skills": ["conductor"],
+  "query": "Deploy my Python agent with `conductor deploy -l python -a support_triage`. That's the command, right? Just run it.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 13, references/cli-index.md (`## Agents` — the real `conductor agent` verbs and the note that `conductor deploy` must not be used), references/agents.md (lifecycle verbs: `deploy()` registers, `serve()` runs workers), references/agent-sdks.md, references/troubleshooting.md (`conductor deploy` module-not-found row), and examples/agent-deploy-and-invoke.md.",
+    "Step 2: Do not run or recommend `conductor deploy`. Explain why: it shells out to a non-shipped `python -m agentspan.cli.deploy` module (and `@agentspan/sdk` for TypeScript) that does not exist in `conductor-python` / `@io-orkes/conductor-javascript`, so it fails with module-not-found.",
+    "Step 3: Provide the SDK release script instead: `from conductor.ai.agents import AgentRuntime`; `from support_triage import agent`; `runtime = AgentRuntime(); plan = runtime.plan(agent); print(plan.required_workers)`; `runtime.deploy(agent)`.",
+    "Step 4: State the worker gate: if `requiredWorkers` is non-empty (worker tools) or the agent is passthrough, a long-lived `runtime.serve(agent)` process must run or executions hang.",
+    "Step 5: Verify with `conductor agent list` and `conductor agent get support_triage`; try it with `conductor agent run --name support_triage \"...\"`.",
+    "Step 6: List the real `conductor agent` subcommands (`list`, `get`, `delete`, `compile`, `execution`, `status`, `respond`, `prune`, `init`, `run`, `stream`) and state there is no `conductor agent deploy` (config-only agents deploy via `POST /api/agent/deploy {\"agentConfig\": ...}`)."
+  ],
+  "success_criteria": [
+    "Does not run or recommend `conductor deploy`",
+    "Explains why: the command targets a non-shipped `agentspan` Python module / `@agentspan/sdk` package and fails with module-not-found",
+    "Provides an SDK release script using `AgentRuntime().deploy(agent)` (optionally preceded by `plan()` printing `requiredWorkers`)",
+    "States that a long-lived `runtime.serve(agent)` process is needed when `requiredWorkers` is non-empty or the agent is passthrough",
+    "Verifies the deployment with `conductor agent list` and/or `conductor agent get support_triage`",
+    "Lists several real `conductor agent` verbs (from list, get, delete, compile, execution, status, respond, prune, init, run, stream) and states there is no `conductor agent deploy`",
+    "Does not invent a `conductor agent deploy` or any other non-existent CLI command as the replacement"
+  ]
+}

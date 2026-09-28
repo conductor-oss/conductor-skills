@@ -1,0 +1,40 @@
+{
+  "name": "a2a_weather_agent",
+  "description": "Exposes the deployed `weather_agent` through Conductor's A2A workflow facade (/api/a2a/workflow/a2a_weather_agent): maps the facade's _a2a_text input onto the agent's prompt and returns the answer as the workflow-output artifact. Register via REST (the CLI drops metadata). Verified live.",
+  "version": 1,
+  "schemaVersion": 2,
+  "ownerEmail": "team@example.com",
+  "timeoutSeconds": 600,
+  "timeoutPolicy": "TIME_OUT_WF",
+  "metadata": {
+    "a2a": {
+      "enabled": true,
+      "tags": [
+        "weather"
+      ]
+    }
+  },
+  "inputParameters": [
+    "_a2a_text",
+    "_a2a_context_id"
+  ],
+  "tasks": [
+    {
+      "name": "run_agent",
+      "taskReferenceName": "run_agent_ref",
+      "type": "AGENT",
+      "inputParameters": {
+        "agentType": "conductor",
+        "name": "weather_agent",
+        "prompt": "${workflow.input._a2a_text}",
+        "sessionId": "${workflow.input._a2a_context_id}",
+        "pollIntervalSeconds": 5,
+        "maxDurationSeconds": 300
+      }
+    }
+  ],
+  "outputParameters": {
+    "result": "${run_agent_ref.output.text}",
+    "executionId": "${run_agent_ref.output.executionId}"
+  }
+}

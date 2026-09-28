@@ -4,6 +4,40 @@ All notable changes to the Conductor Skills plugin are documented here. Versions
 correspond to the shared `VERSION` file (see [PUBLISHING.md](PUBLISHING.md) for
 what that means across the three distribution channels).
 
+## 1.8.0
+
+### Added
+
+- End-to-end Conductor Agent guidance for Python, TypeScript, Java, and C#,
+  including native agents, supported third-party SDK bridges, remote A2A and
+  hosted agents, tools, guardrails, memory, HITL, testing, deployment, serving,
+  scheduling, observation, and workflow `AGENT` tasks.
+- `/conductor-scaffold-agent`, agent-focused workflow examples, framework
+  bridge samples, fallback REST operations, and 40 new agent evaluation cases.
+- Deployable software-society and 120-specialist Bengaluru writers' room
+  examples. Both use bounded tools and deterministic workflow-owned approval;
+  the writers' room isolates phase executions to stay below payload limits.
+
+### Fixed
+
+- Installer verification now tests the native shared skill directories used by
+  Codex, Gemini, Cursor, OpenCode, Copilot, Amp, Cline, and Windsurf.
+- Task-definition commands now match the current CLI (`conductor task ...`).
+- Eval report merging rejects missing shards, missing results, and duplicates.
+- Generated SQLite, Python bytecode, coverage, and pytest artifacts are ignored
+  and excluded from published packages.
+
+### Changed
+
+- All published manifests and installers are versioned consistently at 1.8.0.
+- Plugin CI now runs the 428-check installer/package matrix and all offline
+  Python agent example tests in addition to manifest validation.
+- Vercel AI examples pin the compatible AI SDK 4 tool shape and document the
+  native adapter required for AI SDK 5+.
+- First-time setup now creates `developer` and `localhost` profiles, defaults
+  skill operations to Developer Edition, and keeps access-key creation and
+  one-time secret entry under direct user control.
+
 ## 1.7.0
 
 ### Added

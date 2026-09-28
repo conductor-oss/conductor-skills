@@ -1,0 +1,22 @@
+{
+  "name": "Refuse Deploying an Agent Whose Model Lives Only in CONDUCTOR_AGENT_LLM_MODEL",
+  "skills": ["conductor"],
+  "query": "Here's my agent — deploy it as-is:\n\n```python\nfrom conductor.ai.agents import Agent, AgentRuntime, tool\n\n@tool\ndef lookup_order(order_id: str) -> dict:\n    \"\"\"Look up an order by id.\"\"\"\n    return {\"order_id\": order_id, \"status\": \"shipped\"}\n\nagent = Agent(\n    name=\"support_triage\",\n    instructions=\"You triage support requests. Use lookup_order when asked about an order.\",\n    tools=[lookup_order],\n    max_turns=12,\n)\n\nif __name__ == \"__main__\":\n    AgentRuntime().deploy(agent)\n```\n\nWe set `CONDUCTOR_AGENT_LLM_MODEL=gpt-4o-mini` in the deploy environment, so I don't need `model` in code.",
+  "expected_behavior": [
+    "Step 1: Consult SKILL.md Rule 11, references/agents.md (`Agent` fields and model precedence; gotchas), references/agent-sdks.md (env matrix note that `CONDUCTOR_AGENT_LLM_MODEL` is an examples convention), and references/optimization.md rule F6.",
+    "Step 2: Do not deploy as-is. Explain that the core `Agent` / `AgentRuntime` does not read `CONDUCTOR_AGENT_LLM_MODEL` — only the OpenAI-compat `Runner` and the SDK examples do — so this agent has no model and the server will reject the config (F6 CRITICAL).",
+    "Step 3: Fix: `Agent(name=\"support_triage\", model=\"openai/gpt-4o-mini\", ...)`. Explain the `provider/model` format — a bare `gpt-4o-mini` is also rejected (`IllegalArgumentException` on the server) — with examples like `anthropic/claude-sonnet-4-6`, `google_gemini/gemini-2.0-flash`.",
+    "Step 4: If the user wants env-driven configuration, keep it explicit: `model=os.environ.get(\"SUPPORT_TRIAGE_MODEL\", \"openai/gpt-4o-mini\")` — the value still reaches `Agent(model=...)`.",
+    "Step 5: Provider key lives on the Conductor server: verify with `GET /api/providers/status` that `openai` is `configured: true`; the deploy environment's env var is not where the key or the model belong.",
+    "Step 6: Then `runtime.plan(agent)` / `runtime.deploy(agent)`; note `serve()` is needed for `lookup_order` (worker tool). Verify with `conductor agent get support_triage` showing `model: openai/gpt-4o-mini`."
+  ],
+  "success_criteria": [
+    "Does not deploy the agent as-is",
+    "Explains that the core `Agent` does not read `CONDUCTOR_AGENT_LLM_MODEL` (it is an examples / OpenAI-compat `Runner` convention only)",
+    "Sets `model=\"openai/gpt-4o-mini\"` (or another valid `provider/model`) explicitly in the `Agent(...)` constructor",
+    "States the `provider/model` format requirement and that a bare model name such as `gpt-4o-mini` is rejected",
+    "Describes the provider key as configured on the Conductor server and verifies with `GET /api/providers/status` (or `conductor agent list` as a runtime check)",
+    "Cites F6 and/or Rule 11",
+    "If env-driven configuration is offered, the value is still passed explicitly to `Agent(model=...)` rather than relying on the SDK to pick up an env var"
+  ]
+}

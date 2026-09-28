@@ -1,0 +1,31 @@
+{
+  "name": "Expose a Conductor Workflow (With a HUMAN Task) as an A2A Server for a Partner and Prove It Works",
+  "skills": [
+    "conductor"
+  ],
+  "query": "A partner wants to call our `order_status` workflow — it has a HUMAN task for address confirmation — as an A2A agent from their own agent stack. What do I turn on, how do I register and expose it, where is the agent card, and how do I prove it works before handing them the URL? We're on a self-hosted server.",
+  "expected_behavior": [
+    "Step 1: Consult examples/agent-a2a-remote.md (section \"Expose a Conductor workflow (or deployed agent) as an A2A server\": `conductor.a2a.server.enabled=true`, base path `/api/a2a/workflow`, deployed agents at `/api/a2a/agent` when `agentspan.embedded=true`; register with `\"metadata\": {\"a2a\": {\"enabled\": true}}` via `POST /api/metadata/workflow?overwrite=true` because `conductor workflow create` drops `metadata`; card at `/api/a2a/workflow/<name>/.well-known/agent-card.json`; JSON-RPC `message/send`, `tasks/get`, `tasks/cancel`, `message/stream`; a HUMAN task surfaces as `input-required`), references/agents.md §12 (the same two gotchas), references/workflow-definition.md (`### AGENT` a2a mode, `### GET_AGENT_CARD`), references/cli-index.md (no `conductor deploy`), references/optimization.md F9 and D1.",
+    "Step 2: Server admin: set `conductor.a2a.server.enabled=true` (self-hosted: application property / `--conductor.a2a.server.enabled=true`); the A2A base path becomes `/api/a2a/workflow`; if they later want deployed agents exposed too, `/api/a2a/agent` additionally needs `agentspan.embedded=true`.",
+    "Step 3: Register with metadata: add `\"metadata\": {\"a2a\": {\"enabled\": true}}` to `order_status`'s definition and register it with `POST /api/metadata/workflow?overwrite=true` (via `python3 \"$CONDUCTOR_API\"` or the REST call) — `conductor workflow create` / `update` drop `metadata`, so the CLI path would silently leave it unexposed. Confirm with `GET /api/metadata/workflow/order_status` that `metadata.a2a.enabled` is present.",
+    "Step 3b: Input contract: the facade starts `order_status` with `_a2a_text` (the message text), `_a2a_message_id`, `_a2a_context_id`, plus any `data` parts merged into the input — so the workflow reads the request via `${workflow.input._a2a_text}` (or named keys the partner sends as a `data` part); the workflow's output is returned to the partner as the `workflow-output` artifact. Compiled Conductor Agents live at `/api/a2a/agent/<name>` because they expect `prompt`.",
+    "Step 4: Endpoints to hand the partner: agent card `GET <server>/api/a2a/workflow/order_status/.well-known/agent-card.json`; JSON-RPC `POST <server>/api/a2a/workflow/order_status` with `message/send`, `tasks/get`, `tasks/cancel`, `message/stream`.",
+    "Step 5: HITL: the `HUMAN` address-confirmation task surfaces to the caller as an A2A task in state `input-required`; the partner resumes by sending another message with the same `contextId` and `taskId`; when the HUMAN task completes the A2A task moves on to `completed`.",
+    "Step 6: Prove it from Conductor itself with a small verification workflow: `GET_AGENT_CARD {\"agentUrl\": \"<server>/api/a2a/workflow/order_status\"}` (→ `${card.output.agentCard}`), then `AGENT {\"agentType\": \"a2a\", \"agentUrl\": \"<server>/api/a2a/workflow/order_status\", \"text\": \"Where is order 123?\", \"pollIntervalSeconds\": 5, \"maxDurationSeconds\": 600}` (F9), a `value-param` SWITCH on `${ask.output.state}` with an `input-required` case that re-calls with `contextId` + `taskId`, `defaultCase: []`; write the JSON to a file, `conductor workflow create`, `conductor workflow start -w ... --sync`. For a localhost server add `conductor.a2a.client.allow-private-network=true`.",
+    "Step 7: Auth: the partner sends an `Authorization` header; in our own test the token comes from `${workflow.secrets.A2A_TOKEN}` (OSS: `CONDUCTOR_SECRET_A2A_TOKEN` env on the server) — never `${workflow.input.token}` (D1).",
+    "Step 8: Nothing to `conductor deploy` — exposure is a server property plus workflow metadata; `agentType` in the verification is `a2a` (never a framework name). Note the same procedure exposes a deployed Conductor Agent (its `model` is `provider/model`) at `/api/a2a/agent/<name>`."
+  ],
+  "success_criteria": [
+    "Names `conductor.a2a.server.enabled=true` and the base path `/api/a2a/workflow` (and `/api/a2a/agent` for deployed agents with `agentspan.embedded=true`)",
+    "The workflow definition carries `\"metadata\": {\"a2a\": {\"enabled\": true}}`",
+    "Registers through the REST metadata endpoint with overwrite (`POST /api/metadata/workflow?overwrite=true`, directly or via the skill's `conductor_api.py create-workflow`) and states that `conductor workflow create` drops `metadata`",
+    "Gives the agent card URL `/api/a2a/workflow/order_status/.well-known/agent-card.json`",
+    "Names the JSON-RPC entry point `POST /api/a2a/workflow/order_status` with `message/send` (naming `tasks/get`, `tasks/cancel`, `message/stream` as well is a plus)",
+    "States that the HUMAN task surfaces as `input-required` and that the partner resumes with the same `contextId` + `taskId`",
+    "Verification exercises the exposed agent before hand-off — either a Conductor workflow (`GET_AGENT_CARD` + `AGENT` with `agentType: \"a2a\"`, `agentUrl`, `maxDurationSeconds`, SWITCH on `state`) or direct calls to the agent-card URL and `message/send` — and checks the `input-required` round-trip",
+    "Never uses `conductor deploy`, and never uses a framework name as `agentType` (only `a2a` here, `conductor` for deployed agents)",
+    "Any token is referenced via `${workflow.secrets.X}` / headers — never `${workflow.input.*}` (D1) — and no secret value is echoed",
+    "If a verification workflow is used its JSON is written to a file before registration; if a deployed agent is exposed instead, its `model` is `provider/model` — N/A and passing when verification is script-based",
+    "States that the exposed workflow receives the message as `${workflow.input._a2a_text}` (with `data` parts merged into the input) or otherwise identifies how the A2A message maps onto the workflow's input"
+  ]
+}

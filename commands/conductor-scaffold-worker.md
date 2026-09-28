@@ -15,6 +15,6 @@ Scaffold a worker using the SDK pattern in [skills/conductor/references/workers.
    - The runner / poller setup.
    - **A comment noting the worker must be idempotent** — Conductor may redeliver on failure or timeout.
 4. **Show how to start it** — the actual command/entry point in that language.
-5. **Mention the worker gate.** If the workflow that uses this task type isn't registered yet, remind the user to register both the workflow and the task definition (`conductor taskDef create taskdef.json`) so the runtime knows about it.
+5. **Mention the worker gate.** If the workflow that uses this task type isn't registered yet, remind the user to register both the workflow and the task definition (`conductor task create taskdef.json`) so the runtime knows about it.
 
 If the user has a workflow JSON file or registered workflow handy, also offer to verify the task type appears as a SIMPLE task there.
