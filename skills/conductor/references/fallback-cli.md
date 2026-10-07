@@ -70,6 +70,7 @@ Auth: env vars as above, or `--profile <name>` to reuse a `conductor config save
 | Delete an integration | `python3 "$CONDUCTOR_API" integration-delete --name {name}` |
 | List / add / remove models | `python3 "$CONDUCTOR_API" model-list --provider {name}` · `model-save --provider {name} --model {id}` · `model-delete --provider {name} --model {id}` |
 | Register every model the key can use (live from the provider's API) | `python3 "$CONDUCTOR_API" model-sync --provider {name} --type openai --key-env OPENAI_API_KEY [--dry-run] [--include RE] [--exclude RE]` · list only: `provider-models --type openai --key-env OPENAI_API_KEY` |
+| Prompt templates (Enterprise LLM prompts by name) | `python3 "$CONDUCTOR_API" prompt-list` · `prompt-get --name {t}` · `prompt-save --name {t} --template-file {f} --model {integration}:{model}` · `prompt-delete --name {t}` |
 | Associate a prompt template | `python3 "$CONDUCTOR_API" prompt-associate --provider {name} --model {id} --prompt {template}` |
 | Grant / list access | `python3 "$CONDUCTOR_API" grant-access --subject-type group --subject-id {group} --target-id {name}` · `access-list --target-id {name}` |
 

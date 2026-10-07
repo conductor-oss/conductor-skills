@@ -35,12 +35,14 @@ Once installed, your AI agent can:
 - **Manage** workflows — pause, resume, terminate, retry, restart, rerun, skip-task, jump
 - **Signal** WAIT and HUMAN tasks for human-in-the-loop patterns
 - **Schedule** workflows on cron — schedules are part of OSS
-- **Write workers** in Python, JavaScript, Java, Go, C#, Ruby, or Rust
+- **Write workers** in Python, JavaScript / TypeScript, Java, or Go (built-in patterns), or C#, Ruby, and Rust from each official SDK's README
 - **Build agents** — scaffold, test, deploy, and invoke Conductor Agents with the SDK (Python, TypeScript, Java, C#) or bring a LangChain / LangGraph / OpenAI Agents / Google ADK / Vercel AI / Claude Agent SDK agent; call them from workflows with the `AGENT` task, with human-in-the-loop, multi-agent, scheduling, and evals; call remote A2A agents
 - **Visualize** workflows as Mermaid diagrams
-- **Review & optimize** existing workflows and agents against a checklist of 32 reliability / performance / security / structure / agent rules
+- **Review & optimize** existing workflows and agents against a checklist of 40 structure / reliability / performance / security / wrong-tool / agent rules
+- **Tell OSS from Orkes** — a server that requires auth is Orkes (Enterprise), one that doesn't is OSS; the skill checks before anything that differs between them
 - **Manage** secrets and webhooks (Orkes)
-- **Configure AI providers on Orkes** — create LLM / vector-DB integrations, register models and grant access, so `LLM_*` tasks work on an Orkes cluster
+- **Configure AI providers on Orkes** — create LLM / vector-DB integrations, register every model the provider key can use (discovered live from the provider), and grant access, so `LLM_*` tasks work on an Orkes cluster
+- **Manage prompt templates on Orkes** — LLM prompts are saved as named templates, associated with the models that may use them, and referenced by name from tasks (inline prompts need `allowRawPrompts`)
 
 On Claude Code, five slash commands give you direct entry points:
 
@@ -151,6 +153,7 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Save my Conductor server config as a profile called production"*
 - *"Switch to my staging Conductor profile"*
 - *"How many workflows in dev vs prod?"*
+- *"Is my server OSS or Orkes?"*
 
 **Create & run**
 - *"Create a workflow that calls the GitHub API to get open issues and sends a Slack notification"*
@@ -209,9 +212,9 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Create a RAG workflow that searches my Pinecone index and answers questions with sources"* ([example](skills/conductor/examples/llm-rag.md))
 - *"Build an autonomous agent loop that runs up to 10 think/act/observe iterations"* ([example](skills/conductor/examples/ai-agent-loop.md))
 - *"Add a HUMAN approval step before the agent calls any tool"*
-- *"Create a workflow that classifies support tickets with GPT-4o-mini and routes to the right queue"*
+- *"Create a workflow that classifies support tickets with an OpenAI model and routes to the right queue"*
 - *"Index this document into the knowledge base"* — using `LLM_INDEX_TEXT`
-- *"Generate an image from a prompt with DALL-E"* — using `GENERATE_IMAGE`
+- *"Generate an image from a prompt with OpenAI's image model"* — using `GENERATE_IMAGE`
 
 **Conductor Agents** *(or `/conductor-scaffold-agent`)*
 - *"Build a Python agent that looks up orders and issues refunds only after a human approves"*
@@ -238,7 +241,12 @@ After installing, try these prompts with your agent. Or run the slash command sh
 
 **Orkes only** — secrets, webhooks, AI integrations (Orkes Conductor required)
 - *"Save STRIPE_KEY as a secret"*
-- *"Set up OpenAI with gpt-4o-mini on our Orkes cluster using the key in OPENAI_API_KEY"*
+- *"Create an OpenAI integration on our Orkes cluster with the key in OPENAI_API_KEY and register all its models"*
+- *"Which AI integrations and models does our cluster have?"*
+- *"Give the data-science group access to the openai-prod integration"*
+- *"My LLM task works locally but fails on Orkes with 'integration not found' — fix it"*
+- *"Save this system prompt as a template for openai-prod:gpt-4o-mini and use it in ticket-summary"*
+- *"Why does Orkes say my prompt is not associated with integration openai-prod and model gpt-4o-mini?"*
 - *"Create a GitHub webhook that triggers github_pr_handler"*
 - *"List my webhooks"*
 
@@ -268,6 +276,7 @@ AI / LLM patterns:
 | Example | Description |
 |---------|-------------|
 | [Minimum LLM Workflow](skills/conductor/examples/llm-chat.md) | Single `LLM_CHAT_COMPLETE` — building block |
+| [Multi-turn Chaining](skills/conductor/examples/llm-chaining.md) | OpenAI / Azure Responses API turns linked with `previousResponseId` — no message-history resend |
 | [AI Agent with MCP Tools](skills/conductor/examples/ai-agent-mcp.md) | List tools → plan → call → summarize (the canonical first-AI-agent tutorial) |
 | [Autonomous Agent Loop](skills/conductor/examples/ai-agent-loop.md) | ReAct-pattern `DO_WHILE` loop until the LLM decides it's done |
 | [RAG — Retrieval Augmented Generation](skills/conductor/examples/llm-rag.md) | Vector search + grounded LLM answer with sources |
@@ -291,25 +300,30 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [Workflow Definition Schema](skills/conductor/references/workflow-definition.md) | Full JSON schema, every task type, expression syntax |
 | [GraalJS Gotchas](skills/conductor/references/graaljs-gotchas.md) | JS-evaluated task pitfalls — Java-Map proxies, `$.varName` rule, scope rules, IIFE convention for DO_WHILE |
 | [Template Resolution](skills/conductor/references/template-resolution.md) | `${...}` resolution pitfalls — missing-field-returns-parent, object → string `toString`, iteration paths |
-| [Writing Workers](skills/conductor/references/workers.md) | SDK examples in Python, JavaScript, Java, Go, C#, Ruby, Rust |
+| [Writing Workers](skills/conductor/references/workers.md) | Worker patterns for Python, JavaScript / TypeScript, Java, Go; official SDK repos for C#, Ruby, Rust |
 | [Conductor Agents](skills/conductor/references/agents.md) | Decision table, lifecycle verbs, `Agent` fields, tools, HITL contract, operations, hosted agents, testing, gotchas |
 | [Agent SDKs](skills/conductor/references/agent-sdks.md) | Per-language scaffolds and the framework-bridge matrix (LangChain, LangGraph, OpenAI Agents, ADK, Vercel AI, Claude Agent SDK, LangChain4j, Semantic Kernel) |
 | [API Reference](skills/conductor/references/api-reference.md) | REST endpoints for direct API access |
 | [Visualization](skills/conductor/references/visualization.md) | Mermaid mappings for every Conductor construct + UI link |
 | [Schedules](skills/conductor/references/schedules.md) | Cron schedules (OSS) — schema, format, idempotency patterns |
-| [Optimization Checklist](skills/conductor/references/optimization.md) | 32 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, and agents |
+| [Optimization Checklist](skills/conductor/references/optimization.md) | 40 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, wrong-tool, and agents |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
-| [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access (Orkes Conductor only) |
-| [Fallback CLI](skills/conductor/references/fallback-cli.md) | Python REST script equivalents when the CLI isn't available |
+| [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access, prompt templates (Orkes Conductor only) |
+| [Fallback CLI](skills/conductor/references/fallback-cli.md) | Bundled Python REST script — CLI equivalents when the CLI isn't available, plus agent and Orkes-integration verbs the CLI lacks |
 
 ## Evaluations
 
-The `evaluations/` directory contains automated test scenarios to validate the skill works correctly with your agent. See [evaluations/README.md](evaluations/README.md) for details.
+The `evaluations/` directory holds 86 scenario evals: an LLM gets the skill as context, answers a user request, and a judge model scores the answer against each eval's success criteria (an eval passes at ≥ 80% of its criteria). See [evaluations/README.md](evaluations/README.md) for details.
 
 ```bash
-python3 scripts/run_evals.py --verbose
+export ANTHROPIC_API_KEY=...                                  # agent + judge (OpenAI / Gemini models also supported)
+python3 scripts/run_evals.py                                  # all evals, 4 in parallel
+python3 scripts/run_evals.py evaluations/setup-flow.json -v   # one eval, verbose
+python3 scripts/run_evals.py --retries 0                      # strict: no re-sample of a failed eval
 ```
+
+A failed eval is re-sampled once by default; evals that pass only on the retry are listed as flaky. CI runs the suite in 5 shards (`.github/workflows/evals.yml`) on pushes to `main`, weekly, on demand, and on PRs labeled `run-evals`.
 
 ---
 
@@ -373,7 +387,11 @@ irm https://conductor-oss.github.io/conductor-skills/install.ps1 -OutFile instal
 
 **Windows (cmd)**
 ```cmd
+:: Remove a global install
 powershell -c "irm https://conductor-oss.github.io/conductor-skills/install.ps1 -OutFile install.ps1; .\install.ps1 -Agent <name> -Global -Uninstall"
+
+:: Remove a project-level install
+powershell -c "irm https://conductor-oss.github.io/conductor-skills/install.ps1 -OutFile install.ps1; .\install.ps1 -Agent <name> -Uninstall"
 ```
 
 ---
