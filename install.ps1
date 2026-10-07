@@ -37,6 +37,7 @@ $SKILL_FILES = @(
     "skills/conductor/references/graaljs-gotchas.md",
     "skills/conductor/references/optimization.md",
     "skills/conductor/references/orkes.md",
+    "skills/conductor/references/orkes-integrations.md",
     "skills/conductor/references/schedules.md",
     "skills/conductor/references/setup.md",
     "skills/conductor/references/template-resolution.md",

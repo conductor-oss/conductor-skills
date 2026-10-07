@@ -69,7 +69,7 @@ Treat the checklist as guidance — not every item applies to every workflow. A 
   - For long-running workflows where chain lifetime exceeds OpenAI's ~30-day `responseId` retention, recommend the accumulated-messages fallback ([../examples/ai-agent-loop.md](../examples/ai-agent-loop.md)) and downgrade to INFO when an explicit fallback path is present.
 - **B10. HTTP task hitting an LLM provider API — use the built-in LLM task instead.** Conductor ships first-class LLM tasks (`LLM_CHAT_COMPLETE`, `LLM_GENERATE_EMBEDDINGS`, `LLM_GENERATE_IMAGE`, `LLM_GENERATE_TTS`, `LLM_GENERATE_VIDEO`, `LLM_SEARCH_INDEX`). Hand-rolling the same call as an `HTTP` task to `api.openai.com` / `api.anthropic.com` / `generativelanguage.googleapis.com` / Vertex / Bedrock / Azure-OpenAI / Cohere / Mistral / Grok / Perplexity / HuggingFace / Ollama loses everything the built-in tasks give you: auth wiring, retries, token accounting, the `{role, message}` schema, `webSearch`/`codeInterpreter` built-in tools, `previousResponseId` chaining, `tools[]` function-calling, structured-output parsing (`jsonOutput` + `outputSchema`-driven retry), and a uniform `output.result` shape that downstream tasks can consume.
   - Severity: **CRITICAL** when an `HTTP` task's `http_request.uri` matches a known LLM-provider host (`*.openai.com`, `*.anthropic.com`, `generativelanguage.googleapis.com`, `*-aiplatform.googleapis.com`, `bedrock-runtime.*.amazonaws.com`, `*.openai.azure.com`, `api.cohere.ai`, `api.mistral.ai`, `api.x.ai`, `api.perplexity.ai`, `api-inference.huggingface.co`, `*.ollama.ai`, or any `/v1/chat/completions`, `/v1/messages`, `/v1/embeddings`, `/v1/responses` path on a non-Conductor host).
-  - Fix: replace the HTTP task with the matching `LLM_*` task. If the user says "the server doesn't have an Anthropic integration configured," the answer is to set `ANTHROPIC_API_KEY` (or the provider-equivalent env var) on the Conductor server, not to keep the HTTP task. Conductor auto-enables providers when the key is present.
+  - Fix: replace the HTTP task with the matching `LLM_*` task. If the user says "the server doesn't have an Anthropic integration configured," the answer on OSS is to set `ANTHROPIC_API_KEY` (or the provider-equivalent env var) on the Conductor server — Conductor auto-enables providers when the key is present; on Orkes it is to create the integration, register the model and grant access ([orkes-integrations.md](orkes-integrations.md)). Either way, not to keep the HTTP task.
   - Legitimate exceptions (downgrade to INFO with a one-line note): (a) the URL is a non-AI endpoint the provider happens to host (e.g. an admin/billing API); (b) the user has demonstrated a specific feature gap not yet exposed by the built-in task — name the missing field. Provider lock-in concerns ("we want to swap providers later") are *not* a reason for HTTP; that's exactly what `llmProvider` on the built-in task solves.
 
 ### C. Performance & complexity
@@ -189,7 +189,8 @@ CRITICAL (6)
         → Add `$.retry_loop['iteration'] < 10 &&` to loopCondition
   ✗ B10 HTTP task `call_claude` posts to https://api.anthropic.com/v1/messages
         → Replace with an LLM_CHAT_COMPLETE task (llmProvider: anthropic). Set
-          ANTHROPIC_API_KEY on the server if the integration isn't configured yet.
+          ANTHROPIC_API_KEY on the server (OSS) or create the Anthropic
+          integration + model (Orkes) if it isn't configured yet.
   ✗ D1  Workflow input `stripeKey` looks like a secret
         → Move to ${workflow.secrets.STRIPE_KEY} or worker env
   ✗ F1  AGENT `run_crawler`: agent maxTurns=100000, task has no maxDurationSeconds

@@ -125,4 +125,4 @@ Requires `agentspan.skills.enabled=true` on the server (off by default). A skill
 
 ## Enterprise (Orkes only)
 
-See [orkes.md](orkes.md) for `secret` and `webhook` commands.
+See [orkes.md](orkes.md) for `secret` and `webhook` commands. AI provider integrations, models and access have **no CLI command** — use the fallback verbs in [orkes-integrations.md](orkes-integrations.md).

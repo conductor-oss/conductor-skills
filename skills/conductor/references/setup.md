@@ -158,9 +158,9 @@ Examples:
 conductor workflow list
 ```
 
-If this succeeds, the server has no auth — go to Step 4.
+If this succeeds without credentials, the server has no auth — it is **OSS** — go to Step 4.
 
-If you get **401 or 403**, the server requires authentication. The same applies
+If you get **401 or 403**, the server requires authentication — it is **Enterprise (Orkes)**: set `CONDUCTOR_SERVER_TYPE=Enterprise`. (`python3 "$CONDUCTOR_API" server-info` makes the same check without sending credentials.) The same applies
 when the user explicitly says the target requires auth; an unauthenticated probe
 is then unnecessary.
 
@@ -188,7 +188,8 @@ Re-test: `conductor workflow list`
 > exchange automatically. An explicit `CONDUCTOR_AUTH_TOKEN` takes precedence.
 > The fallback keeps the exchanged token in memory only and never prints it.
 > These are **Conductor access** credentials only. LLM-provider keys
-> (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) live on the Conductor server, never
+> (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) live on the Conductor server (on
+> Orkes: in cluster integrations — [orkes-integrations.md](orkes-integrations.md)), never
 > in the client environment — say so when reporting the connection.
 
 If the user pasted a credential into chat, follow SKILL.md Rule 5: treat it as
@@ -213,6 +214,7 @@ python3 "$CONDUCTOR_API" providers-status          # which LLM providers have ke
 
 - `conductor server start` already passes `--conductor.integrations.ai.enabled=true --agentspan.embedded=true`, so a local server is ready.
 - A remote server needs `conductor.integrations.ai.enabled=true` (+ `agentspan.embedded=true`, `spring.main.allow-bean-definition-overriding=true`) and provider keys in **its** environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, …). Keys never go in agent code.
+- **Orkes (Enterprise):** LLM providers are cluster **integrations**, not server env vars — list them with `python3 "$CONDUCTOR_API" integration-list --category AI_MODEL` and create/extend them per [orkes-integrations.md](orkes-integrations.md). `conductor doctor` only inspects local env vars, not the cluster's integrations.
 - MCP / OpenAPI tool discovery is outbound deny-all: `conductor.ai.outbound.allowed-origins=https://tools.example.com` (`conductor.ai.outbound.allow-private-networks=true` for localhost in dev).
 - OSS secrets: `${workflow.secrets.NAME}` resolves from `CONDUCTOR_SECRET_NAME` env vars on the server (default `conductor.secrets.type=env`).
 - Symptom of a disabled runtime: an `AGENT` task with `agentType: "conductor"` fails with `AGENT requires 'agentUrl'`.

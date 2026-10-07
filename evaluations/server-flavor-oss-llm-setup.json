@@ -1,0 +1,21 @@
+{
+  "name": "OSS Server (No Auth) \u2014 Enable an LLM Provider Without Integration APIs",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Our Conductor runs at http://conductor.internal:8080/api \u2014 `conductor workflow list` works without any credentials. Set things up so our workflows can call Anthropic claude-sonnet-4-6.",
+  "expected_behavior": [
+    "Step 1: A server that answers without credentials is OSS (SKILL.md Rule 17) \u2014 optionally confirm with `python3 \"$CONDUCTOR_API\" server-info`",
+    "Step 2: On OSS, enable Anthropic by setting ANTHROPIC_API_KEY in the Conductor server's environment (and restarting it) \u2014 not in the client, not in workflow JSON",
+    "Step 3: Integration / model / access APIs are Orkes-only \u2014 do not run integration-save, model-sync or grant-access",
+    "Step 4: Use `llmProvider: anthropic` and `model: claude-sonnet-4-6` in an LLM_CHAT_COMPLETE task; verify with a one-task test workflow written to a file"
+  ],
+  "success_criteria": [
+    "Identifies the server as OSS because it requires no auth",
+    "Enables the provider by setting ANTHROPIC_API_KEY in the Conductor server's environment (with a restart), not in the client environment or workflow",
+    "Does not call or recommend Orkes integration APIs (`integration-save`, `model-sync`, `model-save`, `grant-access`, `/api/integrations/...`) for this server",
+    "Uses `llmProvider: anthropic` with `model: claude-sonnet-4-6`",
+    "Verifies with a test workflow whose JSON is written to a file before registration",
+    "Does not fall back to an HTTP task calling api.anthropic.com"
+  ]
+}

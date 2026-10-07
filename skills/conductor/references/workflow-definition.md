@@ -425,7 +425,7 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `llmProvider` | string (required) | e.g. `openai`, `anthropic`, `google_gemini`, `vertex_ai`, `azureopenai`, `bedrock`, `mistral`, `cohere`, `grok`, `perplexity`, `huggingface`, `ollama` |
+| `llmProvider` | string (required) | OSS: the provider name — `openai`, `anthropic`, `google_gemini`, `vertex_ai`, `azureopenai`, `bedrock`, `mistral`, `cohere`, `grok`, `perplexity`, `huggingface`, `ollama`. **Orkes: the integration name** configured on the cluster (e.g. `openai-prod`), with `model` registered under it — see [orkes-integrations.md](orkes-integrations.md) |
 | `model` | string (required) | provider-specific model ID |
 | `messages` | array (required) | `[{role, message}]` — note `message`, not `content` |
 | `instructions` | string | optional system instructions (alias for the legacy `prompt` field) |

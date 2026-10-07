@@ -2,6 +2,8 @@
 
 Webhooks and the managed secret store (with the `conductor secret` CLI) require Orkes Conductor (orkes.io). **`${workflow.secrets.X}` itself is not Orkes-only any more**: OSS Conductor resolves it from `CONDUCTOR_SECRET_X` environment variables on the server (`conductor.secrets.type=env`, the default), and servers with the agent runtime expose the store at `/api/secrets` (UI `/agentSecrets`) for agent `credentials=[...]` — see [agents.md](agents.md) §8. The Python fallback script has no secret commands.
 
+**AI providers on Orkes are integrations**, not server env vars: create the integration, register its models, grant access, and put the integration *name* in `llmProvider` — see [orkes-integrations.md](orkes-integrations.md).
+
 > Schedules used to live here — they're now part of OSS. See [schedules.md](schedules.md).
 
 Auth is the same as the rest of the CLI — see [setup.md](setup.md) (key/secret recommended).
@@ -53,5 +55,5 @@ After creation the CLI returns a webhook URL — give that to the user (don't fa
 
 ## Notes
 
-- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. If the user hits this, confirm they're pointed at an Orkes server. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
+- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. Check the flavor with `python3 "$CONDUCTOR_API" server-info` (auth required = Enterprise, none = OSS) before using them. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
 - For dev against Orkes, [developer.orkescloud.com](https://developer.orkescloud.com) is the public developer sandbox.

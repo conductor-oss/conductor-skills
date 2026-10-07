@@ -8,9 +8,12 @@ The fallback covers core CRUD and execution — not all CLI features. Limitation
   `CONDUCTOR_AUTH_KEY` + `CONDUCTOR_AUTH_SECRET` at `POST /api/token`. An
   explicit token takes precedence. The exchanged JWT remains in memory and is
   never printed.
-- **No profile support** — set `CONDUCTOR_SERVER_URL` directly. A root URL is
-  normalized to `/api`; an existing `/api` or custom non-root path is preserved.
-- **No server auto-detection** — `CONDUCTOR_SERVER_URL` is required.
+- **Server + profile:** set `CONDUCTOR_SERVER_URL`, or pass `--profile <name>`
+  (before or after the subcommand) to reuse a `conductor config save` profile's
+  server and key/secret — the script reads the file itself and never prints it;
+  env vars override profile values. A root URL is normalized to `/api`; an
+  existing `/api` or custom non-root path is preserved.
+- **No server auto-detection** — a server URL (env var or profile) is required.
 - **No task-definition CRUD** — cannot list/create/update/delete task definitions.
 - **No time-range search** — `search-workflows` accepts `--query` and `--status` only.
 - **No** `update-execution`, `restart --use-latest`, `rerun`, `skip-task`, `jump`, schedules, secrets, webhooks, server lifecycle.
@@ -53,5 +56,21 @@ The fallback covers core CRUD and execution — not all CLI features. Limitation
 | Answer a human gate | `conductor agent respond {id} --approve` | `python3 "$CONDUCTOR_API" agent-respond --id {id} --approve` / `--deny --reason "..."` / `--message "..."` |
 | Cancel | `conductor workflow terminate {id}` | `python3 "$CONDUCTOR_API" agent-cancel --id {id} --reason "..."` (`DELETE /agent/{id}/cancel`) |
 | Graceful stop | — | `python3 "$CONDUCTOR_API" agent-stop --id {id}` |
+
+## Orkes integrations (no CLI equivalent — use these even when the CLI is installed; see [orkes-integrations.md](orkes-integrations.md))
+
+Auth: env vars as above, or `--profile <name>` to reuse a `conductor config save` profile (read by the script, never printed). `*-env` flags take a variable **name**.
+
+| Verb | Fallback |
+|------|----------|
+| OSS or Enterprise? (auth required = Enterprise; no credentials sent) | `python3 "$CONDUCTOR_API" server-info` |
+| Integration types + config fields | `python3 "$CONDUCTOR_API" integration-defs --category AI_MODEL` |
+| List / get integrations (secrets masked) | `python3 "$CONDUCTOR_API" integration-list --category AI_MODEL` · `integration-get --name {name}` |
+| Create / update an integration | `python3 "$CONDUCTOR_API" integration-save --name {name} --type openai --config-env api_key=OPENAI_API_KEY` |
+| Delete an integration | `python3 "$CONDUCTOR_API" integration-delete --name {name}` |
+| List / add / remove models | `python3 "$CONDUCTOR_API" model-list --provider {name}` · `model-save --provider {name} --model {id}` · `model-delete --provider {name} --model {id}` |
+| Register every model the key can use (live from the provider's API) | `python3 "$CONDUCTOR_API" model-sync --provider {name} --type openai --key-env OPENAI_API_KEY [--dry-run] [--include RE] [--exclude RE]` · list only: `provider-models --type openai --key-env OPENAI_API_KEY` |
+| Associate a prompt template | `python3 "$CONDUCTOR_API" prompt-associate --provider {name} --model {id} --prompt {template}` |
+| Grant / list access | `python3 "$CONDUCTOR_API" grant-access --subject-type group --subject-id {group} --target-id {name}` · `access-list --target-id {name}` |
 
 For anything not in the tables (task-definition CRUD, schedules, secrets, SSE streaming, etc.), the user must install the CLI.
