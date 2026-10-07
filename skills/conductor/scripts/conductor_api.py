@@ -9,6 +9,7 @@ CONDUCTOR_AUTH_KEY + CONDUCTOR_AUTH_SECRET (exchanged at POST /api/token).
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -61,11 +62,30 @@ def exchange_auth_token(base, key, secret):
     return token
 
 
+def load_cli_profile(name):
+    """Read a `conductor config save --profile <name>` file (flat `key: value` YAML).
+    Values stay in memory and are never printed."""
+    path = os.path.expanduser(f"~/.conductor-cli/config-{name}.yaml")
+    if not os.path.exists(path):
+        print(f"Error: CLI profile {name!r} not found (see `conductor config list`).", file=sys.stderr)
+        sys.exit(1)
+    values = {}
+    with open(path) as f:
+        for line in f:
+            if ":" in line and not line.lstrip().startswith("#"):
+                k, v = line.split(":", 1)
+                values[k.strip()] = v.strip().strip("'\"")
+    return values
+
+
 def get_config():
-    base = normalize_server_url(os.environ.get("CONDUCTOR_SERVER_URL", ""))
+    # Environment variables win; a CLI profile (--profile / CONDUCTOR_PROFILE) fills the gaps.
+    profile_name = os.environ.get("CONDUCTOR_PROFILE", "").strip()
+    profile = load_cli_profile(profile_name) if profile_name else {}
+    base = normalize_server_url(os.environ.get("CONDUCTOR_SERVER_URL") or profile.get("server", ""))
     token = os.environ.get("CONDUCTOR_AUTH_TOKEN", "").strip()
-    key = os.environ.get("CONDUCTOR_AUTH_KEY", "")
-    secret = os.environ.get("CONDUCTOR_AUTH_SECRET", "")
+    key = os.environ.get("CONDUCTOR_AUTH_KEY") or profile.get("auth-key", "")
+    secret = os.environ.get("CONDUCTOR_AUTH_SECRET") or profile.get("auth-secret", "")
     if bool(key) != bool(secret):
         print(
             "Error: set both CONDUCTOR_AUTH_KEY and CONDUCTOR_AUTH_SECRET.",
@@ -464,6 +484,24 @@ def redact(data):
     return out
 
 
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def env_value(name, purpose):
+    """Read a secret from the env var NAME. A malformed name is probably an expanded value
+    (`$OPENAI_API_KEY` instead of `OPENAI_API_KEY`), so it is never echoed."""
+    if not name or not _ENV_NAME.match(name):
+        print(f"Error: {purpose} needs an environment variable NAME such as OPENAI_API_KEY — not its value "
+              "and not $NAME (the shell expands that). The value you passed was not printed.", file=sys.stderr)
+        sys.exit(1)
+    value = os.environ.get(name, "")
+    if not value:
+        # Don't echo the name either: an alphanumeric key pasted in its place would look like one.
+        print(f"Error: the environment variable named for {purpose} is not set (or is empty).", file=sys.stderr)
+        sys.exit(1)
+    return value
+
+
 def parse_pairs(pairs, flag):
     result = {}
     for pair in pairs or []:
@@ -512,20 +550,25 @@ def handle_integration_save(args):
     if args.config_file:
         with open(args.config_file) as f:
             configuration.update(json.load(f))
-    plain = parse_pairs(args.config, "--config")
-    for key in plain:
+    configuration.update(parse_pairs(args.config, "--config"))
+    for key in configuration:
         if any(h in key.lower() for h in _SECRET_HINTS):
-            print(f"Error: {key} looks secret; pass it with --config-env {key}=ENV_VAR, not on the command line.",
-                  file=sys.stderr)
+            print(f"Error: {key} looks secret; pass it with --config-env {key}=ENV_VAR_NAME, "
+                  "not in --config or --config-file.", file=sys.stderr)
             sys.exit(1)
-    configuration.update(plain)
     # Secret values come from environment variables named on the command line, never from argv.
     for key, env_name in parse_pairs(args.config_env, "--config-env").items():
-        value = os.environ.get(env_name, "")
-        if not value:
-            print(f"Error: environment variable {env_name} (for {key}) is not set.", file=sys.stderr)
-            sys.exit(1)
-        configuration[key] = value
+        configuration[key] = env_value(env_name, f"--config-env {key}")
+    # POST is create-or-update and replaces the whole configuration, so an update without the
+    # secrets would wipe them. Require an explicit --overwrite for an existing integration.
+    existing = request_json(build_url(base, "/integrations/provider"), token) or []
+    if isinstance(existing, dict):
+        existing = [existing]
+    if any(isinstance(e, dict) and e.get("name") == args.name for e in existing) and not args.overwrite:
+        print(f"Error: integration {args.name!r} already exists. Re-run with --overwrite to replace its "
+              "configuration — and pass every secret field again with --config-env, or it is cleared. "
+              "To add models to it, use model-save / model-sync instead.", file=sys.stderr)
+        sys.exit(1)
     body = {
         "type": args.type,
         "category": args.category,
@@ -578,7 +621,15 @@ PROVIDER_SOURCES = {
 # Orkes integration type -> provider catalog source.
 TYPE_TO_SOURCE = {"openai": "openai", "anthropic": "anthropic", "mistral": "mistral", "cohere": "cohere",
                   "grok": "xai", "ollama": "ollama", "google_gemini": "gemini", "gemini": "gemini"}
-DEFAULT_MODEL_EXCLUDE = r"^ft:|:ft-|^ft-"  # fine-tunes belong to one org; register them explicitly
+# Types whose models can't be listed with a plain key: look them up online and model-save each.
+NO_CATALOG_TYPES = {
+    "azure_openai": "models are your Azure deployment names — ask the user for them",
+    "vertex_ai": "look up current model ids on Google's Vertex AI models page",
+    "vertex_ai_gemini": "look up current model ids on Google's Vertex AI models page",
+    "perplexity": "look up current model ids on Perplexity's API models page",
+    "huggingface": "use the model ids the user deploys/uses on Hugging Face",
+}
+FINE_TUNES = r"^ft:|:ft-|^ft-"  # fine-tunes belong to one org; register them explicitly with model-save
 
 
 def fetch_provider_models(source, key_env, endpoint=None):
@@ -587,13 +638,11 @@ def fetch_provider_models(source, key_env, endpoint=None):
               "For other providers look the models up on the provider's docs and use model-save.", file=sys.stderr)
         sys.exit(1)
     default_base, path, auth, list_key, id_field = PROVIDER_SOURCES[source]
-    key = os.environ.get(key_env, "") if key_env else ""
-    if auth != "none" and not key:
-        print(f"Error: environment variable {key_env or '(none given)'} is not set; pass --key-env.", file=sys.stderr)
-        sys.exit(1)
+    key = env_value(key_env, "--key-env") if auth != "none" else ""
     base = (endpoint or default_base).rstrip("/")
-    if source == "openai" and base.endswith("/v1"):
-        base = base[:-3]
+    for suffix in ("/v1beta", "/v1"):  # list paths already carry the version
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
     headers = {"Accept": "application/json"}
     if auth == "bearer":
         headers["Authorization"] = f"Bearer {key}"
@@ -626,16 +675,25 @@ def fetch_provider_models(source, key_env, endpoint=None):
 
 
 def resolve_source(args):
-    source = args.source or TYPE_TO_SOURCE.get((args.type or "").lower())
+    kind = (args.type or "").lower()
+    if not args.source and (kind in NO_CATALOG_TYPES or kind.startswith("aws_bedrock")):
+        hint = NO_CATALOG_TYPES.get(kind, "look up current Bedrock model ids on AWS's supported-models page; "
+                                          "they must also be enabled in the account/region")
+        print(f"Error: {args.type} has no model-list API usable with a key: {hint}, then run model-save "
+              "for each id. Don't point --source at another provider.", file=sys.stderr)
+        sys.exit(1)
+    source = args.source or TYPE_TO_SOURCE.get(kind)
     if not source:
-        print("Error: pass --source (" + ", ".join(sorted(PROVIDER_SOURCES)) + ") for this provider type.",
+        print(f"Error: unknown --type {args.type!r}; pass --source (" + ", ".join(sorted(PROVIDER_SOURCES)) + ")"
+              " only if this integration really is that provider's API (e.g. gemini for a Gemini API key).",
               file=sys.stderr)
         sys.exit(1)
     return source
 
 
-def filter_models(models, include, exclude):
-    import re
+def filter_models(models, include, exclude, fine_tunes=False):
+    if not fine_tunes:
+        models = [m for m in models if not re.search(FINE_TUNES, m["id"])]
     if include:
         models = [m for m in models if re.search(include, m["id"])]
     if exclude:
@@ -645,22 +703,36 @@ def filter_models(models, include, exclude):
 
 def handle_provider_models(args):
     models = fetch_provider_models(resolve_source(args), args.key_env, args.endpoint)
-    output(filter_models(models, args.include, args.exclude))
+    output(filter_models(models, args.include, args.exclude, args.include_fine_tunes))
 
 
 def handle_model_sync(args):
     models = filter_models(fetch_provider_models(resolve_source(args), args.key_env, args.endpoint),
-                           args.include, args.exclude)
+                           args.include, args.exclude, args.include_fine_tunes)
     base, token = get_config()
+    # Fails fast (HTTP 404) when the integration doesn't exist yet — create it with integration-save first.
+    request_json(build_url(base, integration_path(args.provider)), token)
     existing = request_json(build_url(base, integration_path(args.provider) + "/integration"), token) or []
     have = {e.get("api") or e.get("name") for e in existing if isinstance(e, dict)}
     to_add = [m["id"] for m in models if m["id"] not in have]
+    added, failed = [], []
     if not args.dry_run:
         for model_id in to_add:
-            request_json(build_url(base, integration_path(args.provider, model_id)), token, method="POST",
-                         body={"enabled": True, "description": model_id}, expect_json=False)
-    output({"provider": args.provider, "dryRun": args.dry_run, "added" if not args.dry_run else "wouldAdd": to_add,
-            "alreadyRegistered": sorted(m["id"] for m in models if m["id"] in have)})
+            try:  # request_json exits on an HTTP error; keep going so one bad id doesn't stop the sync
+                request_json(build_url(base, integration_path(args.provider, model_id)), token, method="POST",
+                             body={"enabled": True, "description": model_id}, expect_json=False)
+                added.append(model_id)
+            except SystemExit:
+                failed.append(model_id)
+    result = {"provider": args.provider, "dryRun": args.dry_run,
+              "alreadyRegistered": sorted(m["id"] for m in models if m["id"] in have)}
+    if args.dry_run:
+        result["wouldAdd"] = to_add
+    else:
+        result["added"], result["failed"] = added, failed
+    output(result)
+    if failed:
+        sys.exit(1)
 
 
 def handle_model_delete(args):
@@ -701,6 +773,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Conductor REST API fallback (stdlib only)"
     )
+    parser.add_argument("--profile", default=None,
+                        help="use a `conductor config save` profile for server + auth (values never printed); env vars override it")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # -- Workflow metadata --
@@ -839,6 +913,8 @@ def main():
     p.add_argument("--config-env", action="append", default=[], metavar="KEY=ENV_VAR", help="secret configuration read from an env var, e.g. api_key=OPENAI_API_KEY")
     p.add_argument("--config-file", default=None, help="JSON file of non-secret configuration")
     p.add_argument("--disabled", action="store_true")
+    p.add_argument("--overwrite", action="store_true",
+                   help="replace an existing integration's whole configuration (re-supply secrets with --config-env)")
 
     p = sub.add_parser("integration-delete", help="Orkes: delete an integration provider")
     p.add_argument("--name", required=True)
@@ -860,7 +936,8 @@ def main():
     p.add_argument("--key-env", default=None, help="env var holding the provider key, e.g. OPENAI_API_KEY")
     p.add_argument("--endpoint", default=None, help="custom base URL (OpenAI-compatible gateway, Ollama host)")
     p.add_argument("--include", default=None, help="regex models must match")
-    p.add_argument("--exclude", default=DEFAULT_MODEL_EXCLUDE, help="regex of models to skip (default: fine-tunes)")
+    p.add_argument("--exclude", default=None, help="regex of models to skip (fine-tunes are always skipped)")
+    p.add_argument("--include-fine-tunes", action="store_true", help="also register ft:... fine-tuned models")
 
     p = sub.add_parser("model-sync", help="Orkes: register every model the provider key can use under an integration")
     p.add_argument("--provider", required=True, help="integration name")
@@ -869,7 +946,8 @@ def main():
     p.add_argument("--key-env", default=None, help="env var holding the provider key, e.g. OPENAI_API_KEY")
     p.add_argument("--endpoint", default=None)
     p.add_argument("--include", default=None, help="regex models must match")
-    p.add_argument("--exclude", default=DEFAULT_MODEL_EXCLUDE, help="regex of models to skip (default: fine-tunes)")
+    p.add_argument("--exclude", default=None, help="regex of models to skip (fine-tunes are always skipped)")
+    p.add_argument("--include-fine-tunes", action="store_true", help="also register ft:... fine-tuned models")
     p.add_argument("--dry-run", action="store_true", help="show what would be added")
 
     p = sub.add_parser("model-delete", help="Orkes: remove a model from an integration")
@@ -882,7 +960,7 @@ def main():
     p.add_argument("--prompt", required=True)
 
     p = sub.add_parser("grant-access", help="Orkes: grant a user/group/role access to a resource (POST /auth/authorization)")
-    p.add_argument("--subject-type", required=True, choices=["user", "group", "role"])
+    p.add_argument("--subject-type", required=True, type=str.upper, choices=["USER", "GROUP", "ROLE"])
     p.add_argument("--subject-id", required=True)
     p.add_argument("--target-type", default="INTEGRATION_PROVIDER")
     p.add_argument("--target-id", required=True, help="integration name for INTEGRATION_PROVIDER")
@@ -892,7 +970,21 @@ def main():
     p.add_argument("--target-type", default="INTEGRATION_PROVIDER")
     p.add_argument("--target-id", required=True)
 
-    args = parser.parse_args()
+    # Accept --profile before or after the subcommand (agents write it both ways).
+    argv, profile, i = [], None, 0
+    raw = sys.argv[1:]
+    while i < len(raw):
+        if raw[i] == "--profile" and i + 1 < len(raw):
+            profile, i = raw[i + 1], i + 2
+            continue
+        if raw[i].startswith("--profile="):
+            profile = raw[i].split("=", 1)[1]
+        else:
+            argv.append(raw[i])
+        i += 1
+    args = parser.parse_args(argv)
+    if profile:
+        os.environ["CONDUCTOR_PROFILE"] = profile
 
     handlers = {
         "list-workflows": handle_list_workflows,

@@ -8,9 +8,12 @@ The fallback covers core CRUD and execution — not all CLI features. Limitation
   `CONDUCTOR_AUTH_KEY` + `CONDUCTOR_AUTH_SECRET` at `POST /api/token`. An
   explicit token takes precedence. The exchanged JWT remains in memory and is
   never printed.
-- **No profile support** — set `CONDUCTOR_SERVER_URL` directly. A root URL is
-  normalized to `/api`; an existing `/api` or custom non-root path is preserved.
-- **No server auto-detection** — `CONDUCTOR_SERVER_URL` is required.
+- **Server + profile:** set `CONDUCTOR_SERVER_URL`, or pass `--profile <name>`
+  (before or after the subcommand) to reuse a `conductor config save` profile's
+  server and key/secret — the script reads the file itself and never prints it;
+  env vars override profile values. A root URL is normalized to `/api`; an
+  existing `/api` or custom non-root path is preserved.
+- **No server auto-detection** — a server URL (env var or profile) is required.
 - **No task-definition CRUD** — cannot list/create/update/delete task definitions.
 - **No time-range search** — `search-workflows` accepts `--query` and `--status` only.
 - **No** `update-execution`, `restart --use-latest`, `rerun`, `skip-task`, `jump`, schedules, secrets, webhooks, server lifecycle.
@@ -55,6 +58,8 @@ The fallback covers core CRUD and execution — not all CLI features. Limitation
 | Graceful stop | — | `python3 "$CONDUCTOR_API" agent-stop --id {id}` |
 
 ## Orkes integrations (no CLI equivalent — use these even when the CLI is installed; see [orkes-integrations.md](orkes-integrations.md))
+
+Auth: env vars as above, or `--profile <name>` to reuse a `conductor config save` profile (read by the script, never printed). `*-env` flags take a variable **name**.
 
 | Verb | Fallback |
 |------|----------|

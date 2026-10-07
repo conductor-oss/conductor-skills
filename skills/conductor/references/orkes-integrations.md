@@ -8,7 +8,7 @@ On **OSS** Conductor an LLM provider is enabled by putting its key in the server
 | Model (integration resource) | An exact provider model id registered under the integration, e.g. `gpt-4o-mini` | `model: "gpt-4o-mini"` |
 | Access | Permission for an application / group / role on the integration | none — missing access surfaces as a 403 / access error at run time |
 
-The `conductor` CLI has **no integration commands** (and `conductor doctor` only checks *local* env vars — it says nothing about the cluster's integrations). Use the bundled fallback script (`$CONDUCTOR_API`, see [fallback-cli.md](fallback-cli.md)) or the REST endpoints below. Same auth as everything else (`CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET`).
+The `conductor` CLI has **no integration commands** (and `conductor doctor` only checks *local* env vars — it says nothing about the cluster's integrations). Use the bundled script even when the CLI is installed: `export CONDUCTOR_API="<path-to-this-skill>/scripts/conductor_api.py"`. It authenticates from `CONDUCTOR_SERVER_URL` + `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET`, or from a saved CLI profile with `--profile <name>` (the script reads the profile itself and never prints it — you still never open the YAML). Every `*-env` flag takes an environment variable **name** (`OPENAI_API_KEY`), never `$OPENAI_API_KEY` or the value.
 
 ## 1. Check what exists — before writing any LLM task for Orkes
 
@@ -17,7 +17,9 @@ python3 "$CONDUCTOR_API" integration-list --category AI_MODEL     # names, types
 python3 "$CONDUCTOR_API" model-list --provider openai-prod          # models registered under one integration
 ```
 
-If a suitable integration and model already exist, **use their names** — don't create a parallel integration. Tell the user which names the workflow will use.
+- Suitable integration **and** model exist → use their names; tell the user which names the workflow will use.
+- Integration exists but lacks the model → add it to that integration (§3: `model-save` or `model-sync`); don't create a parallel integration.
+- Listing returns **403** → this application may not manage integrations; ask the user for the integration name to use (or for an admin to create it / grant rights) instead of guessing or creating one.
 
 ## 2. Create the integration (persistent change — confirm with the user first)
 
@@ -39,7 +41,7 @@ python3 "$CONDUCTOR_API" integration-save --name openai-prod --type openai \
 | `ollama` | `endpoint` |
 | Vector DBs (`--category VECTOR_DB`): `pineconedb`, `weaviatedb`, `pgvectordb`, `mongovectordb` | provider-specific; run `integration-defs --category VECTOR_DB` |
 
-For any type not listed, or to confirm field names on this cluster, run `python3 "$CONDUCTOR_API" integration-defs --category AI_MODEL` — it returns each type's configuration form fields. The `type` cannot be changed after creation; re-running `integration-save` with the same `--name` updates the integration.
+Secret-looking fields (`*key*`, `*secret*`, `*token*`, `*password*`, `*credential*`, `file`) are only accepted via `--config-env`, e.g. Vertex `--config-env file=VERTEX_SA_JSON` where the variable holds the service-account JSON. For any type not listed, or to confirm field names on this cluster, run `python3 "$CONDUCTOR_API" integration-defs --category AI_MODEL`. The `type` cannot be changed after creation. `integration-save` refuses an existing `--name`: `--overwrite` replaces the **whole** configuration, so pass every secret field again with `--config-env` or it is cleared.
 
 ## 3. Register the models — all of them, discovered live
 
@@ -52,7 +54,7 @@ python3 "$CONDUCTOR_API" model-sync --provider openai-prod --type openai --key-e
 python3 "$CONDUCTOR_API" model-sync --provider openai-prod --type openai --key-env OPENAI_API_KEY             # register all
 ```
 
-`model-sync` calls the provider's own list endpoint (the key is sent only there), skips models already registered and fine-tunes, and registers the rest. `--include` / `--exclude` take regexes when the user wants a subset (e.g. `--exclude '-[0-9]{4}-[0-9]{2}-[0-9]{2}$'` drops dated snapshots). `provider-models` prints the same list without touching Orkes. Custom gateways and Ollama hosts: `--endpoint <url>`.
+`model-sync` calls the provider's own list endpoint (the key is sent only there), skips models already registered and fine-tunes (`--include-fine-tunes` to keep them), registers the rest, and reports `added` / `failed`. The integration must exist first. `--include` / `--exclude` take regexes when the user wants a subset (e.g. `--exclude '-[0-9]{4}-[0-9]{2}-[0-9]{2}$'` drops dated snapshots). `provider-models` prints the same list without touching Orkes. Custom gateways and Ollama hosts: `--endpoint <url>`.
 
 **Providers without one** (`azure_openai` — models are the user's *deployment names*, ask for them; `aws_bedrock_*`, `vertex_ai*`, `perplexity`, `huggingface`): use **WebSearch / WebFetch** on the provider's official models page (e.g. "Amazon Bedrock supported models", "Vertex AI model garden Gemini models", "Perplexity API models") for the current model ids, show the list, then `model-save` each one. Bedrock ids must also be enabled in the user's AWS account/region.
 
@@ -91,6 +93,9 @@ Verify end to end with a one-task test workflow before wiring the real one.
 | LLM task fails with integration / provider not found | `llmProvider` is the provider *type* (`openai`) or a typo, not an existing integration name | `integration-list`, use the exact name |
 | Model not found / not enabled | Model not registered under that integration, or `--disabled` | `model-save` |
 | 403 / access denied on the LLM task | The running application has no access to the integration | §4 |
-| Integration endpoints return 404 | Server is OSS | OSS uses server env keys — see [setup.md](setup.md) Step 5 |
+| Integration endpoints return 404 | Server is OSS (or, for one name, that integration doesn't exist) | OSS uses server env keys — see [setup.md](setup.md) Step 5 |
+| `integration-list` returns 403 | This application can't manage integrations | Ask for the integration name to use, or an admin to create it / grant rights (§1) |
+| `integration-save`: "already exists" | Name taken | Use it (add models with `model-sync`), or `--overwrite` with all secrets re-supplied |
+| A `*-env` flag says the variable isn't set | Shell expanded `$VAR` into a value, or the variable isn't exported | Pass the bare name; ask the user to export it |
 
 Never work around a missing integration with an `HTTP` task to the provider API (rule B10) — create or fix the integration.

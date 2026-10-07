@@ -188,7 +188,8 @@ Re-test: `conductor workflow list`
 > exchange automatically. An explicit `CONDUCTOR_AUTH_TOKEN` takes precedence.
 > The fallback keeps the exchanged token in memory only and never prints it.
 > These are **Conductor access** credentials only. LLM-provider keys
-> (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) live on the Conductor server, never
+> (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) live on the Conductor server (on
+> Orkes: in cluster integrations — [orkes-integrations.md](orkes-integrations.md)), never
 > in the client environment — say so when reporting the connection.
 
 If the user pasted a credential into chat, follow SKILL.md Rule 5: treat it as
