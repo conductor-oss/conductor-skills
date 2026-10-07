@@ -20,6 +20,7 @@ These evaluations ensure the Conductor skill:
 - Builds, tests, deploys, invokes, observes, schedules, cancels, and reviews Conductor Agents — SDK-native (`Agent` + `@tool`, `run`/`deploy`/`serve`) or bring-your-framework (OpenAI Agents, LangGraph, LangChain, Google ADK, Vercel AI, LangChain4j, Claude Agent SDK, Semantic Kernel) — covering all nine multi-agent strategies, `agent_tool` / `scatter_gather` composition, memory, MCP / HTTP / OpenAPI tools, code-execution and CLI sandboxes, hosted Foundry / Bedrock agents, skill packages and A2A server exposure — wired into workflows via the `AGENT` / `CANCEL_AGENT` / `GET_AGENT_CARD` tasks, and refuses agent antipatterns (framework names as `agentType`, `agentName`, approval-via-resume, env-only model, `conductor deploy`, secrets in instructions, unbounded turns)
 - Schedules workflows on Quartz cron (an OSS feature)
 - Handles secrets correctly (`${workflow.secrets.X}` resolves on OSS via `CONDUCTOR_SECRET_*` server env; Orkes adds a managed store and the `conductor secret` CLI) and Orkes-only webhooks, without ever echoing secret values
+- Configures `LLM_CHAT_COMPLETE` provider/model integrations on Developer Edition / Orkes Enterprise via the Integrations API fallback (`integration-status` / `integration-create`) instead of the OSS-only server-env-var path
 
 ## Evaluation Files
 
@@ -263,6 +264,9 @@ A review request for `max_turns=100000`, "keep browsing until you have everythin
 
 ### orkes-secrets.json
 Tests Orkes secrets handling — recognizing the feature is Orkes-only, never echoing the secret value in chat or shell commands, confirming by name only, and showing the `${workflow.secrets.X}` reference syntax for use in workflow tasks.
+
+### orkes-llm-integration.json
+Tests configuring an `LLM_CHAT_COMPLETE` provider/model on Developer Edition — recognizing that the OSS fix (server env var) does not apply to a server the user doesn't administer, checking `integration-status` before assuming it's missing, registering it with `integration-create` (API key from an env var, never a CLI argument or echoed value), and not inventing a `conductor` CLI verb for an operation that has none.
 
 ## Running Evaluations
 

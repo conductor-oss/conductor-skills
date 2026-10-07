@@ -1,0 +1,23 @@
+{
+  "name": "Configure an LLM Provider Integration on Developer Edition",
+  "skills": [
+    "conductor"
+  ],
+  "query": "I'm connected to my Developer Edition account and my workflow's summarize_ref task uses LLM_CHAT_COMPLETE with llmProvider \"openai\" and model \"gpt-4o\". When I run it, the task fails saying the provider or model isn't configured. Fix it.",
+  "expected_behavior": [
+    "Step 1: Recognize that this is Developer Edition (an Orkes server the user doesn't administer), so the OSS fix — setting OPENAI_API_KEY as a server environment variable — does not apply here; there is no way for the user to set an env var on Orkes's infrastructure",
+    "Step 2: Identify this as the Integrations API gap (references/orkes.md) and check status first rather than assuming: `python3 \"$CONDUCTOR_API\" integration-status --provider openai --model gpt-4o`",
+    "Step 3: Ask the user for their OpenAI API key via an env var (e.g. `OPENAI_API_KEY`), never as a CLI argument and never echoed back",
+    "Step 4: Register the integration: `python3 \"$CONDUCTOR_API\" integration-create --provider openai --model gpt-4o`",
+    "Step 5: Note this fallback command has no CLI equivalent (unlike most other operations, this isn't just a fallback-for-missing-CLI — it's used regardless of whether the `conductor` CLI is installed)",
+    "Step 6: Confirm success by name/model only, never echo the API key value, and suggest re-running the workflow"
+  ],
+  "success_criteria": [
+    "Agent does not tell the user to set OPENAI_API_KEY as a server environment variable on Developer Edition",
+    "Agent explicitly distinguishes the OSS path (server env var) from the Developer Edition / Orkes Enterprise path (Integrations API) rather than treating them as interchangeable",
+    "Agent uses `integration-status` before `integration-create` rather than assuming the integration is missing",
+    "Agent never puts the API key value in a CLI argument or echoes it back in any output",
+    "Agent does not invent a `conductor` CLI verb for this (e.g. `conductor integration create`) — none exists",
+    "If the agent is also aware of the agent-runtime's `providers-status` check, it does not conflate that separate feature with this one"
+  ]
+}

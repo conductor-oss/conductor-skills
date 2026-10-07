@@ -1,6 +1,6 @@
 # Orkes Enterprise Features
 
-Webhooks and the managed secret store (with the `conductor secret` CLI) require Orkes Conductor (orkes.io). **`${workflow.secrets.X}` itself is not Orkes-only any more**: OSS Conductor resolves it from `CONDUCTOR_SECRET_X` environment variables on the server (`conductor.secrets.type=env`, the default), and servers with the agent runtime expose the store at `/api/secrets` (UI `/agentSecrets`) for agent `credentials=[...]` — see [agents.md](agents.md) §8. The Python fallback script has no secret commands.
+Webhooks, the managed secret store (with the `conductor secret` CLI), and AI model integrations (below) require Orkes Conductor (orkes.io). **`${workflow.secrets.X}` itself is not Orkes-only any more**: OSS Conductor resolves it from `CONDUCTOR_SECRET_X` environment variables on the server (`conductor.secrets.type=env`, the default), and servers with the agent runtime expose the store at `/api/secrets` (UI `/agentSecrets`) for agent `credentials=[...]` — see [agents.md](agents.md) §8. The Python fallback script has no secret commands, but does cover AI model integrations (below).
 
 > Schedules used to live here — they're now part of OSS. See [schedules.md](schedules.md).
 
@@ -50,6 +50,24 @@ Example `webhook.json`:
 ```
 
 After creation the CLI returns a webhook URL — give that to the user (don't fabricate one).
+
+## AI model integrations (`LLM_CHAT_COMPLETE` and friends)
+
+OSS auto-enables a provider when its key is a **server** env var (`OPENAI_API_KEY`, etc.). **No equivalent exists on Developer Edition or any Orkes server you don't administer** — register the provider/model per-account instead, via the Integrations API (separate from the agent-runtime's `providers-status`, §8 in [agents.md](agents.md)).
+
+No `conductor` CLI verb exists for this — always use the fallback script, even with the CLI installed:
+
+```bash
+export CONDUCTOR_API="<path-to-this-skill>/scripts/conductor_api.py"
+python3 "$CONDUCTOR_API" integration-status --provider openai --model gpt-4o   # check first
+
+export OPENAI_API_KEY="..."   # set outside the agent transcript, like any other credential
+python3 "$CONDUCTOR_API" integration-create --provider openai --model gpt-4o   # idempotent
+```
+
+Provider → env var: `openai` → `OPENAI_API_KEY`, `anthropic` → `ANTHROPIC_API_KEY`, `google_gemini` → `GEMINI_API_KEY`. One call per distinct `(provider, model)` pair in the workflow. A new provider means adding it to `PROVIDER_CONFIG` in `conductor_api.py` — ask the user for its endpoint and key convention, don't guess.
+
+Signature symptom: `LLM_CHAT_COMPLETE` fails saying the provider/model isn't found on a Developer Edition / Orkes target. Run `integration-status` before assuming the workflow is broken.
 
 ## Notes
 

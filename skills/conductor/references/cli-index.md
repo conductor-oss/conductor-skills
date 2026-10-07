@@ -126,3 +126,5 @@ Requires `agentspan.skills.enabled=true` on the server (off by default). A skill
 ## Enterprise (Orkes only)
 
 See [orkes.md](orkes.md) for `secret` and `webhook` commands.
+
+`LLM_CHAT_COMPLETE` provider setup on Developer Edition has no CLI verb — always use `python3 "$CONDUCTOR_API" integration-status|integration-create ...` (see [orkes.md](orkes.md#ai-model-integrations-llm_chat_complete-and-friends)).

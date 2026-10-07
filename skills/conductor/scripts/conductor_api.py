@@ -440,6 +440,90 @@ def handle_agent_stop(args):
     result = request_json(url, token, method="POST")
     output(result if result is not None else {"status": "stop-requested", "executionId": args.id})
 
+
+# ---------------------------------------------------------------------------
+# AI model integration handlers — Developer Edition / Orkes Enterprise only.
+# `LLM_CHAT_COMPLETE` and friends read their provider credentials from here,
+# not from a server env var (see references/orkes.md). No CLI equivalent.
+# ---------------------------------------------------------------------------
+
+PROVIDER_CONFIG = {
+    "openai":        {"key_var": "OPENAI_API_KEY",    "endpoint": "https://api.openai.com/v1/"},
+    "anthropic":     {"key_var": "ANTHROPIC_API_KEY", "endpoint": "https://api.anthropic.com"},
+    "google_gemini": {"key_var": "GEMINI_API_KEY",    "endpoint": ""},
+}
+
+
+def check_exists(base, token, path):
+    """GET a path; return True/False for 200/404, exit on any other error."""
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["X-Authorization"] = token
+    req = urllib.request.Request(build_url(base, path), headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30):
+            return True
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        body_text = ""
+        try:
+            body_text = e.read().decode()
+        except Exception:
+            pass
+        print(f"HTTP {e.code}: {e.reason}\n{body_text}", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Connection error: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_integration_status(args):
+    base, token = get_config()
+    provider_path = f"/integrations/provider/{urllib.parse.quote(args.provider)}"
+    provider_configured = check_exists(base, token, provider_path)
+    result = {"provider": args.provider, "configured": provider_configured}
+    if args.model:
+        model_path = f"{provider_path}/integration/{urllib.parse.quote(args.model)}"
+        result["model"] = args.model
+        result["modelConfigured"] = provider_configured and check_exists(base, token, model_path)
+    output(result)
+
+
+def handle_integration_create(args):
+    """Idempotent: create the provider and/or model only if not already present."""
+    cfg = PROVIDER_CONFIG[args.provider]
+    api_key = os.environ.get(cfg["key_var"], "")
+    if not api_key:
+        print(f"Error: {cfg['key_var']} is not set.", file=sys.stderr)
+        sys.exit(1)
+
+    base, token = get_config()
+    provider_path = f"/integrations/provider/{urllib.parse.quote(args.provider)}"
+
+    if check_exists(base, token, provider_path):
+        print(f"Provider already exists: {args.provider}")
+    else:
+        body = {
+            "category": "AI_MODEL",
+            "type": args.provider,
+            "enabled": True,
+            "configuration": {"api_key": api_key, "endpoint": cfg["endpoint"], "organizationId": ""},
+        }
+        request_json(build_url(base, provider_path), token, method="POST", body=body, expect_json=False)
+        print(f"Created provider: {args.provider}")
+
+    model_path = f"{provider_path}/integration/{urllib.parse.quote(args.model)}"
+    if check_exists(base, token, model_path):
+        print(f"Model already exists: {args.model}")
+    else:
+        body = {"description": args.model, "enabled": True, "configuration": {}}
+        request_json(build_url(base, model_path), token, method="POST", body=body, expect_json=False)
+        print(f"Added model: {args.model}")
+
+    print(f"Integration ready: {args.provider} / {args.model}")
+
+
 # ---------------------------------------------------------------------------
 # CLI definition
 # ---------------------------------------------------------------------------
@@ -566,6 +650,15 @@ def main():
     p = sub.add_parser("agent-stop", help="Request a graceful stop after the current iteration")
     p.add_argument("--id", required=True)
 
+    # -- AI model integrations (Developer Edition / Orkes Enterprise only) --
+    p = sub.add_parser("integration-status", help="Check whether a provider/model integration is configured (GET /integrations/provider/...)")
+    p.add_argument("--provider", required=True, choices=sorted(PROVIDER_CONFIG))
+    p.add_argument("--model", default=None)
+
+    p = sub.add_parser("integration-create", help="Register a provider + model integration from an env var API key (idempotent; see references/orkes.md)")
+    p.add_argument("--provider", required=True, choices=sorted(PROVIDER_CONFIG))
+    p.add_argument("--model", required=True)
+
     args = parser.parse_args()
 
     handlers = {
@@ -597,6 +690,8 @@ def main():
         "agent-respond": handle_agent_respond,
         "agent-cancel": handle_agent_cancel,
         "agent-stop": handle_agent_stop,
+        "integration-status": handle_integration_status,
+        "integration-create": handle_integration_create,
     }
 
     handler = handlers.get(args.command)

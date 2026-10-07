@@ -40,6 +40,7 @@ These show up in INLINE, DO_WHILE `loopCondition`, or SWITCH with a JS evaluator
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
+| Task fails saying the provider or model isn't found/configured, on Developer Edition or another Orkes server you don't administer | No server env var to set there — the OSS fix doesn't apply | `python3 "$CONDUCTOR_API" integration-status --provider {p} --model {m}`, then `integration-create` if missing. See [orkes.md](orkes.md#ai-model-integrations-llm_chat_complete-and-friends). |
 | `Content must not be null for SYSTEM or USER messages` | Used `{role, content}` (Anthropic/OpenAI shape) instead of `{role, message}` (Conductor shape). | Rename `content` → `message` in every message. |
 | Chat history contains `{role=user, message=Hello}` and the LLM replies with nonsense | A structured object was placed in the `message` field; Conductor Java-`toString`'d it on the way to the provider. | Ensure `message` is always a **string**. Stringify structured data upstream with `JSON_JQ_TRANSFORM` + `tojson`. |
 | Task fails with JSON parse error from Jackson when `jsonOutput: true` | The model emitted markdown fences (` ```json ... ``` `) and Conductor's strict parser rejected them. Common with Claude. | Use provider-native structured output (Anthropic tool-use, OpenAI JSON mode), or keep `jsonOutput: false` and substring-extract `{...}` downstream. |

@@ -54,4 +54,11 @@ The fallback covers core CRUD and execution — not all CLI features. Limitation
 | Cancel | `conductor workflow terminate {id}` | `python3 "$CONDUCTOR_API" agent-cancel --id {id} --reason "..."` (`DELETE /agent/{id}/cancel`) |
 | Graceful stop | — | `python3 "$CONDUCTOR_API" agent-stop --id {id}` |
 
+## AI model integration verbs (Developer Edition / Orkes only — no CLI equivalent)
+
+| Verb | Fallback |
+|------|----------|
+| Check integration status | `python3 "$CONDUCTOR_API" integration-status --provider {p} [--model {m}]` |
+| Register provider + model | `python3 "$CONDUCTOR_API" integration-create --provider {p} --model {m}` (idempotent, key from env var — [orkes.md](orkes.md#ai-model-integrations-llm_chat_complete-and-friends)) |
+
 For anything not in the tables (task-definition CRUD, schedules, secrets, SSE streaming, etc.), the user must install the CLI.
