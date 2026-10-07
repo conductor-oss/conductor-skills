@@ -55,5 +55,5 @@ After creation the CLI returns a webhook URL — give that to the user (don't fa
 
 ## Notes
 
-- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. If the user hits this, confirm they're pointed at an Orkes server. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
+- Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. Check the flavor with `python3 "$CONDUCTOR_API" server-info` (auth required = Enterprise, none = OSS) before using them. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
 - For dev against Orkes, [developer.orkescloud.com](https://developer.orkescloud.com) is the public developer sandbox.

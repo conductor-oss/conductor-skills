@@ -1,0 +1,21 @@
+{
+  "name": "Detect OSS vs Enterprise by Auth Before Setting Up an LLM Provider (Custom Domain)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Our Conductor server is at https://conductor.acme.internal/api. I want our workflows to use OpenAI gpt-4o-mini \u2014 set that up. My OpenAI key is exported as OPENAI_API_KEY.",
+  "expected_behavior": [
+    "Step 1: The hostname doesn't say whether this is OSS or Orkes, so determine it from the server (SKILL.md Rule 17): `python3 \"$CONDUCTOR_API\" server-info` (no credentials sent) or an unauthenticated `conductor workflow list`",
+    "Step 2: If auth is required (401/403) \u2192 Enterprise/Orkes: set CONDUCTOR_SERVER_TYPE=Enterprise, authenticate with injected key/secret, then follow the integration flow \u2014 integration-list, integration-save with --config-env api_key=OPENAI_API_KEY (after confirming), model-sync / model-save, access, and `llmProvider` = the integration name",
+    "Step 3: If no auth is required \u2192 OSS: OpenAI is enabled by setting OPENAI_API_KEY in the Conductor *server's* environment (restart the server), `llmProvider: openai`; integration APIs don't exist on OSS, so don't call them",
+    "Step 4: Verify with a one-task LLM_CHAT_COMPLETE test workflow written to a file"
+  ],
+  "success_criteria": [
+    "Determines OSS vs Enterprise from whether the server requires auth (`server-info`, or an unauthenticated request returning 401/403 vs success) before choosing a setup path",
+    "Does not decide the flavor from the hostname / URL alone",
+    "Enterprise branch: uses the integration flow (integration-save with the key from the env var, model registration, `llmProvider` = the integration name) and sets/mentions CONDUCTOR_SERVER_TYPE=Enterprise",
+    "OSS branch: sets OPENAI_API_KEY in the Conductor server's environment and uses `llmProvider: openai`, without calling integration APIs",
+    "The OpenAI key value never appears in chat or a command argument",
+    "Does not fall back to an HTTP task calling api.openai.com"
+  ]
+}

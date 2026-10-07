@@ -63,6 +63,7 @@ Auth: env vars as above, or `--profile <name>` to reuse a `conductor config save
 
 | Verb | Fallback |
 |------|----------|
+| OSS or Enterprise? (auth required = Enterprise; no credentials sent) | `python3 "$CONDUCTOR_API" server-info` |
 | Integration types + config fields | `python3 "$CONDUCTOR_API" integration-defs --category AI_MODEL` |
 | List / get integrations (secrets masked) | `python3 "$CONDUCTOR_API" integration-list --category AI_MODEL` · `integration-get --name {name}` |
 | Create / update an integration | `python3 "$CONDUCTOR_API" integration-save --name {name} --type openai --config-env api_key=OPENAI_API_KEY` |

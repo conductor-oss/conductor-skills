@@ -1,6 +1,6 @@
 # Orkes Integrations — AI Providers, Models and Access
 
-On **OSS** Conductor an LLM provider is enabled by putting its key in the server's environment (`OPENAI_API_KEY`, …) and `llmProvider` is the provider name (`openai`). On **Orkes Conductor** (Enterprise — `*.orkesconductor.*`, `developer.orkescloud.com`, `CONDUCTOR_SERVER_TYPE=Enterprise`) that is not how it works: every provider is a named **integration** on the cluster, every model must be **registered under that integration**, and the calling application needs **access** to it. Skip any of the three and `LLM_*` tasks fail even though the workflow JSON is valid.
+On **OSS** Conductor an LLM provider is enabled by putting its key in the server's environment (`OPENAI_API_KEY`, …) and `llmProvider` is the provider name (`openai`). On **Orkes Conductor** (Enterprise — the server **requires auth**; check with `python3 "$CONDUCTOR_API" server-info`, SKILL.md Rule 17) that is not how it works: every provider is a named **integration** on the cluster, every model must be **registered under that integration**, and the calling application needs **access** to it. Skip any of the three and `LLM_*` tasks fail even though the workflow JSON is valid.
 
 | Concept | What it is | Where it shows up in a task |
 |---|---|---|
@@ -93,7 +93,7 @@ Verify end to end with a one-task test workflow before wiring the real one.
 | LLM task fails with integration / provider not found | `llmProvider` is the provider *type* (`openai`) or a typo, not an existing integration name | `integration-list`, use the exact name |
 | Model not found / not enabled | Model not registered under that integration, or `--disabled` | `model-save` |
 | 403 / access denied on the LLM task | The running application has no access to the integration | §4 |
-| Integration endpoints return 404 | Server is OSS (or, for one name, that integration doesn't exist) | OSS uses server env keys — see [setup.md](setup.md) Step 5 |
+| "this server does not require auth, so it is OSS" / integration endpoints 404 | Server is OSS — integration APIs don't exist there (a 404 for one name on Enterprise = that integration doesn't exist) | OSS uses server env keys — see [setup.md](setup.md) Step 5 |
 | `integration-list` returns 403 | This application can't manage integrations | Ask for the integration name to use, or an admin to create it / grant rights (§1) |
 | `integration-save`: "already exists" | Name taken | Use it (add models with `model-sync`), or `--overwrite` with all secrets re-supplied |
 | A `*-env` flag says the variable isn't set | Shell expanded `$VAR` into a value, or the variable isn't exported | Pass the bare name; ask the user to export it |

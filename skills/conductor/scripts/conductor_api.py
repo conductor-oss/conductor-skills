@@ -78,10 +78,47 @@ def load_cli_profile(name):
     return values
 
 
+def active_profile():
+    profile_name = os.environ.get("CONDUCTOR_PROFILE", "").strip()
+    return load_cli_profile(profile_name) if profile_name else {}
+
+
+def get_base_url():
+    return normalize_server_url(os.environ.get("CONDUCTOR_SERVER_URL") or active_profile().get("server", ""))
+
+
+def detect_flavor(base):
+    """Enterprise (Orkes) servers require auth; OSS servers don't. Probe without credentials
+    a path that doesn't exist: OSS answers 404 (no auth layer), Enterprise answers 401/403."""
+    req = urllib.request.Request(build_url(base, "/metadata/workflow/__conductor_skill_probe__"),
+                                 headers={"Accept": "application/json"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            code = resp.status
+    except urllib.error.HTTPError as e:
+        code = e.code
+    except urllib.error.URLError as e:
+        return {"server": base, "reachable": False, "error": str(e.reason)}
+    if code in (401, 403):
+        return {"server": base, "reachable": True, "authRequired": True, "flavor": "Enterprise", "probeStatus": code}
+    if code in (200, 204, 404):
+        return {"server": base, "reachable": True, "authRequired": False, "flavor": "OSS", "probeStatus": code}
+    return {"server": base, "reachable": True, "authRequired": None, "flavor": "unknown", "probeStatus": code}
+
+
+def require_enterprise():
+    """Integration APIs exist only on Enterprise (Orkes); fail clearly on OSS instead of a bare 404."""
+    info = detect_flavor(get_base_url())
+    if info.get("flavor") == "OSS":
+        print("Error: this server does not require auth, so it is OSS Conductor — integration APIs are "
+              "Enterprise (Orkes) only. On OSS, enable a provider by setting its key (e.g. OPENAI_API_KEY) "
+              "in the Conductor server's environment, and use the provider name in llmProvider.", file=sys.stderr)
+        sys.exit(1)
+
+
 def get_config():
     # Environment variables win; a CLI profile (--profile / CONDUCTOR_PROFILE) fills the gaps.
-    profile_name = os.environ.get("CONDUCTOR_PROFILE", "").strip()
-    profile = load_cli_profile(profile_name) if profile_name else {}
+    profile = active_profile()
     base = normalize_server_url(os.environ.get("CONDUCTOR_SERVER_URL") or profile.get("server", ""))
     token = os.environ.get("CONDUCTOR_AUTH_TOKEN", "").strip()
     key = os.environ.get("CONDUCTOR_AUTH_KEY") or profile.get("auth-key", "")
@@ -520,7 +557,21 @@ def integration_path(name, model=None):
     return path
 
 
+def handle_server_info(args):
+    info = detect_flavor(get_base_url())
+    if info.get("flavor") == "Enterprise":
+        info["next"] = ("Orkes/Enterprise: set CONDUCTOR_SERVER_TYPE=Enterprise, authenticate with key/secret; "
+                        "AI providers are integrations (references/orkes-integrations.md)")
+    elif info.get("flavor") == "OSS":
+        info["next"] = ("OSS: no auth needed; AI providers are enabled by keys in the server environment; "
+                        "integration, secret-store and webhook APIs are not available")
+    output(info)
+    if not info.get("reachable"):
+        sys.exit(1)
+
+
 def handle_integration_defs(args):
+    require_enterprise()
     base, token = get_config()
     result = request_json(build_url(base, "/integrations/def"), token)
     if args.category and isinstance(result, list):
@@ -529,6 +580,7 @@ def handle_integration_defs(args):
 
 
 def handle_integration_list(args):
+    require_enterprise()
     base, token = get_config()
     params = {"activeOnly": "true"} if args.active_only else None
     result = request_json(build_url(base, "/integrations/provider", params), token) or []
@@ -540,11 +592,13 @@ def handle_integration_list(args):
 
 
 def handle_integration_get(args):
+    require_enterprise()
     base, token = get_config()
     output(redact(request_json(build_url(base, integration_path(args.name)), token)))
 
 
 def handle_integration_save(args):
+    require_enterprise()
     base, token = get_config()
     configuration = {}
     if args.config_file:
@@ -582,12 +636,14 @@ def handle_integration_save(args):
 
 
 def handle_integration_delete(args):
+    require_enterprise()
     base, token = get_config()
     request_json(build_url(base, integration_path(args.name)), token, method="DELETE", expect_json=False)
     print(f"Integration {args.name} deleted.")
 
 
 def handle_model_list(args):
+    require_enterprise()
     base, token = get_config()
     params = {"activeOnly": "true"} if args.active_only else None
     url = build_url(base, integration_path(args.provider) + "/integration", params)
@@ -595,6 +651,7 @@ def handle_model_list(args):
 
 
 def handle_model_save(args):
+    require_enterprise()
     base, token = get_config()
     body = {"enabled": not args.disabled, "description": args.description or args.model}
     if args.max_tokens:
@@ -707,6 +764,7 @@ def handle_provider_models(args):
 
 
 def handle_model_sync(args):
+    require_enterprise()
     models = filter_models(fetch_provider_models(resolve_source(args), args.key_env, args.endpoint),
                            args.include, args.exclude, args.include_fine_tunes)
     base, token = get_config()
@@ -736,6 +794,7 @@ def handle_model_sync(args):
 
 
 def handle_model_delete(args):
+    require_enterprise()
     base, token = get_config()
     request_json(build_url(base, integration_path(args.provider, args.model)), token,
                  method="DELETE", expect_json=False)
@@ -743,6 +802,7 @@ def handle_model_delete(args):
 
 
 def handle_prompt_associate(args):
+    require_enterprise()
     base, token = get_config()
     path = integration_path(args.provider, args.model) + f"/prompt/{urllib.parse.quote(args.prompt, safe='')}"
     request_json(build_url(base, path), token, method="POST", expect_json=False)
@@ -750,6 +810,7 @@ def handle_prompt_associate(args):
 
 
 def handle_grant_access(args):
+    require_enterprise()
     base, token = get_config()
     body = {
         "subject": {"type": args.subject_type, "id": args.subject_id},
@@ -761,6 +822,7 @@ def handle_grant_access(args):
 
 
 def handle_access_list(args):
+    require_enterprise()
     base, token = get_config()
     path = f"/auth/authorization/{urllib.parse.quote(args.target_type)}/{urllib.parse.quote(args.target_id, safe='')}"
     output(request_json(build_url(base, path), token))
@@ -893,6 +955,8 @@ def main():
     p = sub.add_parser("agent-stop", help="Request a graceful stop after the current iteration")
     p.add_argument("--id", required=True)
 
+    sub.add_parser("server-info", help="OSS or Enterprise (Orkes)? Probes whether the server requires auth (no credentials sent)")
+
     # -- Orkes integrations (references/orkes-integrations.md) --
     p = sub.add_parser("integration-defs", help="Orkes: integration types and their configuration fields (GET /integrations/def)")
     p.add_argument("--category", default=None, help="AI_MODEL, VECTOR_DB, ...")
@@ -1015,6 +1079,7 @@ def main():
         "agent-respond": handle_agent_respond,
         "agent-cancel": handle_agent_cancel,
         "agent-stop": handle_agent_stop,
+        "server-info": handle_server_info,
         "integration-defs": handle_integration_defs,
         "integration-list": handle_integration_list,
         "integration-get": handle_integration_get,

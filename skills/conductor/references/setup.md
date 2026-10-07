@@ -158,9 +158,9 @@ Examples:
 conductor workflow list
 ```
 
-If this succeeds, the server has no auth — go to Step 4.
+If this succeeds without credentials, the server has no auth — it is **OSS** — go to Step 4.
 
-If you get **401 or 403**, the server requires authentication. The same applies
+If you get **401 or 403**, the server requires authentication — it is **Enterprise (Orkes)**: set `CONDUCTOR_SERVER_TYPE=Enterprise`. (`python3 "$CONDUCTOR_API" server-info` makes the same check without sending credentials.) The same applies
 when the user explicitly says the target requires auth; an unauthenticated probe
 is then unnecessary.
 
