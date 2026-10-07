@@ -114,7 +114,7 @@ Anything else (run, status, schedule, pause, retry, signal, visualize, create, r
 
 If the user has nothing set up, walk them through the default two-profile flow in **[references/setup.md](references/setup.md)**. Honor an explicit local-only or remote-only request instead.
 
-**User names a server URL**: (1) `export CONDUCTOR_SERVER_URL=<url>` (`/api` appended only to a bare root); (2) probe **without credentials** — `conductor workflow list`; (3) only on 401/403 (or user-stated auth) ask them to inject `CONDUCTOR_AUTH_KEY`/`_SECRET` (or `_TOKEN`) via shell / secret store — never chat or CLI args — and check names only; (4) re-run the probe; (5) *then* offer interactive `conductor config save --profile <name>`, noting these are Conductor access credentials — LLM-provider keys stay on the server. No credentials or `config save` before the unauthenticated probe.
+**User names a server URL**: (1) `export CONDUCTOR_SERVER_URL=<url>` (`/api` appended only to a bare root); (2) probe **without credentials** — `conductor workflow list`; (3) only on 401/403 (or user-stated auth) ask them to inject `CONDUCTOR_AUTH_KEY`/`_SECRET` (or `_TOKEN`) via shell / secret store — never chat or CLI args — and check names only; (4) re-run the probe; (5) *then* offer interactive `conductor config save --profile <name>` and confirm it with `conductor config list` (never the YAML). Always say: these are Conductor access credentials — LLM-provider keys stay on the server; without the CLI, `scripts/conductor_api.py` exchanges key + secret at `POST /api/token` in memory. No credentials or `config save` before the unauthenticated probe.
 
 To verify a working environment:
 
