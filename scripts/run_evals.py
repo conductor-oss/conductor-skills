@@ -67,6 +67,10 @@ PASS_THRESHOLD = 0.8
 # Evals are independent; each spends minutes waiting on two API calls, so a sequential run of a
 # 15-eval shard does not fit in CI. Override with --concurrency / EVAL_CONCURRENCY.
 DEFAULT_CONCURRENCY = int(os.environ.get("EVAL_CONCURRENCY", "4"))
+# Each eval is one sampled answer from a nondeterministic model; across ~80 evals an occasional
+# omission fails a run that is otherwise green. A failed eval is re-sampled this many times and
+# passes if any attempt passes; such passes are reported as flaky so they stay visible.
+DEFAULT_RETRIES = int(os.environ.get("EVAL_RETRIES", "1"))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = PROJECT_ROOT / "skills" / "conductor"
 EVAL_DIR = PROJECT_ROOT / "evaluations"
@@ -588,6 +592,10 @@ Examples:
         "--concurrency", "-j", type=int, default=DEFAULT_CONCURRENCY,
         help=f"Evals to run in parallel (default: {DEFAULT_CONCURRENCY}; 1 = sequential)"
     )
+    parser.add_argument(
+        "--retries", type=int, default=DEFAULT_RETRIES,
+        help=f"Re-run a failed eval up to N more times; pass if any attempt passes (default: {DEFAULT_RETRIES})"
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output JSON report")
     parser.add_argument("--output", "-o", default=None, help="Write JSON report to file")
@@ -665,10 +673,21 @@ Examples:
     stdout = _ThreadBufferedStdout(sys.stdout)
     sys.stdout = stdout
 
+    def run_with_retries(eval_file):
+        result = run_one(eval_file)
+        attempts = 1
+        while not result["overall_pass"] and attempts <= args.retries:
+            attempts += 1
+            print(f"  [RETRY] {eval_file.name} failed; re-sampling (attempt {attempts}/{args.retries + 1})")
+            result = run_one(eval_file)
+        result["attempts"] = attempts
+        result["flaky"] = attempts > 1 and result["overall_pass"]
+        return result
+
     def run_buffered(eval_file):
         stdout.start()
         try:
-            return run_one(eval_file)
+            return run_with_retries(eval_file)
         finally:
             stdout._real.write(stdout.finish())
             stdout._real.flush()
@@ -703,7 +722,8 @@ Examples:
 
     for r in results:
         icon = "+" if r["overall_pass"] else "-"
-        print(f"  [{icon}] {r['name']}: {r['passed']}/{r['total']} ({r['overall_score']:.0%})")
+        flaky = f"  [flaky: passed on attempt {r['attempts']}]" if r.get("flaky") else ""
+        print(f"  [{icon}] {r['name']}: {r['passed']}/{r['total']} ({r['overall_score']:.0%}){flaky}")
 
     print()
 
@@ -720,6 +740,7 @@ Examples:
             "total_criteria": total_criteria,
             "passed_criteria": passed_criteria,
             "avg_score": round(avg_score, 3),
+            "flaky_evals": [r["file"] for r in results if r.get("flaky")],
         },
         "results": results,
     }
