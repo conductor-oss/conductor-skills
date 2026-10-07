@@ -82,6 +82,8 @@ Single model: `python3 "$CONDUCTOR_API" model-save --provider openai-prod --mode
 }
 ```
 
+**Agents:** a Conductor Agent's `model="<provider>/<model>"` compiles to `llmProvider: "<provider>"`, so on Orkes the prefix must be an **integration name** with that model registered (e.g. `openai/gpt-4o-mini` → integration `openai`). Agent instructions travel in `messages`, so §6's template check doesn't apply to them.
+
 Same rule for every `LLM_*` task; for `LLM_INDEX_TEXT` / `LLM_SEARCH_INDEX`, `vectorDB` is the vector integration name, `index` a registered index, and `embeddingModelProvider` / `embeddingModel` an AI integration name + registered embedding model. Prompt text in `instructions` / `promptName` / image `prompt` follows §6 — a saved template by name, or `allowRawPrompts: true`.
 
 Verify end to end with a one-task test workflow before wiring the real one.
@@ -118,6 +120,8 @@ On Enterprise the server treats a task's prompt field as the **name of a saved p
 ```
 
 `LLM_TEXT_COMPLETE` uses `"promptName": "ticket_summary"` the same way.
+
+With `jsonOutput: true` on OpenAI models, the word **JSON must also appear in a `messages` entry** (e.g. *"…reply in JSON. Ticket: ${workflow.input.ticket}"*): the template is sent as the Responses API's `instructions`, which OpenAI's JSON-mode check ignores, so a template that says "JSON" alone fails with *"Response input messages must contain the word 'json'…"*.
 
 **`${var}` placeholders only work inside a saved template.** In workflow JSON, `${...}` is a Conductor expression: `"instructions": "Summarize ${ticket}"` fails registration (*"taskReferenceName: ticket … is not defined in workflow definition"*). Inline text must use real expressions (`${workflow.input.ticket}`), not template placeholders.
 
