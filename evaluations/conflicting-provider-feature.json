@@ -1,7 +1,7 @@
 {
   "name": "Conflicting Requirements — Anthropic Provider with Gemini-Only Feature",
   "skills": ["conductor"],
-  "query": "I want a Conductor workflow that calls Claude (`claude-sonnet-4-20250514`) with `googleSearchRetrieval: true` so it can ground its answers in Google Search results. Set it up.",
+  "query": "I want a Conductor workflow that calls Claude (`claude-sonnet-4-6`) with `googleSearchRetrieval: true` so it can ground its answers in Google Search results. Set it up.",
   "expected_behavior": [
     "Step 1: Catch the conflict before generating the workflow. `googleSearchRetrieval` is a **Gemini-only** field (per references/workflow-definition.md and examples/llm-chat.md's built-in-tools table). It is silently ignored on Anthropic.",
     "Step 2: Explain the conflict to the user in one or two sentences, plainly: 'You've combined an Anthropic model with a Gemini-only field. Anthropic doesn't support googleSearchRetrieval — the field will be silently dropped and Claude will answer without web grounding.'",

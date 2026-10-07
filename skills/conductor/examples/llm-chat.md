@@ -122,7 +122,7 @@ Use `thinkingTokenLimit` or `reasoningEffort` when the problem benefits from del
   "type": "LLM_CHAT_COMPLETE",
   "inputParameters": {
     "llmProvider": "anthropic",
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-sonnet-4-6",
     "messages": [{"role": "user", "message": "${workflow.input.problem}"}],
     "thinkingTokenLimit": 10000,
     "maxTokens": 16000,

@@ -284,7 +284,7 @@ python3 scripts/run_evals.py --model gemini-2.5-pro
 python3 scripts/run_evals.py --provider openai --model ft:gpt-4o:my-org
 
 # Use different providers for agent vs judge
-python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-4-20250514
+python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-4-6
 
 # Run a specific eval
 python3 scripts/run_evals.py evaluations/profile-switching.json
@@ -295,8 +295,15 @@ python3 scripts/run_evals.py --verbose
 # Save JSON report
 python3 scripts/run_evals.py --json --output report.json
 
+# Run 8 evals in parallel (default 4; 1 = sequential)
+python3 scripts/run_evals.py --concurrency 8
+
+# Re-sample a failed eval before failing it (default 1; 0 = strict single sample).
+# Evals that pass only on a retry are listed as flaky in the summary and report.
+python3 scripts/run_evals.py --retries 0
+
 # Compare across providers
-python3 scripts/run_evals.py --model claude-sonnet-4-20250514 -o anthropic.json
+python3 scripts/run_evals.py --model claude-sonnet-4-6 -o anthropic.json
 python3 scripts/run_evals.py --model gpt-4o -o openai.json
 python3 scripts/run_evals.py --model gemini-2.5-pro -o gemini.json
 ```

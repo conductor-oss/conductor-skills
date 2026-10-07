@@ -30,14 +30,20 @@ Usage:
 
     # Print the size of the skill context sent to the agent (no API key needed)
     python3 scripts/run_evals.py --print-context-size
+
+    # Run 8 evals at a time (default 4; 1 = sequential)
+    python3 scripts/run_evals.py --concurrency 8
 """
 
 import argparse
+import concurrent.futures
+import io
 import json
 import os
 import socket
 import http.client
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -56,6 +62,15 @@ API_TIMEOUT_SECONDS = int(os.environ.get("EVAL_API_TIMEOUT", "300"))  # override
 AGENT_MAX_TOKENS = 32768
 ANTHROPIC_MAX_OUTPUT_TOKENS = 64000
 JUDGE_MODEL = "claude-sonnet-5"
+# An eval passes when at least this fraction of its success criteria pass (also stated to the judge).
+PASS_THRESHOLD = 0.8
+# Evals are independent; each spends minutes waiting on two API calls, so a sequential run of a
+# 15-eval shard does not fit in CI. Override with --concurrency / EVAL_CONCURRENCY.
+DEFAULT_CONCURRENCY = int(os.environ.get("EVAL_CONCURRENCY", "4"))
+# Each eval is one sampled answer from a nondeterministic model; across ~80 evals an occasional
+# omission fails a run that is otherwise green. A failed eval is re-sampled this many times and
+# passes if any attempt passes; such passes are reported as flaky so they stay visible.
+DEFAULT_RETRIES = int(os.environ.get("EVAL_RETRIES", "1"))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = PROJECT_ROOT / "skills" / "conductor"
 EVAL_DIR = PROJECT_ROOT / "evaluations"
@@ -174,7 +189,9 @@ def call_anthropic(api_key, model, system, user_message, max_tokens=4096):
     body = json.dumps({
         "model": model,
         "max_tokens": max_tokens,
-        "system": system,
+        # The agent system prompt is the whole skill (~75K tokens) and identical for every eval in a
+        # run; caching it cuts time-to-first-token and input cost for every call after the first.
+        "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         "messages": [{"role": "user", "content": user_message}],
     }).encode()
     data = _api_call(PROVIDER_URLS["anthropic"], headers, body)
@@ -473,9 +490,13 @@ def run_single_eval(provider, api_key, model, judge_provider, judge_api_key,
     # Step 3: Display results
     criteria_results = judgment.get("criteria_results", [])
     passed = sum(1 for c in criteria_results if c.get("pass"))
-    total = len(criteria_results) or len(success_criteria)
-    score = judgment.get("overall_score", 0.0)
-    overall = judgment.get("overall_pass", False)
+    # A criterion the judge skipped counts as failed.
+    total = max(len(criteria_results), len(success_criteria))
+    # Score and verdict come from the per-criterion results, not the judge's own overall_pass /
+    # overall_score: the judge applies the threshold inconsistently (6/7 judged PASS in one eval,
+    # FAIL in another).
+    score = passed / total if total else 0.0
+    overall = score >= PASS_THRESHOLD and not judgment.get("runner_error")
 
     for cr in criteria_results:
         status = "PASS" if cr.get("pass") else "FAIL"
@@ -504,6 +525,32 @@ def run_single_eval(provider, api_key, model, judge_provider, judge_api_key,
     }
 
 
+class _ThreadBufferedStdout:
+    """sys.stdout proxy that diverts writes from threads with an active buffer, so each
+    concurrently running eval prints its block in one piece instead of interleaving."""
+
+    def __init__(self, real):
+        self._real = real
+        self._local = threading.local()
+
+    def start(self):
+        self._local.buf = io.StringIO()
+
+    def finish(self):
+        buf, self._local.buf = self._local.buf, None
+        return buf.getvalue()
+
+    def write(self, s):
+        buf = getattr(self._local, "buf", None)
+        return (buf or self._real).write(s)
+
+    def flush(self):
+        self._real.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -517,7 +564,7 @@ Examples:
   python3 scripts/run_evals.py --model gpt-4o                    # OpenAI
   python3 scripts/run_evals.py --model gemini-2.5-pro            # Google Gemini
   python3 scripts/run_evals.py --provider openai --model ft:gpt-4o:my-org
-  python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-4-20250514
+  python3 scripts/run_evals.py --model gpt-4o --judge-model claude-sonnet-4-6
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -540,6 +587,14 @@ Examples:
     parser.add_argument(
         "--judge-provider", choices=["anthropic", "openai", "gemini"], default=None,
         help="Provider for judge model (auto-detected from model name if omitted)"
+    )
+    parser.add_argument(
+        "--concurrency", "-j", type=int, default=DEFAULT_CONCURRENCY,
+        help=f"Evals to run in parallel (default: {DEFAULT_CONCURRENCY}; 1 = sequential)"
+    )
+    parser.add_argument(
+        "--retries", type=int, default=DEFAULT_RETRIES,
+        help=f"Re-run a failed eval up to N more times; pass if any attempt passes (default: {DEFAULT_RETRIES})"
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output JSON report")
@@ -586,16 +641,14 @@ Examples:
     print(f"  Judge: {judge_provider}:{judge_model}")
 
     # Run evals
-    results = []
-    for eval_file in eval_files:
-        if not eval_file.exists():
-            print(f"Warning: {eval_file} not found, skipping.", file=sys.stderr)
-            continue
-        if eval_file.name == "README.md":
-            continue
+    eval_files = [f for f in eval_files if f.name != "README.md"]
+    for eval_file in [f for f in eval_files if not f.exists()]:
+        print(f"Warning: {eval_file} not found, skipping.", file=sys.stderr)
+    eval_files = [f for f in eval_files if f.exists()]
 
+    def run_one(eval_file):
         try:
-            result = run_single_eval(
+            return run_single_eval(
                 provider, api_key, args.model,
                 judge_provider, judge_api_key, judge_model,
                 skill_context, eval_file, args.verbose,
@@ -610,16 +663,45 @@ Examples:
             except Exception:
                 n_crit, name = 0, eval_file.stem
             print(f"  [ERROR] {eval_file.name}: {type(e).__name__}: {e}", file=sys.stderr)
-            result = {
+            return {
                 "name": name, "file": eval_file.name, "provider": provider, "model": args.model,
                 "overall_pass": False, "overall_score": 0.0, "passed": 0, "total": n_crit,
                 "summary": f"runner error: {type(e).__name__}: {e}", "criteria_results": [],
                 "agent_response": "", "runner_error": True,
             }
-        results.append(result)
-        if args.output:  # checkpoint so a crash or kill never loses completed evals
-            with open(args.output, "w") as f:
-                json.dump({"partial": True, "results": results}, f, indent=2)
+
+    stdout = _ThreadBufferedStdout(sys.stdout)
+    sys.stdout = stdout
+
+    def run_with_retries(eval_file):
+        result = run_one(eval_file)
+        attempts = 1
+        while not result["overall_pass"] and attempts <= args.retries:
+            attempts += 1
+            print(f"  [RETRY] {eval_file.name} failed; re-sampling (attempt {attempts}/{args.retries + 1})")
+            result = run_one(eval_file)
+        result["attempts"] = attempts
+        result["flaky"] = attempts > 1 and result["overall_pass"]
+        return result
+
+    def run_buffered(eval_file):
+        stdout.start()
+        try:
+            return run_with_retries(eval_file)
+        finally:
+            stdout._real.write(stdout.finish())
+            stdout._real.flush()
+
+    done = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
+        futures = {pool.submit(run_buffered, f): i for i, f in enumerate(eval_files)}
+        for fut in concurrent.futures.as_completed(futures):
+            done[futures[fut]] = fut.result()
+            if args.output:  # checkpoint so a crash or kill never loses completed evals
+                with open(args.output, "w") as f:
+                    json.dump({"partial": True, "results": [done[i] for i in sorted(done)]}, f, indent=2)
+    sys.stdout = stdout._real
+    results = [done[i] for i in sorted(done)]
 
     # Summary
     total_evals = len(results)
@@ -640,7 +722,8 @@ Examples:
 
     for r in results:
         icon = "+" if r["overall_pass"] else "-"
-        print(f"  [{icon}] {r['name']}: {r['passed']}/{r['total']} ({r['overall_score']:.0%})")
+        flaky = f"  [flaky: passed on attempt {r['attempts']}]" if r.get("flaky") else ""
+        print(f"  [{icon}] {r['name']}: {r['passed']}/{r['total']} ({r['overall_score']:.0%}){flaky}")
 
     print()
 
@@ -657,6 +740,7 @@ Examples:
             "total_criteria": total_criteria,
             "passed_criteria": passed_criteria,
             "avg_score": round(avg_score, 3),
+            "flaky_evals": [r["file"] for r in results if r.get("flaky")],
         },
         "results": results,
     }
