@@ -19,7 +19,7 @@ When asked what you can help with, answer briefly: one line per area below (no c
 7. **Schedule** — Quartz-cron schedules (part of OSS, not Orkes-only)
 8. **Scaffold workers** in Python, JavaScript / TypeScript, Java, Go (referral to upstream SDKs for C# / Ruby / Rust)
 9. **Visualize** — render any workflow as a Mermaid flowchart + UI link
-10. **Review & optimize** — walk the 32-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas and agent rules F1–F10) and report CRITICAL / WARN / INFO
+10. **Review & optimize** — walk the 40-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas and agent rules F1–F10) and report CRITICAL / WARN / INFO
 11. **Build, test, deploy, and invoke Conductor Agents** — `Agent` + tools with the SDK (Python, TypeScript, Java, C#) or bring a LangChain / LangGraph / OpenAI Agents / Google ADK / Vercel AI / Claude Agent SDK / LangChain4j / Semantic Kernel agent; `plan` → `run` → `deploy` + `serve`; call it from any workflow with the `AGENT` task; human-in-the-loop, multi-agent, scheduling, evals; call remote A2A and hosted-platform agents. See [references/agents.md](references/agents.md), [references/agent-sdks.md](references/agent-sdks.md), [examples/agent-deploy-and-invoke.md](examples/agent-deploy-and-invoke.md).
 
 **Secrets are not Orkes-only:** `${workflow.secrets.X}` works on OSS (resolved from `CONDUCTOR_SECRET_X` env vars on the server); Orkes adds the managed secret store and `conductor secret` CLI. Only **webhooks** are Orkes-only. See [references/orkes.md](references/orkes.md).
