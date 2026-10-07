@@ -561,6 +561,108 @@ def handle_model_save(args):
     print(json.dumps({"saved": f"{args.provider}/{args.model}", "enabled": body["enabled"]}, indent=2))
 
 
+
+# Provider model catalogs: ask the provider which models this key can use, so a new
+# integration can register all of them. The key comes from an env var and is only sent
+# to the provider's own API.
+PROVIDER_SOURCES = {
+    # source: (default base URL, list path, auth style, response list key, id field)
+    "openai": ("https://api.openai.com", "/v1/models", "bearer", "data", "id"),
+    "anthropic": ("https://api.anthropic.com", "/v1/models?limit=1000", "anthropic", "data", "id"),
+    "gemini": ("https://generativelanguage.googleapis.com", "/v1beta/models?pageSize=1000", "google", "models", "name"),
+    "mistral": ("https://api.mistral.ai", "/v1/models", "bearer", "data", "id"),
+    "cohere": ("https://api.cohere.com", "/v1/models?page_size=1000", "bearer", "models", "name"),
+    "xai": ("https://api.x.ai", "/v1/models", "bearer", "data", "id"),
+    "ollama": ("http://localhost:11434", "/api/tags", "none", "models", "name"),
+}
+# Orkes integration type -> provider catalog source.
+TYPE_TO_SOURCE = {"openai": "openai", "anthropic": "anthropic", "mistral": "mistral", "cohere": "cohere",
+                  "grok": "xai", "ollama": "ollama", "google_gemini": "gemini", "gemini": "gemini"}
+DEFAULT_MODEL_EXCLUDE = r"^ft:|:ft-|^ft-"  # fine-tunes belong to one org; register them explicitly
+
+
+def fetch_provider_models(source, key_env, endpoint=None):
+    if source not in PROVIDER_SOURCES:
+        print(f"Error: no model catalog for {source!r}; supported: {', '.join(sorted(PROVIDER_SOURCES))}. "
+              "For other providers look the models up on the provider's docs and use model-save.", file=sys.stderr)
+        sys.exit(1)
+    default_base, path, auth, list_key, id_field = PROVIDER_SOURCES[source]
+    key = os.environ.get(key_env, "") if key_env else ""
+    if auth != "none" and not key:
+        print(f"Error: environment variable {key_env or '(none given)'} is not set; pass --key-env.", file=sys.stderr)
+        sys.exit(1)
+    base = (endpoint or default_base).rstrip("/")
+    if source == "openai" and base.endswith("/v1"):
+        base = base[:-3]
+    headers = {"Accept": "application/json"}
+    if auth == "bearer":
+        headers["Authorization"] = f"Bearer {key}"
+    elif auth == "anthropic":
+        headers["x-api-key"] = key
+        headers["anthropic-version"] = "2023-06-01"
+    elif auth == "google":
+        headers["x-goog-api-key"] = key
+    req = urllib.request.Request(base + path, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        print(f"Error: {source} model list returned HTTP {e.code} {e.reason} (check the key in {key_env}).",
+              file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"Error: could not reach {base}: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    models = []
+    for item in data.get(list_key, []) if isinstance(data, dict) else []:
+        model_id = item.get(id_field, "")
+        if source == "gemini":
+            model_id = model_id.removeprefix("models/")
+        if model_id:
+            models.append({"id": model_id,
+                           "created": item.get("created") or item.get("created_at"),
+                           "displayName": item.get("display_name") or item.get("displayName")})
+    return sorted(models, key=lambda m: m["id"])
+
+
+def resolve_source(args):
+    source = args.source or TYPE_TO_SOURCE.get((args.type or "").lower())
+    if not source:
+        print("Error: pass --source (" + ", ".join(sorted(PROVIDER_SOURCES)) + ") for this provider type.",
+              file=sys.stderr)
+        sys.exit(1)
+    return source
+
+
+def filter_models(models, include, exclude):
+    import re
+    if include:
+        models = [m for m in models if re.search(include, m["id"])]
+    if exclude:
+        models = [m for m in models if not re.search(exclude, m["id"])]
+    return models
+
+
+def handle_provider_models(args):
+    models = fetch_provider_models(resolve_source(args), args.key_env, args.endpoint)
+    output(filter_models(models, args.include, args.exclude))
+
+
+def handle_model_sync(args):
+    models = filter_models(fetch_provider_models(resolve_source(args), args.key_env, args.endpoint),
+                           args.include, args.exclude)
+    base, token = get_config()
+    existing = request_json(build_url(base, integration_path(args.provider) + "/integration"), token) or []
+    have = {e.get("api") or e.get("name") for e in existing if isinstance(e, dict)}
+    to_add = [m["id"] for m in models if m["id"] not in have]
+    if not args.dry_run:
+        for model_id in to_add:
+            request_json(build_url(base, integration_path(args.provider, model_id)), token, method="POST",
+                         body={"enabled": True, "description": model_id}, expect_json=False)
+    output({"provider": args.provider, "dryRun": args.dry_run, "added" if not args.dry_run else "wouldAdd": to_add,
+            "alreadyRegistered": sorted(m["id"] for m in models if m["id"] in have)})
+
+
 def handle_model_delete(args):
     base, token = get_config()
     request_json(build_url(base, integration_path(args.provider, args.model)), token,
@@ -752,6 +854,24 @@ def main():
     p.add_argument("--max-tokens", type=int, default=None)
     p.add_argument("--disabled", action="store_true")
 
+    p = sub.add_parser("provider-models", help="List the models a provider key can use, from the provider's own API (key from an env var)")
+    p.add_argument("--type", default=None, help="Orkes integration type (openai, anthropic, mistral, cohere, grok, ollama)")
+    p.add_argument("--source", default=None, choices=sorted(PROVIDER_SOURCES), help="catalog to query when --type doesn't map")
+    p.add_argument("--key-env", default=None, help="env var holding the provider key, e.g. OPENAI_API_KEY")
+    p.add_argument("--endpoint", default=None, help="custom base URL (OpenAI-compatible gateway, Ollama host)")
+    p.add_argument("--include", default=None, help="regex models must match")
+    p.add_argument("--exclude", default=DEFAULT_MODEL_EXCLUDE, help="regex of models to skip (default: fine-tunes)")
+
+    p = sub.add_parser("model-sync", help="Orkes: register every model the provider key can use under an integration")
+    p.add_argument("--provider", required=True, help="integration name")
+    p.add_argument("--type", default=None, help="Orkes integration type (openai, anthropic, mistral, cohere, grok, ollama)")
+    p.add_argument("--source", default=None, choices=sorted(PROVIDER_SOURCES))
+    p.add_argument("--key-env", default=None, help="env var holding the provider key, e.g. OPENAI_API_KEY")
+    p.add_argument("--endpoint", default=None)
+    p.add_argument("--include", default=None, help="regex models must match")
+    p.add_argument("--exclude", default=DEFAULT_MODEL_EXCLUDE, help="regex of models to skip (default: fine-tunes)")
+    p.add_argument("--dry-run", action="store_true", help="show what would be added")
+
     p = sub.add_parser("model-delete", help="Orkes: remove a model from an integration")
     p.add_argument("--provider", required=True)
     p.add_argument("--model", required=True)
@@ -811,6 +931,8 @@ def main():
         "model-list": handle_model_list,
         "model-save": handle_model_save,
         "model-delete": handle_model_delete,
+        "provider-models": handle_provider_models,
+        "model-sync": handle_model_sync,
         "prompt-associate": handle_prompt_associate,
         "grant-access": handle_grant_access,
         "access-list": handle_access_list,

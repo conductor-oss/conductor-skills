@@ -1,0 +1,22 @@
+{
+  "name": "Orkes: AWS Bedrock Integration Where Models Must Be Looked Up Online",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Set up AWS Bedrock (Anthropic models) as an AI integration on our Orkes cluster in us-east-1 so our workflows can use Claude through Bedrock. We use an IAM role: the role ARN and external ID are in BEDROCK_ROLE_ARN and BEDROCK_EXTERNAL_ID. Add whatever Claude models Bedrock currently offers.",
+  "expected_behavior": [
+    "Step 1: Check existing AI integrations first (`integration-list --category AI_MODEL`)",
+    "Step 2: Confirm, then create the integration with type `aws_bedrock_anthropic`, `--config connectionType=EXTERNAL_ROLE --config region=us-east-1`, and the role values from the env vars (`--config-env roleArn=BEDROCK_ROLE_ARN --config-env externalId=BEDROCK_EXTERNAL_ID`) \u2014 values never typed into chat or argv",
+    "Step 3: Recognize Bedrock has no model-list API usable with this script (`model-sync` does not cover it), so look the current Anthropic-on-Bedrock model ids up online with WebSearch / WebFetch of the official Bedrock supported-models page",
+    "Step 4: Show the list, then `model-save --provider <name> --model <bedrock model id>` for each; note the models must also be enabled for the account in that region",
+    "Step 5: Use the integration name as `llmProvider` with one of the registered ids, and verify with a test run"
+  ],
+  "success_criteria": [
+    "Checks existing AI integrations before creating one",
+    "Creates the integration with type `aws_bedrock_anthropic` (or the Bedrock Anthropic type), region `us-east-1` and connection type `EXTERNAL_ROLE`, reading the role ARN / external ID from the environment variables rather than putting values in chat or a command argument",
+    "Uses a live lookup (WebSearch and/or WebFetch of AWS's Bedrock model documentation) to find the current Claude model ids instead of relying only on memory",
+    "Registers each found model with `model-save` (or the equivalent REST call), not `model-sync` against a provider list API that Bedrock doesn't offer",
+    "Notes that the models must be enabled (model access) in the AWS account and region",
+    "Uses the integration name as `llmProvider` in any workflow example and does not fall back to an HTTP task to bedrock-runtime"
+  ]
+}

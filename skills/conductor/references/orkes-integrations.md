@@ -41,14 +41,24 @@ python3 "$CONDUCTOR_API" integration-save --name openai-prod --type openai \
 
 For any type not listed, or to confirm field names on this cluster, run `python3 "$CONDUCTOR_API" integration-defs --category AI_MODEL` — it returns each type's configuration form fields. The `type` cannot be changed after creation; re-running `integration-save` with the same `--name` updates the integration.
 
-## 3. Register the models
+## 3. Register the models — all of them, discovered live
+
+When creating an AI integration, register **every model the key can use**, not just the one the current workflow needs, so later workflows and agents don't hit "model not found". Discover models live — never from memory, they change monthly.
+
+**Providers with a model-list API** (`openai`, `anthropic`, `mistral`, `cohere`, `grok`, `ollama`, and Gemini-API keys via `--source gemini`): ask the provider with the same key, then register the lot.
 
 ```bash
-python3 "$CONDUCTOR_API" model-save --provider openai-prod --model gpt-4o-mini --description "default chat model"
-python3 "$CONDUCTOR_API" model-save --provider openai-prod --model text-embedding-3-small
+python3 "$CONDUCTOR_API" model-sync --provider openai-prod --type openai --key-env OPENAI_API_KEY --dry-run   # preview
+python3 "$CONDUCTOR_API" model-sync --provider openai-prod --type openai --key-env OPENAI_API_KEY             # register all
 ```
 
-The model id must **exactly** match the provider's id. For a vector DB the "model" is the index name. Optional `--max-tokens` caps a model; `--disabled` keeps it registered but unusable.
+`model-sync` calls the provider's own list endpoint (the key is sent only there), skips models already registered and fine-tunes, and registers the rest. `--include` / `--exclude` take regexes when the user wants a subset (e.g. `--exclude '-[0-9]{4}-[0-9]{2}-[0-9]{2}$'` drops dated snapshots). `provider-models` prints the same list without touching Orkes. Custom gateways and Ollama hosts: `--endpoint <url>`.
+
+**Providers without one** (`azure_openai` — models are the user's *deployment names*, ask for them; `aws_bedrock_*`, `vertex_ai*`, `perplexity`, `huggingface`): use **WebSearch / WebFetch** on the provider's official models page (e.g. "Amazon Bedrock supported models", "Vertex AI model garden Gemini models", "Perplexity API models") for the current model ids, show the list, then `model-save` each one. Bedrock ids must also be enabled in the user's AWS account/region.
+
+**Either way, also look up what's current**: WebSearch / WebFetch the provider's models or deprecations page and tell the user which registered models are the latest (and which are deprecated), and use the latest suitable one as the workflow's default `model` — not a model remembered from training.
+
+Single model: `python3 "$CONDUCTOR_API" model-save --provider openai-prod --model gpt-4o-mini`. The id must exactly match the provider's. For a vector DB the "model" is the index name. `--max-tokens` caps a model; `--disabled` keeps it registered but unusable.
 
 ## 4. Grant access
 
