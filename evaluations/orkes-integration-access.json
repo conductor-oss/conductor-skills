@@ -1,0 +1,19 @@
+{
+  "name": "Orkes: Another Team's Workflows Get Access Denied on an Existing AI Integration",
+  "skills": ["conductor"],
+  "query": "On our Orkes cluster I created an OpenAI integration called openai-prod with gpt-4o and gpt-4o-mini, and my workflows use it fine. The data-science group's workflows, which run under their own application key, fail on the LLM task with an access denied error. How do I give them access without creating another integration?",
+  "expected_behavior": [
+    "Step 1: Explain that the creator of an integration gets access automatically, but other applications / groups need an explicit grant on the integration",
+    "Step 2: Inspect current grants: `python3 \"$CONDUCTOR_API\" access-list --target-id openai-prod`",
+    "Step 3: Grant the data-science group: `python3 \"$CONDUCTOR_API\" grant-access --subject-type group --subject-id <group> --target-id openai-prod --access READ,EXECUTE` (target type INTEGRATION_PROVIDER)",
+    "Step 4: For their application identity, grant access in the UI (Access Control → Applications → app → Integration tab, toggle the models) rather than guessing an API subject id",
+    "Step 5: Re-check with `access-list` and have them re-run a failing workflow to verify"
+  ],
+  "success_criteria": [
+    "Explains that the integration creator has access automatically but other applications/groups need a grant",
+    "Grants access on the existing `openai-prod` integration (target type `INTEGRATION_PROVIDER`) — e.g. `grant-access` / `POST /api/auth/authorization` for the group, with READ and EXECUTE — instead of creating a new integration",
+    "For the other team's application, points to the UI Access Control → Applications → Integration tab (or otherwise avoids inventing an application subject-id format)",
+    "Verifies with `access-list` (or `GET /api/auth/authorization/INTEGRATION_PROVIDER/openai-prod`) and a re-run of the failing workflow",
+    "Does not share or re-enter the OpenAI key and does not invent a `conductor integration` CLI command"
+  ]
+}

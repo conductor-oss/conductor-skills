@@ -1,0 +1,24 @@
+{
+  "name": "Orkes: Create an OpenAI Integration and Model Before Building an LLM Workflow",
+  "skills": ["conductor"],
+  "query": "I'm on our Orkes Conductor cluster (CONDUCTOR_SERVER_URL=https://acme.orkesconductor.io/api, CONDUCTOR_SERVER_TYPE=Enterprise, and my application key/secret are already in the environment). Build me a workflow that summarizes a support ticket with OpenAI gpt-4o-mini. My OpenAI key is exported in my shell as OPENAI_API_KEY. I don't think OpenAI is set up on the cluster yet.",
+  "expected_behavior": [
+    "Step 1: Recognize the target is Orkes, where LLM providers are cluster integrations (SKILL.md Rule 16, references/orkes-integrations.md) — not server env vars",
+    "Step 2: Check what exists first: `python3 \"$CONDUCTOR_API\" integration-list --category AI_MODEL` and `model-list --provider <name>`; reuse an existing OpenAI integration if there is one",
+    "Step 3: If none, confirm before creating it, then `python3 \"$CONDUCTOR_API\" integration-save --name <name> --type openai --config-env api_key=OPENAI_API_KEY` — key read from the env var, never in chat, argv or workflow JSON",
+    "Step 4: Register the model: `python3 \"$CONDUCTOR_API\" model-save --provider <name> --model gpt-4o-mini`",
+    "Step 5: Note access: the application that created the integration has access automatically; other applications/groups need a grant (UI Access Control or `grant-access`)",
+    "Step 6: Write an LLM_CHAT_COMPLETE workflow to a file with `llmProvider` = the integration NAME and `model: gpt-4o-mini`, `messages` using `{role, message}`, and register it",
+    "Step 7: Verify with a test execution"
+  ],
+  "success_criteria": [
+    "Checks existing AI integrations (`integration-list` and/or `model-list`) before creating one",
+    "Creates the integration via `integration-save` (or `POST /api/integrations/provider/{name}`) with type `openai`, reading the key from the environment (`--config-env api_key=OPENAI_API_KEY` or equivalent) — the key value never appears in chat, a command argument or the workflow",
+    "Registers `gpt-4o-mini` under the integration (`model-save` or `POST /api/integrations/provider/{name}/integration/gpt-4o-mini`)",
+    "The LLM task's `llmProvider` is the integration name that was created or found (not assumed to be the literal type `openai` unless that is the integration's name) and `model` is `gpt-4o-mini`",
+    "Addresses access: states the creating application gets access automatically and/or how other applications/groups are granted access",
+    "Does not present 'set OPENAI_API_KEY in the server environment' as the Orkes fix, and does not invent a `conductor integration` CLI command",
+    "Does not fall back to an HTTP task calling api.openai.com",
+    "Workflow JSON is written to a file before registration and the plan includes a verification run"
+  ]
+}

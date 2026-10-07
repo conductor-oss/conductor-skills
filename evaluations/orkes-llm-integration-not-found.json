@@ -1,0 +1,20 @@
+{
+  "name": "Orkes: LLM Task Fails Because llmProvider Is a Provider Type, Not an Integration Name",
+  "skills": ["conductor"],
+  "query": "My summarize_ticket workflow works on my local Conductor but on our Orkes cluster the LLM_CHAT_COMPLETE task fails saying the integration 'anthropic' was not found. The task has llmProvider: \"anthropic\" and model: \"claude-sonnet-4-6\". Our admins say Anthropic is configured. What's wrong and how do I fix it?",
+  "expected_behavior": [
+    "Step 1: Explain that on Orkes `llmProvider` is the name of an integration configured on the cluster, not the provider type — locally (OSS) `anthropic` is the provider name, so the same JSON works there",
+    "Step 2: List the cluster's AI integrations: `python3 \"$CONDUCTOR_API\" integration-list --category AI_MODEL` to find the actual Anthropic integration name",
+    "Step 3: Check the model is registered under it: `python3 \"$CONDUCTOR_API\" model-list --provider <name>`; if `claude-sonnet-4-6` is missing, register it with `model-save` (or ask the admins to)",
+    "Step 4: Check the application running the workflow has access to the integration (`access-list --target-id <name>`), and grant it if needed",
+    "Step 5: Update `llmProvider` to the integration name, write the workflow to a file, `conductor workflow update`, and re-run to verify"
+  ],
+  "success_criteria": [
+    "Identifies the cause: on Orkes `llmProvider` must be the integration NAME configured on the cluster, which differs from the provider type that works on OSS",
+    "Lists the cluster's AI integrations (`integration-list` or `GET /api/integrations/provider`) to find the real name rather than guessing",
+    "Checks that the model is registered under that integration (`model-list` / `model-save`)",
+    "Mentions checking or granting the running application's access to the integration",
+    "Fixes the workflow by changing `llmProvider` to the integration name, writing the JSON to a file and updating/re-running it",
+    "Does not suggest replacing the task with an HTTP call to api.anthropic.com, and does not tell the user to set ANTHROPIC_API_KEY on the Orkes server as the fix"
+  ]
+}

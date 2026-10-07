@@ -213,6 +213,7 @@ python3 "$CONDUCTOR_API" providers-status          # which LLM providers have ke
 
 - `conductor server start` already passes `--conductor.integrations.ai.enabled=true --agentspan.embedded=true`, so a local server is ready.
 - A remote server needs `conductor.integrations.ai.enabled=true` (+ `agentspan.embedded=true`, `spring.main.allow-bean-definition-overriding=true`) and provider keys in **its** environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, …). Keys never go in agent code.
+- **Orkes (Enterprise):** LLM providers are cluster **integrations**, not server env vars — list them with `python3 "$CONDUCTOR_API" integration-list --category AI_MODEL` and create/extend them per [orkes-integrations.md](orkes-integrations.md). `conductor doctor` only inspects local env vars, not the cluster's integrations.
 - MCP / OpenAPI tool discovery is outbound deny-all: `conductor.ai.outbound.allowed-origins=https://tools.example.com` (`conductor.ai.outbound.allow-private-networks=true` for localhost in dev).
 - OSS secrets: `${workflow.secrets.NAME}` resolves from `CONDUCTOR_SECRET_NAME` env vars on the server (default `conductor.secrets.type=env`).
 - Symptom of a disabled runtime: an `AGENT` task with `agentType: "conductor"` fails with `AGENT requires 'agentUrl'`.

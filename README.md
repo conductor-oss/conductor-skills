@@ -40,6 +40,7 @@ Once installed, your AI agent can:
 - **Visualize** workflows as Mermaid diagrams
 - **Review & optimize** existing workflows and agents against a checklist of 32 reliability / performance / security / structure / agent rules
 - **Manage** secrets and webhooks (Orkes)
+- **Configure AI providers on Orkes** — create LLM / vector-DB integrations, register models and grant access, so `LLM_*` tasks work on an Orkes cluster
 
 On Claude Code, five slash commands give you direct entry points:
 
@@ -235,8 +236,9 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Show me a diagram of the order-processing workflow"*
 - *"Render the FORK_JOIN flow as a Mermaid chart"*
 
-**Orkes only** — secrets, webhooks (Orkes Conductor required)
+**Orkes only** — secrets, webhooks, AI integrations (Orkes Conductor required)
 - *"Save STRIPE_KEY as a secret"*
+- *"Set up OpenAI with gpt-4o-mini on our Orkes cluster using the key in OPENAI_API_KEY"*
 - *"Create a GitHub webhook that triggers github_pr_handler"*
 - *"List my webhooks"*
 
@@ -298,6 +300,7 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [Optimization Checklist](skills/conductor/references/optimization.md) | 32 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, and agents |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
+| [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access (Orkes Conductor only) |
 | [Fallback CLI](skills/conductor/references/fallback-cli.md) | Python REST script equivalents when the CLI isn't available |
 
 ## Evaluations

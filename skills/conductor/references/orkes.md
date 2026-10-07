@@ -2,6 +2,8 @@
 
 Webhooks and the managed secret store (with the `conductor secret` CLI) require Orkes Conductor (orkes.io). **`${workflow.secrets.X}` itself is not Orkes-only any more**: OSS Conductor resolves it from `CONDUCTOR_SECRET_X` environment variables on the server (`conductor.secrets.type=env`, the default), and servers with the agent runtime expose the store at `/api/secrets` (UI `/agentSecrets`) for agent `credentials=[...]` — see [agents.md](agents.md) §8. The Python fallback script has no secret commands.
 
+**AI providers on Orkes are integrations**, not server env vars: create the integration, register its models, grant access, and put the integration *name* in `llmProvider` — see [orkes-integrations.md](orkes-integrations.md).
+
 > Schedules used to live here — they're now part of OSS. See [schedules.md](schedules.md).
 
 Auth is the same as the rest of the CLI — see [setup.md](setup.md) (key/secret recommended).

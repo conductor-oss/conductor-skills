@@ -441,6 +441,157 @@ def handle_agent_stop(args):
     output(result if result is not None else {"status": "stop-requested", "executionId": args.id})
 
 # ---------------------------------------------------------------------------
+# Orkes integrations: AI providers, models, access (references/orkes-integrations.md).
+# The `conductor` CLI has no integration commands. Orkes-only: OSS returns 404.
+# ---------------------------------------------------------------------------
+
+_SECRET_HINTS = ("key", "secret", "token", "password", "credential", "file")
+
+
+def redact(data):
+    """Mask secret-looking configuration values so they never reach the transcript."""
+    if isinstance(data, list):
+        return [redact(d) for d in data]
+    if not isinstance(data, dict):
+        return data
+    out = {}
+    for k, v in data.items():
+        if k == "configuration" and isinstance(v, dict):
+            out[k] = {ck: ("***" if any(h in ck.lower() for h in _SECRET_HINTS) and v[ck] not in (None, "") else v[ck])
+                      for ck in v}
+        else:
+            out[k] = redact(v)
+    return out
+
+
+def parse_pairs(pairs, flag):
+    result = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            print(f"Error: {flag} expects KEY=VALUE, got {pair!r}.", file=sys.stderr)
+            sys.exit(1)
+        k, v = pair.split("=", 1)
+        result[k] = v
+    return result
+
+
+def integration_path(name, model=None):
+    path = f"/integrations/provider/{urllib.parse.quote(name, safe='')}"
+    if model is not None:
+        path += f"/integration/{urllib.parse.quote(model, safe='')}"
+    return path
+
+
+def handle_integration_defs(args):
+    base, token = get_config()
+    result = request_json(build_url(base, "/integrations/def"), token)
+    if args.category and isinstance(result, list):
+        result = [d for d in result if d.get("category") == args.category]
+    output(result)
+
+
+def handle_integration_list(args):
+    base, token = get_config()
+    params = {"activeOnly": "true"} if args.active_only else None
+    result = request_json(build_url(base, "/integrations/provider", params), token) or []
+    if isinstance(result, dict):
+        result = [result]
+    if args.category:
+        result = [r for r in result if r.get("category") == args.category]
+    output(redact(result))
+
+
+def handle_integration_get(args):
+    base, token = get_config()
+    output(redact(request_json(build_url(base, integration_path(args.name)), token)))
+
+
+def handle_integration_save(args):
+    base, token = get_config()
+    configuration = {}
+    if args.config_file:
+        with open(args.config_file) as f:
+            configuration.update(json.load(f))
+    plain = parse_pairs(args.config, "--config")
+    for key in plain:
+        if any(h in key.lower() for h in _SECRET_HINTS):
+            print(f"Error: {key} looks secret; pass it with --config-env {key}=ENV_VAR, not on the command line.",
+                  file=sys.stderr)
+            sys.exit(1)
+    configuration.update(plain)
+    # Secret values come from environment variables named on the command line, never from argv.
+    for key, env_name in parse_pairs(args.config_env, "--config-env").items():
+        value = os.environ.get(env_name, "")
+        if not value:
+            print(f"Error: environment variable {env_name} (for {key}) is not set.", file=sys.stderr)
+            sys.exit(1)
+        configuration[key] = value
+    body = {
+        "type": args.type,
+        "category": args.category,
+        "enabled": not args.disabled,
+        "description": args.description or args.name,
+        "configuration": configuration,
+    }
+    request_json(build_url(base, integration_path(args.name)), token, method="POST", body=body, expect_json=False)
+    print(json.dumps({"saved": args.name, "type": args.type, "category": args.category,
+                      "configurationKeys": sorted(configuration)}, indent=2))
+
+
+def handle_integration_delete(args):
+    base, token = get_config()
+    request_json(build_url(base, integration_path(args.name)), token, method="DELETE", expect_json=False)
+    print(f"Integration {args.name} deleted.")
+
+
+def handle_model_list(args):
+    base, token = get_config()
+    params = {"activeOnly": "true"} if args.active_only else None
+    url = build_url(base, integration_path(args.provider) + "/integration", params)
+    output(redact(request_json(url, token)))
+
+
+def handle_model_save(args):
+    base, token = get_config()
+    body = {"enabled": not args.disabled, "description": args.description or args.model}
+    if args.max_tokens:
+        body["maxTokens"] = args.max_tokens
+    request_json(build_url(base, integration_path(args.provider, args.model)), token,
+                 method="POST", body=body, expect_json=False)
+    print(json.dumps({"saved": f"{args.provider}/{args.model}", "enabled": body["enabled"]}, indent=2))
+
+
+def handle_model_delete(args):
+    base, token = get_config()
+    request_json(build_url(base, integration_path(args.provider, args.model)), token,
+                 method="DELETE", expect_json=False)
+    print(f"Model {args.model} removed from integration {args.provider}.")
+
+
+def handle_prompt_associate(args):
+    base, token = get_config()
+    path = integration_path(args.provider, args.model) + f"/prompt/{urllib.parse.quote(args.prompt, safe='')}"
+    request_json(build_url(base, path), token, method="POST", expect_json=False)
+    print(f"Prompt {args.prompt} associated with {args.provider}/{args.model}.")
+
+
+def handle_grant_access(args):
+    base, token = get_config()
+    body = {
+        "subject": {"type": args.subject_type, "id": args.subject_id},
+        "target": {"type": args.target_type, "id": args.target_id},
+        "access": [a.strip().upper() for a in args.access.split(",") if a.strip()],
+    }
+    request_json(build_url(base, "/auth/authorization"), token, method="POST", body=body, expect_json=False)
+    output({"granted": body})
+
+
+def handle_access_list(args):
+    base, token = get_config()
+    path = f"/auth/authorization/{urllib.parse.quote(args.target_type)}/{urllib.parse.quote(args.target_id, safe='')}"
+    output(request_json(build_url(base, path), token))
+
+# ---------------------------------------------------------------------------
 # CLI definition
 # ---------------------------------------------------------------------------
 
@@ -566,6 +717,61 @@ def main():
     p = sub.add_parser("agent-stop", help="Request a graceful stop after the current iteration")
     p.add_argument("--id", required=True)
 
+    # -- Orkes integrations (references/orkes-integrations.md) --
+    p = sub.add_parser("integration-defs", help="Orkes: integration types and their configuration fields (GET /integrations/def)")
+    p.add_argument("--category", default=None, help="AI_MODEL, VECTOR_DB, ...")
+
+    p = sub.add_parser("integration-list", help="Orkes: list integration providers (secret config masked)")
+    p.add_argument("--category", default=None, help="AI_MODEL, VECTOR_DB, ...")
+    p.add_argument("--active-only", action="store_true")
+
+    p = sub.add_parser("integration-get", help="Orkes: get one integration provider (secret config masked)")
+    p.add_argument("--name", required=True)
+
+    p = sub.add_parser("integration-save", help="Orkes: create/update an integration provider (POST /integrations/provider/{name})")
+    p.add_argument("--name", required=True, help="integration name -- this is what LLM tasks put in llmProvider")
+    p.add_argument("--type", required=True, help="openai, anthropic, azure_openai, vertex_ai, aws_bedrock_anthropic, ...")
+    p.add_argument("--category", default="AI_MODEL")
+    p.add_argument("--description", default=None)
+    p.add_argument("--config", action="append", default=[], metavar="KEY=VALUE", help="non-secret configuration (endpoint, region, ...)")
+    p.add_argument("--config-env", action="append", default=[], metavar="KEY=ENV_VAR", help="secret configuration read from an env var, e.g. api_key=OPENAI_API_KEY")
+    p.add_argument("--config-file", default=None, help="JSON file of non-secret configuration")
+    p.add_argument("--disabled", action="store_true")
+
+    p = sub.add_parser("integration-delete", help="Orkes: delete an integration provider")
+    p.add_argument("--name", required=True)
+
+    p = sub.add_parser("model-list", help="Orkes: list models registered under an integration")
+    p.add_argument("--provider", required=True, help="integration name")
+    p.add_argument("--active-only", action="store_true")
+
+    p = sub.add_parser("model-save", help="Orkes: add/update a model under an integration")
+    p.add_argument("--provider", required=True, help="integration name")
+    p.add_argument("--model", required=True, help="exact provider model id, e.g. gpt-4o-mini")
+    p.add_argument("--description", default=None)
+    p.add_argument("--max-tokens", type=int, default=None)
+    p.add_argument("--disabled", action="store_true")
+
+    p = sub.add_parser("model-delete", help="Orkes: remove a model from an integration")
+    p.add_argument("--provider", required=True)
+    p.add_argument("--model", required=True)
+
+    p = sub.add_parser("prompt-associate", help="Orkes: allow a prompt template to run on an integration model")
+    p.add_argument("--provider", required=True)
+    p.add_argument("--model", required=True)
+    p.add_argument("--prompt", required=True)
+
+    p = sub.add_parser("grant-access", help="Orkes: grant a user/group/role access to a resource (POST /auth/authorization)")
+    p.add_argument("--subject-type", required=True, choices=["user", "group", "role"])
+    p.add_argument("--subject-id", required=True)
+    p.add_argument("--target-type", default="INTEGRATION_PROVIDER")
+    p.add_argument("--target-id", required=True, help="integration name for INTEGRATION_PROVIDER")
+    p.add_argument("--access", default="READ,EXECUTE", help="comma list of READ,CREATE,UPDATE,DELETE,EXECUTE")
+
+    p = sub.add_parser("access-list", help="Orkes: who has access to a resource (GET /auth/authorization/{type}/{id})")
+    p.add_argument("--target-type", default="INTEGRATION_PROVIDER")
+    p.add_argument("--target-id", required=True)
+
     args = parser.parse_args()
 
     handlers = {
@@ -597,6 +803,17 @@ def main():
         "agent-respond": handle_agent_respond,
         "agent-cancel": handle_agent_cancel,
         "agent-stop": handle_agent_stop,
+        "integration-defs": handle_integration_defs,
+        "integration-list": handle_integration_list,
+        "integration-get": handle_integration_get,
+        "integration-save": handle_integration_save,
+        "integration-delete": handle_integration_delete,
+        "model-list": handle_model_list,
+        "model-save": handle_model_save,
+        "model-delete": handle_model_delete,
+        "prompt-associate": handle_prompt_associate,
+        "grant-access": handle_grant_access,
+        "access-list": handle_access_list,
     }
 
     handler = handlers.get(args.command)
