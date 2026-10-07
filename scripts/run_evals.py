@@ -62,6 +62,8 @@ API_TIMEOUT_SECONDS = int(os.environ.get("EVAL_API_TIMEOUT", "300"))  # override
 AGENT_MAX_TOKENS = 32768
 ANTHROPIC_MAX_OUTPUT_TOKENS = 64000
 JUDGE_MODEL = "claude-sonnet-5"
+# An eval passes when at least this fraction of its success criteria pass (also stated to the judge).
+PASS_THRESHOLD = 0.8
 # Evals are independent; each spends minutes waiting on two API calls, so a sequential run of a
 # 15-eval shard does not fit in CI. Override with --concurrency / EVAL_CONCURRENCY.
 DEFAULT_CONCURRENCY = int(os.environ.get("EVAL_CONCURRENCY", "4"))
@@ -484,9 +486,13 @@ def run_single_eval(provider, api_key, model, judge_provider, judge_api_key,
     # Step 3: Display results
     criteria_results = judgment.get("criteria_results", [])
     passed = sum(1 for c in criteria_results if c.get("pass"))
-    total = len(criteria_results) or len(success_criteria)
-    score = judgment.get("overall_score", 0.0)
-    overall = judgment.get("overall_pass", False)
+    # A criterion the judge skipped counts as failed.
+    total = max(len(criteria_results), len(success_criteria))
+    # Score and verdict come from the per-criterion results, not the judge's own overall_pass /
+    # overall_score: the judge applies the threshold inconsistently (6/7 judged PASS in one eval,
+    # FAIL in another).
+    score = passed / total if total else 0.0
+    overall = score >= PASS_THRESHOLD and not judgment.get("runner_error")
 
     for cr in criteria_results:
         status = "PASS" if cr.get("pass") else "FAIL"
