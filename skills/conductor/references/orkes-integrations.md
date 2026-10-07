@@ -82,11 +82,50 @@ Single model: `python3 "$CONDUCTOR_API" model-save --provider openai-prod --mode
 }
 ```
 
-Same rule for every `LLM_*` task; for `LLM_INDEX_TEXT` / `LLM_SEARCH_INDEX`, `vectorDB` is the vector integration name, `index` a registered index, and `embeddingModelProvider` / `embeddingModel` an AI integration name + registered embedding model. For `promptName` templates — a stored prompt also has to be associated with each model it runs on: `python3 "$CONDUCTOR_API" prompt-associate --provider openai-prod --model gpt-4o-mini --prompt <template>`.
+Same rule for every `LLM_*` task; for `LLM_INDEX_TEXT` / `LLM_SEARCH_INDEX`, `vectorDB` is the vector integration name, `index` a registered index, and `embeddingModelProvider` / `embeddingModel` an AI integration name + registered embedding model. Prompt text in `instructions` / `promptName` / image `prompt` follows §6 — a saved template by name, or `allowRawPrompts: true`.
 
 Verify end to end with a one-task test workflow before wiring the real one.
 
-## 6. Errors
+## 6. Prompts — saved templates by name (raw text needs `allowRawPrompts`)
+
+On Enterprise the server treats a task's prompt field as the **name of a saved prompt template** and checks that the template is associated with the task's exact `integration:model`. Literal text there fails at run time with *"Prompt \<text\> is not associated with integration \<name\> and model \<model\>"* — unless the task sets `allowRawPrompts: true`.
+
+| Field | Enterprise behaviour |
+|---|---|
+| `LLM_CHAT_COMPLETE.instructions` | template name; raw text needs `allowRawPrompts: true` |
+| `LLM_TEXT_COMPLETE.promptName` (also `prompt`) | template name; raw text in `promptName` needs `allowRawPrompts: true` |
+| `GENERATE_IMAGE.prompt` | raw text needs `allowRawPrompts: true` (or a template name) |
+| `messages[]`, `GENERATE_AUDIO.text`, `GENERATE_VIDEO.prompt` | not gated |
+
+**Default: put the prompt in a template and reference it by name.** Templates are versioned, reviewable, reusable across workflows, and the association doubles as an allow-list of the models a prompt may run on.
+
+1. Write the template text to a file. Placeholders are `${name}`.
+2. Save it and associate it with **every** `integration:model` the tasks use:
+   `python3 "$CONDUCTOR_API" prompt-save --name ticket_summary --template-file ticket_summary.txt --model openai-prod:gpt-4o-mini --model openai-prod:gpt-4o`
+   (re-run with the full `--model` list to add a model; `prompt-list` / `prompt-get` show what exists and its `variables`).
+3. Reference it by name and pass runtime values through `promptVariables` (real Conductor expressions go **here**):
+
+```json
+{
+  "name": "summarize", "taskReferenceName": "summarize_ref", "type": "LLM_CHAT_COMPLETE",
+  "inputParameters": {
+    "llmProvider": "openai-prod", "model": "gpt-4o-mini",
+    "instructions": "ticket_summary",
+    "promptVariables": {"ticket": "${workflow.input.ticket_text}", "tone": "brief"},
+    "messages": [{"role": "user", "message": "${workflow.input.ticket_text}"}]
+  }
+}
+```
+
+`LLM_TEXT_COMPLETE` uses `"promptName": "ticket_summary"` the same way.
+
+**`${var}` placeholders only work inside a saved template.** In workflow JSON, `${...}` is a Conductor expression: `"instructions": "Summarize ${ticket}"` fails registration (*"taskReferenceName: ticket … is not defined in workflow definition"*). Inline text must use real expressions (`${workflow.input.ticket}`), not template placeholders.
+
+**Raw text instead — only when the user explicitly asks for inline prompts** (never as your own default): keep the literal text and add `"allowRawPrompts": true` to the task. When you build a template, mention this alternative in one line. It is ignored on OSS, so it is safe in workflows that run on both.
+
+OSS has no prompt registry: prompts are always literal text and `prompt-*` commands are refused.
+
+## 7. Errors
 
 | Symptom on Orkes | Cause | Fix |
 |---|---|---|
@@ -94,6 +133,8 @@ Verify end to end with a one-task test workflow before wiring the real one.
 | Model not found / not enabled | Model not registered under that integration, or `--disabled` | `model-save` |
 | 403 / access denied on the LLM task | The running application has no access to the integration | §4 |
 | "this server does not require auth, so it is OSS" / integration endpoints 404 | Server is OSS — integration APIs don't exist there (a 404 for one name on Enterprise = that integration doesn't exist) | OSS uses server env keys — see [setup.md](setup.md) Step 5 |
+| *"Prompt … is not associated with integration … and model …"* | Literal text in `instructions` / `promptName` / image `prompt` without `allowRawPrompts`, or the template isn't associated with that `integration:model` | Use a template name and `prompt-save … --model <integration>:<model>`, or set `allowRawPrompts: true` (§6) |
+| Registration fails: *"taskReferenceName: x … is not defined"* for prompt text | `${x}` template placeholder written inline in the workflow | Move the text into a saved template, or use a real expression (§6) |
 | `integration-list` returns 403 | This application can't manage integrations | Ask for the integration name to use, or an admin to create it / grant rights (§1) |
 | `integration-save`: "already exists" | Name taken | Use it (add models with `model-sync`), or `--overwrite` with all secrets re-supplied |
 | A `*-env` flag says the variable isn't set | Shell expanded `$VAR` into a value, or the variable isn't exported | Pass the bare name; ask the user to export it |

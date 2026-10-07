@@ -1,0 +1,21 @@
+{
+  "name": "Orkes: Diagnose 'Prompt \u2026 is not associated with integration \u2026 and model \u2026'",
+  "skills": [
+    "conductor"
+  ],
+  "query": "My workflow fails on Orkes with: \"Prompt You are a helpful assistant that classifies tickets into billing, technical or sales is not associated with integration openai-prod and model gpt-4o-mini\". The LLM_CHAT_COMPLETE task has that sentence in instructions. Works fine on my local OSS Conductor. Fix it.",
+  "expected_behavior": [
+    "Step 1: Explain that on Enterprise `instructions` is read as a saved prompt-template name; literal text there fails this check unless `allowRawPrompts: true` (OSS has no prompt registry, which is why it works locally)",
+    "Step 2: Preferred fix: save the text as a template associated with `openai-prod:gpt-4o-mini` (`prompt-save ... --model openai-prod:gpt-4o-mini`) and set `instructions` to the template name",
+    "Step 3: Quick fix alternative: keep the text and add `\"allowRawPrompts\": true` to the task (ignored on OSS, so the same JSON still works locally)",
+    "Step 4: Update the workflow from a file and re-run to verify"
+  ],
+  "success_criteria": [
+    "Identifies the cause: Enterprise treats `instructions` as a saved prompt-template name, and the literal sentence is not an associated template",
+    "Explains why it works on OSS (no prompt registry / raw prompts always allowed)",
+    "Offers the template fix: save the prompt and associate it with `openai-prod:gpt-4o-mini`, then reference it by name",
+    "Offers `allowRawPrompts: true` as the alternative and notes it is ignored on OSS",
+    "Updates the workflow from a file and verifies with a re-run",
+    "Does not suggest switching to an HTTP call to the provider or changing the integration"
+  ]
+}

@@ -42,6 +42,7 @@ Once installed, your AI agent can:
 - **Tell OSS from Orkes** — a server that requires auth is Orkes (Enterprise), one that doesn't is OSS; the skill checks before anything that differs between them
 - **Manage** secrets and webhooks (Orkes)
 - **Configure AI providers on Orkes** — create LLM / vector-DB integrations, register every model the provider key can use (discovered live from the provider), and grant access, so `LLM_*` tasks work on an Orkes cluster
+- **Manage prompt templates on Orkes** — LLM prompts are saved as named templates, associated with the models that may use them, and referenced by name from tasks (inline prompts need `allowRawPrompts`)
 
 On Claude Code, five slash commands give you direct entry points:
 
@@ -244,6 +245,8 @@ After installing, try these prompts with your agent. Or run the slash command sh
 - *"Which AI integrations and models does our cluster have?"*
 - *"Give the data-science group access to the openai-prod integration"*
 - *"My LLM task works locally but fails on Orkes with 'integration not found' — fix it"*
+- *"Save this system prompt as a template for openai-prod:gpt-4o-mini and use it in ticket-summary"*
+- *"Why does Orkes say my prompt is not associated with integration openai-prod and model gpt-4o-mini?"*
 - *"Create a GitHub webhook that triggers github_pr_handler"*
 - *"List my webhooks"*
 
@@ -306,12 +309,12 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [Optimization Checklist](skills/conductor/references/optimization.md) | 40 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, wrong-tool, and agents |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
-| [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access (Orkes Conductor only) |
+| [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access, prompt templates (Orkes Conductor only) |
 | [Fallback CLI](skills/conductor/references/fallback-cli.md) | Bundled Python REST script — CLI equivalents when the CLI isn't available, plus agent and Orkes-integration verbs the CLI lacks |
 
 ## Evaluations
 
-The `evaluations/` directory holds 84 scenario evals: an LLM gets the skill as context, answers a user request, and a judge model scores the answer against each eval's success criteria (an eval passes at ≥ 80% of its criteria). See [evaluations/README.md](evaluations/README.md) for details.
+The `evaluations/` directory holds 86 scenario evals: an LLM gets the skill as context, answers a user request, and a judge model scores the answer against each eval's success criteria (an eval passes at ≥ 80% of its criteria). See [evaluations/README.md](evaluations/README.md) for details.
 
 ```bash
 export ANTHROPIC_API_KEY=...                                  # agent + judge (OpenAI / Gemini models also supported)

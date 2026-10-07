@@ -809,6 +809,52 @@ def handle_prompt_associate(args):
     print(f"Prompt {args.prompt} associated with {args.provider}/{args.model}.")
 
 
+def handle_prompt_list(args):
+    require_enterprise()
+    base, token = get_config()
+    result = request_json(build_url(base, "/prompts"), token) or []
+    output([{"name": p.get("name"), "description": p.get("description"), "variables": p.get("variables"),
+             "integrations": p.get("integrations"), "version": p.get("version")} for p in result])
+
+
+def handle_prompt_get(args):
+    require_enterprise()
+    base, token = get_config()
+    output(request_json(build_url(base, f"/prompts/{urllib.parse.quote(args.name, safe='')}"), token))
+
+
+def handle_prompt_save(args):
+    """Create/update a prompt template. The template text comes from a file; each --model is
+    <integration>:<model> and is the association that lets LLM tasks on that model use it."""
+    require_enterprise()
+    base, token = get_config()
+    with open(args.template_file) as f:
+        template = f.read()
+    params = {"description": args.description or args.name}
+    if args.model:
+        params["models"] = ",".join(args.model)
+    url = build_url(base, f"/prompts/{urllib.parse.quote(args.name, safe='')}", params)
+    req = urllib.request.Request(url, data=template.encode(), method="POST",
+                                 headers={"Content-Type": "text/plain", "Accept": "application/json",
+                                          **({"X-Authorization": token} if token else {})})
+    try:
+        with urllib.request.urlopen(req, timeout=30):
+            pass
+    except urllib.error.HTTPError as e:
+        print(f"HTTP {e.code}: {e.reason}\n{e.read().decode(errors='replace')}", file=sys.stderr)
+        sys.exit(1)
+    variables = sorted(set(re.findall(r"\$\{([^}]+)\}", template)))
+    output({"saved": args.name, "models": args.model, "variables": variables})
+
+
+def handle_prompt_delete(args):
+    require_enterprise()
+    base, token = get_config()
+    request_json(build_url(base, f"/prompts/{urllib.parse.quote(args.name, safe='')}"), token,
+                 method="DELETE", expect_json=False)
+    print(f"Prompt template {args.name} deleted.")
+
+
 def handle_grant_access(args):
     require_enterprise()
     base, token = get_config()
@@ -1023,6 +1069,21 @@ def main():
     p.add_argument("--model", required=True)
     p.add_argument("--prompt", required=True)
 
+    sub.add_parser("prompt-list", help="Orkes: list prompt templates (name, variables, associated models)")
+
+    p = sub.add_parser("prompt-get", help="Orkes: get one prompt template")
+    p.add_argument("--name", required=True)
+
+    p = sub.add_parser("prompt-save", help="Orkes: create/update a prompt template from a file and associate it with models")
+    p.add_argument("--name", required=True, help="template name -- LLM tasks put this in instructions / promptName")
+    p.add_argument("--template-file", required=True, help="file holding the template text; ${var} placeholders become promptVariables")
+    p.add_argument("--model", action="append", default=[], metavar="INTEGRATION:MODEL",
+                   help="associate with a model, e.g. openai-prod:gpt-4o-mini (repeatable)")
+    p.add_argument("--description", default=None)
+
+    p = sub.add_parser("prompt-delete", help="Orkes: delete a prompt template")
+    p.add_argument("--name", required=True)
+
     p = sub.add_parser("grant-access", help="Orkes: grant a user/group/role access to a resource (POST /auth/authorization)")
     p.add_argument("--subject-type", required=True, type=str.upper, choices=["USER", "GROUP", "ROLE"])
     p.add_argument("--subject-id", required=True)
@@ -1091,6 +1152,10 @@ def main():
         "provider-models": handle_provider_models,
         "model-sync": handle_model_sync,
         "prompt-associate": handle_prompt_associate,
+        "prompt-list": handle_prompt_list,
+        "prompt-get": handle_prompt_get,
+        "prompt-save": handle_prompt_save,
+        "prompt-delete": handle_prompt_delete,
         "grant-access": handle_grant_access,
         "access-list": handle_access_list,
     }

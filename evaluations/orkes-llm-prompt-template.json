@@ -1,0 +1,23 @@
+{
+  "name": "Orkes: LLM Workflow Uses a Saved Prompt Template by Name (not raw instructions)",
+  "skills": [
+    "conductor"
+  ],
+  "query": "On our Orkes cluster (auth required; integration openai-prod already has gpt-4o-mini registered) build a workflow that takes a support ticket as input and returns a 3-bullet summary in a friendly tone. Use system instructions telling the model how to summarize.",
+  "expected_behavior": [
+    "Step 1: Recognize Enterprise (auth required) \u2014 on Enterprise `instructions` is read as a saved prompt-template name (SKILL.md Rule 18)",
+    "Step 2: Write the system prompt to a file with `${...}` placeholders (e.g. `${ticket}`, `${tone}`)",
+    "Step 3: Save it as a template associated with the model the task uses: `python3 \"$CONDUCTOR_API\" prompt-save --name <t> --template-file <f> --model openai-prod:gpt-4o-mini`",
+    "Step 4: Write the workflow with LLM_CHAT_COMPLETE: `llmProvider: openai-prod`, `model: gpt-4o-mini`, `instructions: <template name>`, runtime values via `promptVariables` (real expressions like `${workflow.input.ticket}`) and/or the ticket as a user message in `messages`",
+    "Step 5: Mention the alternative: literal instructions require `allowRawPrompts: true`",
+    "Step 6: Register from a file and verify with a test run"
+  ],
+  "success_criteria": [
+    "Saves the system prompt as a prompt template (`prompt-save` or `POST /api/prompts/{name}`) rather than putting literal instructions in the task without `allowRawPrompts`",
+    "Associates the template with `openai-prod:gpt-4o-mini` (the exact integration:model the task uses)",
+    "The task's `instructions` (or `promptName`) is the template name, and runtime data reaches the model through `promptVariables` mapped to real Conductor expressions (e.g. `${workflow.input.ticket}`) and/or a `messages` entry",
+    "Does not put template placeholders like `${ticket}` inline in the workflow JSON, where Conductor would treat them as expressions",
+    "Mentions that literal prompt text would require `allowRawPrompts: true` on Enterprise",
+    "Uses `llmProvider: openai-prod` and `model: gpt-4o-mini`, writes the workflow JSON to a file before registering, and verifies with a run"
+  ]
+}

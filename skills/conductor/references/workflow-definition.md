@@ -428,7 +428,7 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
 | `llmProvider` | string (required) | OSS: the provider name — `openai`, `anthropic`, `google_gemini`, `vertex_ai`, `azureopenai`, `bedrock`, `mistral`, `cohere`, `grok`, `perplexity`, `huggingface`, `ollama`. **Orkes: the integration name** configured on the cluster (e.g. `openai-prod`), with `model` registered under it — see [orkes-integrations.md](orkes-integrations.md) |
 | `model` | string (required) | provider-specific model ID |
 | `messages` | array (required) | `[{role, message}]` — note `message`, not `content` |
-| `instructions` | string | optional system instructions (alias for the legacy `prompt` field) |
+| `instructions` | string | system instructions (alias for the legacy `prompt` field). **Orkes: a saved prompt-template name** (with `promptVariables`); literal text needs `allowRawPrompts: true` — see [orkes-integrations.md](orkes-integrations.md) §6 |
 | `temperature` | number | sampling temperature (0.0–2.0) |
 | `maxTokens` | integer | hard cap on completion length (default `8192`) |
 | `topP` | number | nucleus sampling |
@@ -451,7 +451,9 @@ Multi-turn conversational AI with optional tool calling. Supports all LLM provid
 | `outputMimeType` | string | HTTP-style content type for the output (media generation flows) |
 | `outputLocation` | string | URI where results should be stored (e.g., audio/video output paths) |
 | `voice` | string | audio output voice (when the model supports speech) |
-| `promptVersion` / `promptVariables` / `allowRawPrompts` | — | Orkes prompt-template integration (named prompts stored on the server, with versioning and variable interpolation). Pair with the legacy `prompt` field on the task. |
+| `promptVariables` | object | values for the template's `${name}` placeholders, e.g. `{"ticket": "${workflow.input.text}"}`. Placeholders only work in a saved template — inline `${name}` in task JSON is a Conductor expression and fails registration |
+| `promptVersion` | integer | pin a saved template version (Orkes) |
+| `allowRawPrompts` | boolean | **Orkes:** set `true` when `instructions` / `promptName` / image `prompt` holds literal text, otherwise the run fails with *"Prompt … is not associated with integration … and model …"*. Ignored on OSS |
 | `integrationName` | string | named Orkes integration override (per-environment auth) |
 | `maxResults` | integer | when the provider returns N choices, how many to keep (default `1`) |
 
@@ -578,7 +580,7 @@ Single prompt text completion.
   }
 }
 ```
-**Inputs**: `llmProvider`, `model`, `prompt` (all required), `temperature`, `maxTokens`.
+**Inputs**: `llmProvider`, `model`, `prompt` (all required), `temperature`, `maxTokens`; `promptName` + `promptVariables` to use a saved template. **Orkes:** prefer `"promptName": "<template>"`; literal text in `promptName` needs `allowRawPrompts: true` ([orkes-integrations.md](orkes-integrations.md) §6).
 **Outputs**: `result`, `tokenUsed`.
 
 ### LLM_GENERATE_EMBEDDINGS
@@ -597,13 +599,13 @@ Convert text to vector embeddings.
 **Outputs**: `result` (array of floats, e.g. 1536 dimensions for OpenAI).
 
 ### GENERATE_IMAGE
-Generate images from text prompts. Supports OpenAI (DALL-E-3), Vertex AI (Imagen), Azure OpenAI, Stability AI.
+Generate images from text prompts. Supports OpenAI (`gpt-image-*`), Vertex AI (Imagen), Azure OpenAI, Stability AI.
 ```json
 {
   "name": "img_task", "taskReferenceName": "img", "type": "GENERATE_IMAGE",
   "inputParameters": {
     "llmProvider": "openai",
-    "model": "dall-e-3",
+    "model": "gpt-image-2",
     "prompt": "A futuristic cityscape at sunset",
     "width": 1024,
     "height": 1024,
@@ -611,7 +613,7 @@ Generate images from text prompts. Supports OpenAI (DALL-E-3), Vertex AI (Imagen
   }
 }
 ```
-**Inputs**: `llmProvider`, `model`, `prompt` (all required), `width`, `height`, `n`, `style`.
+**Inputs**: `llmProvider`, `model`, `prompt` (all required), `width`, `height`, `n`, `style`. **Orkes:** `prompt` is checked like `instructions` — a saved template name, or literal text with `allowRawPrompts: true`.
 **Outputs**: `url` or `b64_json`.
 
 ### GENERATE_AUDIO
