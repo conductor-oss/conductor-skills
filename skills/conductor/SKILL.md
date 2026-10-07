@@ -8,7 +8,7 @@ allowed-tools: Bash(conductor *), Bash(npx *conductor*), Bash(python3 *conductor
 
 ## What this skill does
 
-When asked what you can help with, enumerate these eleven areas — every one is covered by this skill and the references it links to:
+When asked what you can help with, answer briefly: one line per area below (no code, tables or rule dumps), three or four concrete sample requests ("create a workflow that…", "schedule X daily", "review my workflow"), then ask what they want to do. The eleven areas:
 
 1. **Create** workflow definitions (any task type: SIMPLE, HTTP, SWITCH, FORK_JOIN, DO_WHILE, WAIT, SUB_WORKFLOW, LLM_*, MCP, etc.)
 2. **Build agentic workflows declaratively** — `LLM_CHAT_COMPLETE`, MCP tool calls, vector search (RAG), and — when you need manual control — a hand-wired `DO_WHILE` ReAct loop. See [examples/ai-agent-mcp.md](examples/ai-agent-mcp.md) (list-tools → plan → call → summarize), [examples/llm-rag.md](examples/llm-rag.md) (vector search + grounded answer with sources), [examples/llm-chat.md](examples/llm-chat.md) (minimal single-LLM call), [examples/ai-agent-loop.md](examples/ai-agent-loop.md) (the loop the agent compiler generates, hand-wired).
@@ -22,7 +22,7 @@ When asked what you can help with, enumerate these eleven areas — every one is
 10. **Review & optimize** — walk the 32-rule checklist in [references/optimization.md](references/optimization.md) (includes LLM-specific gotchas and agent rules F1–F10) and report CRITICAL / WARN / INFO
 11. **Build, test, deploy, and invoke Conductor Agents** — `Agent` + tools with the SDK (Python, TypeScript, Java, C#) or bring a LangChain / LangGraph / OpenAI Agents / Google ADK / Vercel AI / Claude Agent SDK / LangChain4j / Semantic Kernel agent; `plan` → `run` → `deploy` + `serve`; call it from any workflow with the `AGENT` task; human-in-the-loop, multi-agent, scheduling, evals; call remote A2A and hosted-platform agents. See [references/agents.md](references/agents.md), [references/agent-sdks.md](references/agent-sdks.md), [examples/agent-deploy-and-invoke.md](examples/agent-deploy-and-invoke.md).
 
-Plus Orkes-only: **webhooks** and the managed **secret store** / `conductor secret` CLI. (`${workflow.secrets.X}` itself also works on OSS — resolved from `CONDUCTOR_SECRET_X` env vars on the server — see [references/orkes.md](references/orkes.md).)
+**Secrets are not Orkes-only:** `${workflow.secrets.X}` works on OSS (resolved from `CONDUCTOR_SECRET_X` env vars on the server); Orkes adds the managed secret store and `conductor secret` CLI. Only **webhooks** are Orkes-only. See [references/orkes.md](references/orkes.md).
 
 ## Rules
 
@@ -112,7 +112,11 @@ Anything else (run, status, schedule, pause, retry, signal, visualize, create, r
 
 ## Setup check
 
-If the user has nothing set up, walk them through the default two-profile flow in **[references/setup.md](references/setup.md)**. Honor an explicit local-only or remote-only request instead. To verify a working environment:
+If the user has nothing set up, walk them through the default two-profile flow in **[references/setup.md](references/setup.md)**. Honor an explicit local-only or remote-only request instead.
+
+**User names a server URL**: (1) `export CONDUCTOR_SERVER_URL=<url>` (`/api` appended only to a bare root); (2) probe **without credentials** — `conductor workflow list`; (3) only on 401/403 (or user-stated auth) ask them to inject `CONDUCTOR_AUTH_KEY`/`_SECRET` (or `_TOKEN`) via shell / secret store — never chat or CLI args — and check names only; (4) re-run the probe; (5) *then* offer interactive `conductor config save --profile <name>`, noting these are Conductor access credentials — LLM-provider keys stay on the server. No credentials or `config save` before the unauthenticated probe.
+
+To verify a working environment:
 
 ```bash
 conductor --version          # CLI present?
@@ -121,7 +125,7 @@ conductor workflow list      # Server reachable?
 
 ## Commands
 
-Full verb-to-CLI lookup is in **[references/cli-index.md](references/cli-index.md)**. Python fallback equivalents (when neither `conductor` nor `npx` is available) are in **[references/fallback-cli.md](references/fallback-cli.md)**. Schedules (OSS) are in **[references/schedules.md](references/schedules.md)**. Enterprise commands (secrets, webhooks) are in **[references/orkes.md](references/orkes.md)**.
+Full verb-to-CLI lookup is in **[references/cli-index.md](references/cli-index.md)**. Python fallback equivalents (when neither `conductor` nor `npx` is available) are in **[references/fallback-cli.md](references/fallback-cli.md)**. Schedules (OSS) are in **[references/schedules.md](references/schedules.md)**. Orkes commands (managed secret store, webhooks) are in **[references/orkes.md](references/orkes.md)**.
 
 ## Creating workflows
 

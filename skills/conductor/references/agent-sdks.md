@@ -143,7 +143,9 @@ All cells use the same `runtime.run(agentOrGraph, prompt)` / `deploy` / `serve` 
 
 ## 6. Multi-agent strategies (all nine, Python; TS/Java/C# use the same names)
 
-`Agent(agents=[...], strategy=...)` — every child needs a unique `name` and its own bounds. `Strategy` values: `handoff` (default), `router`, `sequential`, `parallel`, `swarm`, `round_robin`, `random`, `manual`, `plan_execute`. Children compile to `SUB_WORKFLOW`s; the parent owns the loop.
+`Agent(agents=[...], strategy=...)` — every child needs a unique `name` and its own bounds. `Strategy` values: `handoff` (default), `router`, `sequential`, `parallel`, `swarm`, `round_robin`, `random`, `manual`, `plan_execute`. Children compile to `SUB_WORKFLOW`s inside the one deployed parent, which owns the loop.
+
+In the plan, state: **which** — "hand the conversation to a specialist" is `HANDOFF`, not `ROUTER` (separate `router=` selector) or a workflow `SWITCH`/`FORK_JOIN`; **shape** — only the parent is deployed and called by the `AGENT` task; **verify** — `mock_run(..., events=[MockEvent.handoff("billing"), ...])` + `expect(r).handoff_to("billing")`, live `handoff`/`subagent_start` on `conductor agent stream`.
 
 ```python
 from conductor.ai.agents import Agent, Strategy, agent_tool, scatter_gather, OnTextMention, OnToolResult, OnCondition
