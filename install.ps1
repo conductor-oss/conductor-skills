@@ -118,8 +118,8 @@ $SKILL_FILES = @(
     "skills/conductor/scripts/test_conductor_api.py"
 )
 
-$VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp")
-$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","aider","opencode","copilot")
+$VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp","bob")
+$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","aider","opencode","copilot","bob")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -150,6 +150,7 @@ function Detect-Agents {
     if (Get-Command opencode -ErrorAction SilentlyContinue) { $detected += "opencode" }
     if (Test-Path (Join-Path $installDir ".roo")) { $detected += "roo" }
     if ((Get-Command amp -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".config\amp"))) { $detected += "amp" }
+    if ((Get-Command bob -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".bob"))) { $detected += "bob" }
 
     return $detected
 }
@@ -380,6 +381,7 @@ function Get-GlobalPath {
         "windsurf" { return Join-Path $installDir ".codeium\windsurf\memories\global_rules.md" }
         "roo"      { return Join-Path $installDir ".roo\rules\conductor.md" }
         "aider"    { return Join-Path $installDir ".aider.conf.yml" }
+        "bob"      { return Join-Path $installDir ".bob\skills\conductor" }
     }
 }
 
@@ -393,6 +395,7 @@ function Get-TargetPath {
         "aider"    { return Join-Path $ProjDir ".conductor-skills" }
         "amazonq"  { return Join-Path $ProjDir ".amazonq\rules\conductor.md" }
         "roo"      { return Join-Path $ProjDir ".roo\rules\conductor.md" }
+        "bob"      { return Join-Path $ProjDir ".bob\skills\conductor" }
     }
 }
 
@@ -609,7 +612,7 @@ function Install-ForAgent {
         return Install-Claude -IsGlobal $IsGlobal -ProjDir $ProjDir -TmpDir $TmpDir
     }
 
-    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
+    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp","bob")) {
         $dest = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
         return Install-SkillDirOnce -DestDir $dest -TmpDir $TmpDir
     }
@@ -648,7 +651,7 @@ function Uninstall-Agent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [string]$ManifestPath)
 
     $skillDir = ""
-    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
+    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp","bob")) {
         $skillDir = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
     } elseif ($AgentName -eq "windsurf" -and -not $IsGlobal) {
         $skillDir = Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir
@@ -874,7 +877,7 @@ if ($All) {
         Write-Warn "No AI coding agents detected on this system."
         Write-Host ""
         Write-Info "Supported agents: claude, codex, gemini, cursor, windsurf, cline,"
-        Write-Info "  aider, copilot, amazonq, opencode, roo, amp"
+        Write-Info "  aider, copilot, amazonq, opencode, roo, amp, bob"
         Write-Host ""
         Write-Info "Install one of the above, then re-run this command."
         exit 0

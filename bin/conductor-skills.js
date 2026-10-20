@@ -36,7 +36,7 @@ Usage:
 
 Supported agents:
   claude, codex, gemini, cursor, windsurf, cline, aider,
-  copilot, amazonq, opencode, roo, amp
+  copilot, amazonq, opencode, roo, amp, bob
 
 Examples:
   npx @conductor-oss/conductor-skills --agent claude

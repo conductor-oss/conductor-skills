@@ -361,6 +361,7 @@ Or upgrade a single agent: `--agent <name> --upgrade`
 | [Roo Code](https://github.com/RooVetGit/Roo-Code) | `roo` | `~/.roo/rules/conductor.md` | `.roo/rules/conductor.md` |
 | [Amp](https://ampcode.com) | `amp` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
 | [OpenCode](https://opencode.ai) | `opencode` | `~/.agents/skills/conductor/` | `.agents/skills/conductor/` |
+| [IBM Bob](https://bob.ibm.com/) | `bob` | `~/.bob/skills/conductor/` | `.bob/skills/conductor/` |
 
 Codex, Gemini, Cursor, OpenCode, GitHub Copilot, and Amp share one `.agents/skills/` install — installing any one of them writes the shared directory; installing another just points at the same copy. Uninstalling only removes the shared directory once every agent using it has been uninstalled.
 
