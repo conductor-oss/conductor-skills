@@ -140,6 +140,8 @@ These agents don't support global install — run the command from your project 
 
 That's it — ask your agent to connect to your server (see [Try It](#try-it) below).
 
+**No server yet?** The skill defaults to the free hosted [Orkes Conductor Developer Edition](https://developer.orkescloud.com/): your agent asks you to run `orkes login` (a browser device-flow sign-in; signup is implicit, no keys to paste), runs a 30-second hello-world workflow, then builds your real goal from the closest starter. Commands run as `orkes conductor …` when the `orkes` CLI is installed, or `conductor --profile developer …` otherwise. Key + secret remains the fallback for CI and clusters without device login, and a local `conductor server start` is one request away.
+
 ---
 
 
@@ -148,6 +150,8 @@ That's it — ask your agent to connect to your server (see [Try It](#try-it) be
 After installing, try these prompts with your agent. Or run the slash command shown in brackets where one exists.
 
 **Setup & configure** *(or `/conductor-setup`)*
+- *"Set up Conductor"* — logs you in to Developer Edition with `orkes login`, then runs a hello world
+- *"I was on the Developer Edition Launchpad — continue here"*
 - *"Set up Conductor — I want to start a local server"*
 - *"Connect to my Conductor server at https://developer.orkescloud.com/api"*
 - *"Save my Conductor server config as a profile called production"*
@@ -308,6 +312,8 @@ Raw JSON workflow definitions live in [skills/conductor/examples/workflows/](ski
 | [Schedules](skills/conductor/references/schedules.md) | Cron schedules (OSS) — schema, format, idempotency patterns |
 | [Optimization Checklist](skills/conductor/references/optimization.md) | 40 review rules across structure, reliability (incl. LLM-specific gotchas), performance, security, wrong-tool, and agents |
 | [Troubleshooting](skills/conductor/references/troubleshooting.md) | Common errors, diagnosis flow, stuck-workflow recovery |
+| [Orkes Developer Edition](skills/conductor/references/orkes-dev-edition.md) | `orkes login` device flow, hello world, starters, worker credentials via `keys create`, upgrade paths, `orkes` CLI cheat-sheet |
+| [Orkes docs & use cases](skills/conductor/references/orkes-use-cases.md) | Where to send users: use-case pages by pattern / industry, Enterprise docs (secrets, webhooks, RBAC, integrations, agents, human tasks, schedules, SDKs), starters, Enterprise-vs-OSS docs rule |
 | [Orkes Enterprise](skills/conductor/references/orkes.md) | Secrets, webhooks (Orkes Conductor only) |
 | [Orkes integrations](skills/conductor/references/orkes-integrations.md) | AI provider / vector DB integrations, models, access, prompt templates (Orkes Conductor only) |
 | [Fallback CLI](skills/conductor/references/fallback-cli.md) | Bundled Python REST script — CLI equivalents when the CLI isn't available, plus agent and Orkes-integration verbs the CLI lacks |

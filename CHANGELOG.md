@@ -4,6 +4,38 @@ All notable changes to the Conductor Skills plugin are documented here. Versions
 correspond to the shared `VERSION` file (see [PUBLISHING.md](PUBLISHING.md) for
 what that means across the three distribution channels).
 
+## Unreleased
+
+### Added
+
+- `orkes login` (OAuth device flow to Orkes Conductor Developer Edition) is the
+  default first-run path: no keys to paste, signup is implicit, the CLI writes
+  and activates the `developer` profile plus the `conductor --profile developer`
+  shim. The skill then runs a sub-30-second hello world before the user's real
+  goal and starts that goal from the closest starter. Commands run as
+  `orkes conductor …` when `orkes` is on PATH.
+- `references/orkes-dev-edition.md` — the Developer Edition journey (web →
+  terminal handoff, login, hello world, starters, worker credentials via
+  `orkes conductor keys create --name <app> --save`, upgrade paths incl. a
+  Foundry placeholder) and an `orkes` CLI cheat-sheet.
+- `references/orkes-use-cases.md` — verified index of orkes.io use-case pages
+  by pattern / industry, Enterprise documentation (secrets, webhooks, RBAC,
+  integrations, agents, human tasks, schedules, SDKs), starters, and the
+  Enterprise-docs-vs-OSS-docs rule, with the live `llms.txt` preferred online.
+- Device-login failure modes in `references/troubleshooting.md`.
+- `evaluations/orkes-login-device-flow.json`.
+
+### Changed
+
+- Default setup no longer creates `localhost` unless the user wants a local
+  server; key + secret (`conductor config save --profile developer`) is the
+  fallback for CI and clusters without device login. `/conductor-setup`, the
+  eval harness system prompt, and the setup evals follow the new default.
+- The `orkes` install page is referenced as `https://orkes.io/cli`
+  (placeholder — TODO: confirm the install URL before release).
+- Eval-context hard budget in `scripts/validate_plugin.py` raised 340k → 360k
+  chars to fit the new references (the 300k soft budget was already exceeded).
+
 ## 1.8.0
 
 ### Added
