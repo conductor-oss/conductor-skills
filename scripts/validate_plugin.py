@@ -40,9 +40,11 @@ EVAL_DIR = ROOT / "evaluations"
 OPTIMIZATION_MD = SKILL_ROOT / "references" / "optimization.md"
 
 # Eval context budget (chars). run_evals.py sends SKILL.md + references/*.md +
-# examples/*.md as one system prompt; keep it well inside every provider's window.
+# examples/*.md as one system prompt; keep it well inside every provider's window
+# (360k chars ≈ 90k tokens). Raised from 340k when the Orkes Developer Edition /
+# `orkes login` references landed; the soft budget is the signal to start trimming.
 CONTEXT_WARN_CHARS = 300_000
-CONTEXT_FAIL_CHARS = 340_000
+CONTEXT_FAIL_CHARS = 360_000
 
 # Shipped AGENT task contract (see references/workflow-definition.md).
 VALID_AGENT_TYPES = {
