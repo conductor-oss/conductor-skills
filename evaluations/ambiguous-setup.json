@@ -5,7 +5,7 @@
   "expected_behavior": [
     "Step 1: Treat an unqualified first-time setup as the default flow: sign in to Orkes Conductor Developer Edition with `orkes login`; Developer Edition is the default for later skill operations.",
     "Step 2: Check `orkes --version` and `conductor --version` first. If `conductor` is missing, prefer `npx @conductor-oss/conductor-cli`; never run a global npm install without explicit consent (Rule 3). If `orkes` is missing, point to its install page and use the key + secret fallback.",
-    "Step 3: Have the user run `orkes login` in their own terminal and explain what happens: verification URL + user code, browser opens, the user signs in or signs up on that page (implicit signup, no signup command), the CLI stores the session and writes/activates the `developer` profile and the `conductor --profile developer` shim. The agent never reads token or session files, the clipboard, terminal input, or profile YAML.",
+    "Step 3: Run `orkes login --no-wait` yourself; exit status 7 means the sign-in is pending, not that anything failed. Relay the printed `Open <url>` and `Code XXXX-XXXX` lines verbatim and say the page also creates their account (implicit signup, no signup command). Never ask them to paste anything back and never claim to have opened the browser. Wait for them to confirm, or poll `orkes login --timeout 30s` (it resumes the same code, valid ~15 min); exit 0 means the CLI stored the session and wrote/activated the `developer` profile and the `conductor --profile developer` shim. The agent never reads token or session files, the profiles file, the clipboard, terminal input, or profile YAML.",
     "Step 4: Verify safely with `orkes identity show` and `orkes conductor workflow list --json` (or `conductor --profile developer workflow list --json`).",
     "Step 5: Run the hello world from references/orkes-dev-edition.md (`orkes conductor workflow create hello_world.json`, then `workflow start … --sync`) before offering anything else, and give the execution link.",
     "Step 6: Fallback only when needed (no `orkes`, cluster without device login, CI): open https://developer.orkescloud.com/ visibly, navigate through Access Control → Applications, hand control to the user before Create access key, and have them enter the key + one-time secret directly into interactive `conductor config save --profile developer`.",
@@ -15,7 +15,7 @@
   ],
   "success_criteria": [
     "Agent chooses Developer Edition via `orkes login` for the generic setup request and identifies `developer` as the default profile",
-    "`orkes login` is run by the user in their terminal and explained as a device flow with implicit signup (no signup command)",
+    "The agent runs `orkes login --no-wait`, treats exit 7 as pending, relays the link and code verbatim with the account-creation note, waits for the user or polls `orkes login --timeout 30s`, never asks them to paste anything back, and never claims to have opened the browser",
     "Agent verifies with a real `orkes identity show` / `workflow list` call before reporting success",
     "A hello world workflow is registered and run before any other work is offered",
     "Key + secret (visible Access Control → Applications, user-owned secret entry) is presented only as the fallback",

@@ -22,7 +22,14 @@ what that means across the three distribution channels).
   by pattern / industry, Enterprise documentation (secrets, webhooks, RBAC,
   integrations, agents, human tasks, schedules, SDKs), starters, and the
   Enterprise-docs-vs-OSS-docs rule, with the live `llms.txt` preferred online.
-- Device-login failure modes in `references/troubleshooting.md`.
+- Agent-friendly two-step login: `orkes login --no-wait` exits 7 (= pending,
+  not failure) after printing `Open <url>` / `Code XXXX-XXXX`; the agent relays
+  both verbatim, waits for the user or polls `orkes login --timeout 30s`, and
+  never asks them to paste anything back. Documented in
+  `references/orkes-dev-edition.md` § Agent login, `setup.md`, Rule 15 and
+  the setup evals.
+- Device-login failure modes in `references/troubleshooting.md`, including
+  the exit-7 row.
 - `evaluations/orkes-login-device-flow.json`.
 
 ### Changed

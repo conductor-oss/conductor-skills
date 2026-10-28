@@ -1,18 +1,33 @@
 # Orkes Conductor Developer Edition
 
-Free hosted Orkes Conductor at `https://developer.orkescloud.com` — Enterprise features (secret store, webhooks, AI integrations, human tasks, RBAC), nothing to install, a private context per user. **Default target when the user has no server**; local OSS only when they ask. Sign-in is `orkes login` (OAuth 2.0 device flow). Signup is implicit on the browser page — **there is no signup command**. Install `orkes` from `https://orkes.io/cli` <!-- TODO: confirm install URL -->.
+Free hosted Orkes Conductor at `https://developer.orkescloud.com` — Enterprise features (secret store, webhooks, AI integrations, human tasks, RBAC), nothing to install, a private context per user. **Default target when the user has no server**; local OSS only when they ask. Sign-in is `orkes login` (OAuth 2.0 device flow) — an agent runs it in two steps, see § Agent login. Signup is implicit on the browser page — **there is no signup command**. Install `orkes` from `https://orkes.io/cli` <!-- TODO: confirm install URL -->.
 
 ## Journey
 
 | Step | Do | Notes |
 |---|---|---|
 | 0 Web → terminal | User says "I was on Launchpad" or pastes a Developer Edition prompt | Already signed in in the browser → `orkes login` is one click (SSO). The pasted prompt is the goal; don't re-explain Conductor. |
-| 1 Login | `orkes login` — in the **user's** terminal | Prints a URL + user code, opens the browser, the user confirms; the CLI stores the session, activates profile `developer` and writes `~/.conductor-cli/config-developer.yaml` (so `conductor --profile developer …` works too). `--no-browser` on headless hosts. Verify: `orkes identity show`. |
+| 1 Login | `orkes login --no-wait` → relay link + code → wait for the human (§ Agent login) | Exit status 7 = sign-in pending, not an error. Once approved, the CLI stores the session, activates profile `developer` and writes `~/.conductor-cli/config-developer.yaml` (so `conductor --profile developer …` works too). Verify: `orkes identity show` (no server call). |
 | 2 Hello World (< 30 s) | register + run the workflow below | Always before the user's real goal, even when they pasted one. Link the run: `https://developer.orkescloud.com/execution/<workflowId>`. |
 | 3 Starter | Pick the closest starter / template to the goal | [orkes-use-cases.md](orkes-use-cases.md) § Starters, or the Launchpad cards in the UI. Modify it; don't start blank. |
 | 4 Their goal | Normal skill rules | Developer Edition is Enterprise: Rule 16 (LLM providers are integrations), Rule 18 (prompt templates), `conductor secret`, webhooks all apply. |
-| 5 Workers / SDKs | `orkes conductor keys create --name <app> --save` | Mints an application + access key. Prints `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` as shell exports **once**; `--save` also writes profile `<app>` for a standalone `conductor --profile <app>` and SDK workers. The worker reads the env vars — never paste or relay the values. Then run the worker gate (Rule 1). |
+| 5 Workers / SDKs | `orkes conductor keys create --name <app> --save` | Mints an application + access key (default roles `WORKER` + `METADATA_API`; `--role` to change). Prints `export CONDUCTOR_SERVER_URL` / `CONDUCTOR_AUTH_KEY` / `CONDUCTOR_AUTH_SECRET` lines **once**; `--save` writes the key into the active Orkes profile's Conductor CLI file (`~/.conductor-cli/config-developer.yaml`), replacing the sign-in token there — so standalone `conductor --profile developer …` and SDK workers on that profile use the long-lived key, while `orkes conductor …` keeps the personal sign-in. It does not create a profile named after the app. The worker reads the env vars — never paste or relay the values. Then run the worker gate (Rule 1). |
 | 6 Upgrade | see below | Other clusters, CI, Foundry-hosted workers, local OSS. |
+
+## Agent login
+
+A coding agent has no interactive terminal, so `orkes login` runs in two steps:
+
+```bash
+orkes login --no-wait            # or: orkes login --json --no-wait
+# stderr:  Open   https://…      Code   XXXX-XXXX      "New to Orkes? That page also creates your account."
+# stdout (--json): {"pending": true, "userCode": "…", "verificationUri": "…", "profile": "…", "server": "…"}
+# exit 7 = not signed in yet — nothing failed
+```
+
+1. Relay the `Open <url>` and `Code XXXX-XXXX` lines to the user **verbatim**, and say that the page also creates their account. Never ask them to paste anything back; never claim to have opened the browser for them.
+2. Wait until they say they are done — or poll `orkes login --timeout 30s` a few times; re-running `orkes login` (same `--server` / profile) resumes the same code ("Resuming the sign-in you started earlier"), which stays valid about 15 minutes. Exit 0 = signed in.
+3. Without `--no-wait` and without a terminal, `orkes login` polls for at most 90 s, then exits 7 with the sign-in still pending — the same resume applies.
 
 ## Hello World
 
@@ -59,12 +74,12 @@ Without `orkes` on PATH: `conductor --profile developer workflow …`.
 
 | Command | Does |
 |---|---|
-| `orkes login [--profile N] [--server URL] [--no-browser] [--json]` | Device-flow sign-in (key login when `ORKES_KEY_ID` + `ORKES_KEY_SECRET` are set). Default server: Developer Edition; default profile: `developer`, else the server hostname. |
+| `orkes login [--profile N] [--server URL] [--no-wait] [--timeout 60s] [--no-browser] [--json]` | Device-flow sign-in (key login when `ORKES_KEY_ID` + `ORKES_KEY_SECRET` are set). Exit 7 = pending; re-run resumes the same code. Default server: Developer Edition; default profile: `developer`, else the server hostname. |
 | `orkes logout [--profile N] [--all]` | Revoke + delete the session; the profile entry stays. |
 | `orkes profile list` / `show [N]` / `use N` / `delete N` | Manage and switch profiles (`ORKES_PROFILE` env also works). |
-| `orkes identity show` | Who am I: email, issuer, expiry — safe to show. |
-| `orkes token` | Prints a bearer token — use only inline, `curl -H "X-Authorization: $(orkes token)"`; never into chat, a file, or a log. |
-| `orkes conductor <conductor-cli command…>` | Any `conductor` verb with the active profile injected (`CONDUCTOR_SERVER_URL`, `CONDUCTOR_AUTH_TOKEN`, `CONDUCTOR_SERVER_TYPE=Enterprise`); explicit `--server` / `--auth-*` flags still override. |
-| `orkes conductor keys create --name N [--save]` | Application + access key for workers / SDKs / CI. |
+| `orkes identity show` | Who am I: email, issuer, expiry — local, no server call; safe to show. |
+| `orkes token` | Prints a bearer token for curl against the profile's `conductorUrl` — use only inline, `curl -H "X-Authorization: $(orkes token)"`; never into chat, a file, or a log. |
+| `orkes conductor <conductor-cli command…>` | Any `conductor` verb with the active profile injected (`CONDUCTOR_SERVER_URL`, `CONDUCTOR_AUTH_TOKEN`, `CONDUCTOR_SERVER_TYPE=Enterprise`); explicit `--server` / `--auth-*` flags still override. No `update` subcommand. |
+| `orkes conductor keys create --name N [--role WORKER --role METADATA_API] [--save] [--json]` | Application + access key for workers / SDKs / CI; prints the three `export` lines once. |
 
-Precedence: `ORKES_TOKEN` > `ORKES_KEY_ID` + `ORKES_KEY_SECRET` > `--profile` / `ORKES_PROFILE` > active profile. Tokens live ~10 h; any `orkes` command renews them and the `config-developer.yaml` shim. Never read `~/.config/orkes/`, `~/.local/state/orkes/`, or `~/.conductor-cli/*.yaml`.
+Precedence: `ORKES_TOKEN` > `ORKES_KEY_ID` + `ORKES_KEY_SECRET` > `--profile` / `ORKES_PROFILE` > active profile. Tokens live ~10 h; any `orkes` command renews them and the `config-developer.yaml` shim. Never read the profiles file (`~/.config/orkes/profiles.toml`; macOS `~/Library/Application Support/orkes/profiles.toml`), the token state dir (`~/.local/state/orkes/`), or `~/.conductor-cli/*.yaml`.

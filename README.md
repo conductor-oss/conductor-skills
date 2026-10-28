@@ -140,7 +140,7 @@ These agents don't support global install — run the command from your project 
 
 That's it — ask your agent to connect to your server (see [Try It](#try-it) below).
 
-**No server yet?** The skill defaults to the free hosted [Orkes Conductor Developer Edition](https://developer.orkescloud.com/): your agent asks you to run `orkes login` (a browser device-flow sign-in; signup is implicit, no keys to paste), runs a 30-second hello-world workflow, then builds your real goal from the closest starter. Commands run as `orkes conductor …` when the `orkes` CLI is installed, or `conductor --profile developer …` otherwise. Key + secret remains the fallback for CI and clusters without device login, and a local `conductor server start` is one request away.
+**No server yet?** The skill defaults to the free hosted [Orkes Conductor Developer Edition](https://developer.orkescloud.com/): your agent runs `orkes login` and hands you a link + code to approve in the browser (signup is implicit, no keys to paste), runs a 30-second hello-world workflow, then builds your real goal from the closest starter. Commands run as `orkes conductor …` when the `orkes` CLI is installed, or `conductor --profile developer …` otherwise. Key + secret remains the fallback for CI and clusters without device login, and a local `conductor server start` is one request away.
 
 ---
 

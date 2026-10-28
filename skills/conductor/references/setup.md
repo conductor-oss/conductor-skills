@@ -17,8 +17,9 @@ compatibility shim (token ~10 h, refreshed by any `orkes` command), so the skill
 uses `conductor --profile developer …` unless the user selects another profile.
 Do not duplicate its credentials or edit shell startup files to make it the
 default. Discover saved environments with `orkes profile list` or
-`conductor config list`; **never read profile YAML, `~/.config/orkes/` or
-`~/.local/state/orkes/`**, which may contain credentials.
+`conductor config list`; **never read profile YAML, the `orkes` profiles file
+(`~/.config/orkes/profiles.toml`; macOS `~/Library/Application Support/orkes/profiles.toml`)
+or the token state dir `~/.local/state/orkes/`**, which may contain credentials.
 
 Without a profile, the CLI uses `CONDUCTOR_SERVER_URL`, `--server`, or local
 server auto-detection. The Python fallback script (`scripts/conductor_api.py`)
@@ -35,17 +36,20 @@ local. Honor an explicit target instead.
 1. `orkes --version`. If missing, install it from `https://orkes.io/cli`
    <!-- TODO: confirm install URL --> (ask before any system-wide install). If
    it cannot be installed, use the key + secret fallback below.
-2. In **their own terminal** the user runs:
+2. Run the two-step agent login (exact procedure and output shape in
+   [orkes-dev-edition.md](orkes-dev-edition.md) § Agent login):
 
    ```bash
-   orkes login            # add --no-browser on a headless host
+   orkes login --no-wait            # prints Open <url> + Code XXXX-XXXX; exit 7 = pending, not an error
+   orkes login --timeout 30s        # later: resumes the same code; exit 0 once the user approved
    ```
 
-   It prints a verification URL + user code, opens the browser, the user signs
-   in or signs up on that page (signup is implicit — there is no signup
-   command; one click if the browser already has a Developer Edition session),
-   then the CLI stores the session, writes and activates profile `developer`,
-   and writes `~/.conductor-cli/config-developer.yaml`. Never read token or
+   Relay the link and code to the user verbatim and say the page also creates
+   their account (signup is implicit — there is no signup command; one click
+   if the browser already has a Developer Edition session). Never ask them to
+   paste anything back, never claim to have opened the browser. Once approved,
+   the CLI stores the session, writes and activates profile `developer`, and
+   writes `~/.conductor-cli/config-developer.yaml`. Never read token or
    session files, the clipboard, or the page after sign-in.
 3. Verify, then run the Hello World and continue in
    [orkes-dev-edition.md](orkes-dev-edition.md):
@@ -56,9 +60,13 @@ local. Honor an explicit target instead.
    ```
 
 4. Workers, SDKs, CI: `orkes conductor keys create --name <app> --save` mints an
-   application + access key, prints the pair once as shell exports and (with
-   `--save`) writes profile `<app>` for `conductor --profile <app>`. Never paste
-   or relay the values.
+   application + access key and prints the pair once as shell exports. With
+   `--save` it writes the key into the active Orkes profile's
+   `~/.conductor-cli/config-<profile>.yaml` (e.g. `config-developer.yaml`),
+   replacing the sign-in token there: standalone `conductor --profile developer …`
+   and SDK workers then authenticate with the key; `orkes conductor …` keeps the
+   personal sign-in. It does not create a profile named after the app. Never
+   paste or relay the values.
 
 ### Fallback — key + secret (no `orkes`, a cluster without device login, CI)
 
