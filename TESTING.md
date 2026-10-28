@@ -128,7 +128,7 @@ The GitHub Actions `validate-plugin` workflow runs on push to `main` and on any 
 | ID | Description | Env | Steps | Expected |
 |----|-------------|-----|-------|----------|
 | TC-CMD-10 | First-time on clean machine | E1 | `/conductor-setup` | Detects missing CLI; offers `npx` first; **asks before** `npm install -g` |
-| TC-CMD-11 | CLI already installed | E2 | `/conductor-setup` | Skips install and starts the standard `developer` + `localhost` profile setup |
+| TC-CMD-11 | CLI already installed | E2 | `/conductor-setup` | Skips install and starts `orkes login` to Developer Edition (hello world next) |
 | TC-CMD-12 | Local server option | E2 | `/conductor-setup`, choose Option A | Runs `conductor server start`; verifies with `conductor server status` |
 | TC-CMD-13 | Remote no-auth option | E3 | `/conductor-setup`, choose Option B, no creds requested | Sets `CONDUCTOR_SERVER_URL`, `conductor workflow list` returns OK |
 | TC-CMD-14 | Remote with token auth | E4 | `/conductor-setup`, server returns 401 first | Asks for token, sets `CONDUCTOR_AUTH_TOKEN`, never echoes the value |
@@ -136,7 +136,7 @@ The GitHub Actions `validate-plugin` workflow runs on push to `main` and on any 
 | TC-CMD-16 | Saves named profile when asked | E5/E6 | After setup, ask "save this as profile prod" | Directs the user to run interactive `conductor config save --profile prod`; profile appears as `~/.conductor-cli/config-prod.yaml` |
 | TC-CMD-18 | Explicit Orkes URL | E5 | "Use https://developer.orkescloud.com/; auth env is already set" | Does not re-ask local-vs-remote; uses `https://developer.orkescloud.com/api`, Enterprise mode, and verifies with no credential output |
 | TC-CMD-19 | Fallback key/secret auth | E5 without CLI/npm | Run `conductor_api.py list-workflows` with key/secret env | Exchanges at `/api/token` in memory and sends JWT via `X-Authorization` without printing it |
-| TC-CMD-19a | Default dual-profile setup | E2/E5 | `/conductor-setup` with no target | Creates interactive `developer` and `localhost` profiles; uses visible Developer Edition navigation and a user-owned key-creation handoff; defaults later commands to `--profile developer` |
+| TC-CMD-19a | Default setup = `orkes login` | E2/E5 | `/conductor-setup` with no target | Has the user run `orkes login` (device flow, implicit signup); verifies with `orkes identity show`; runs the hello world from `orkes-dev-edition.md`; defaults later commands to `orkes conductor …` / `--profile developer`; key + secret (visible Access Control → Applications, user-owned secret entry) only as the fallback; `localhost` only on request |
 | TC-CMD-17 | `npm install -g` requires confirmation | E1 | When CLI is missing and user picks global install | Agent **explicitly confirms** before running install command |
 
 ### 4.3 `/conductor-optimize`
@@ -192,7 +192,7 @@ Requires the agent runtime: E2 started with `conductor server start` (sets `cond
 
 | ID | Description | Env | Steps | Expected |
 |----|-------------|-----|-------|----------|
-| TC-SET-01 | "Help me set up Conductor" | E1 | Prompt agent in plain English | Agent walks the default dual-profile flow in `references/setup.md`, creating `developer` and `localhost` and using `developer` by default |
+| TC-SET-01 | "Help me set up Conductor" | E1 | Prompt agent in plain English | Agent walks the `orkes login` flow in `references/setup.md` / `orkes-dev-edition.md` (Developer Edition by default, hello world first); `localhost` only if asked |
 | TC-SET-02 | Install via npx (no global) | E1 | When prompted, prefer no global install | Agent uses `npx @conductor-oss/conductor-cli ...` |
 | TC-SET-03 | Connect to local server | E2 | "Connect to my local Conductor" | CLI auto-detects; no env var needed |
 | TC-SET-04 | Connect to remote URL | E3 | "Connect to https://my.example.com/api" | Sets `CONDUCTOR_SERVER_URL`; verifies |
@@ -620,7 +620,7 @@ Use Appendix D as the fixture. For code-defined agents, `/conductor-optimize` sh
 | TC-PRF-04 | Profile inferred from context | E6 | "How many failed today in prod?" | Uses `--profile prod` automatically |
 | TC-PRF-05 | Confirm ambiguous profile | E6 | "Run on production" when only `prod` exists | Agent confirms or just uses `prod` (if unambiguous) |
 | TC-PRF-06 | Cross-env query | E6 | "Compare workflow counts in dev vs prod" | Two separate `--profile` queries; reports both |
-| TC-PRF-07 | Standard first-run pair | E2/E5 | "Set up Conductor for me" | Saves `developer` for `https://developer.orkescloud.com/api` and `localhost` for `http://localhost:8080/api`; later unqualified operations use `--profile developer` |
+| TC-PRF-07 | Standard first run | E2/E5 | "Set up Conductor for me" | `orkes login` writes and activates `developer` (`https://developer.orkescloud.com/api`); `localhost` (`http://localhost:8080/api`) only when asked; later unqualified operations use `orkes conductor …` / `--profile developer` |
 
 ---
 

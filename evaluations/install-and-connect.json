@@ -1,26 +1,27 @@
 {
-  "name": "Install CLI and Create Standard Profiles",
+  "name": "Install CLI and Sign In to Developer Edition",
   "skills": ["conductor"],
   "query": "I want to start using Conductor but I don't have anything set up yet",
   "expected_behavior": [
-    "Step 1: Check `conductor --version` before attempting installation.",
-    "Step 2: If missing, prefer `npx @conductor-oss/conductor-cli` for one-off use. Ask before any global npm install; if npm is unavailable, explain the Node.js prerequisite or fallback limitations.",
-    "Step 3: Start the standard dual-profile onboarding rather than asking the user to choose only one server.",
-    "Step 4: Open https://developer.orkescloud.com/ visibly when browser automation is available, let the user sign in, and use visible navigation to Access Control → Applications.",
-    "Step 5: Guide the user to create a least-privilege application and hand control to them before Create access key. Never observe the one-time secret or request credentials in chat.",
-    "Step 6: Have the user run interactive `conductor config save --profile developer` and directly enter `https://developer.orkescloud.com/api`, Enterprise, and their API key + secret.",
-    "Step 7: Have the user run interactive `conductor config save --profile localhost` with `http://localhost:8080/api`, OSS, and no auth. Saving it does not require starting the server.",
-    "Step 8: Verify with `conductor config list`, `conductor --profile developer whoami`, and `conductor --profile developer workflow list --json`; verify localhost only when its server is running.",
-    "Step 9: Default later skill commands to `--profile developer`; use `--profile localhost` when the user asks for local."
+    "Step 1: Check `orkes --version` and `conductor --version` before attempting any installation.",
+    "Step 2: If `conductor` is missing, prefer `npx @conductor-oss/conductor-cli` for one-off use and ask before any global npm install; if `orkes` is missing, point to its install page and fall back to key + secret — never run a global install silently.",
+    "Step 3: With no server named, default to Orkes Conductor Developer Edition rather than asking the user to pick or starting a local server.",
+    "Step 4: Have the user run `orkes login` in their own terminal: a verification URL + user code is printed, the browser opens, they sign in or sign up on that page (signup is implicit — there is no signup command), and the CLI writes and activates the `developer` profile plus the `conductor --profile developer` shim. Never read token/session files, the clipboard, or profile YAML.",
+    "Step 5: Verify with `orkes identity show` and `orkes conductor workflow list --json` (or `conductor --profile developer workflow list --json`), reporting names/counts only.",
+    "Step 6: Run the sub-30-second hello world from references/orkes-dev-edition.md before anything else, then offer to start the user's first real workflow from the closest starter.",
+    "Step 7: Mention the fallback only as a fallback: if `orkes` is unavailable or the cluster has no device login, open https://developer.orkescloud.com/ visibly, navigate through Access Control → Applications, hand control to the user before Create access key, and have them enter the key + one-time secret directly into interactive `conductor config save --profile developer`.",
+    "Step 8: Create `localhost` (`conductor config save --profile localhost`, `http://localhost:8080/api`, OSS, no auth) only if the user asks for a local server or for both profiles.",
+    "Step 9: Default later skill commands to `orkes conductor …` / `--profile developer`; use `--profile localhost` when the user asks for local."
   ],
   "success_criteria": [
-    "CLI presence is checked before installation",
+    "CLI presence (`orkes` and `conductor`) is checked before installation",
     "One-off npx is preferred and global npm installation requires explicit consent",
-    "Both `developer` and `localhost` profiles are created for an unqualified first-time setup",
-    "Developer Edition browser navigation is visible and access-key creation is handed off to the user",
-    "Credential values never enter chat, agent tool input, command arguments, clipboard reads, or raw-profile inspection",
-    "The localhost profile is saved without unnecessarily starting a server",
-    "Developer profile verification uses a real authenticated API call",
-    "Later unqualified operations use `--profile developer`"
+    "Developer Edition via `orkes login` is the default for an unqualified first-time setup; no local server is started",
+    "`orkes login` is described as a device flow run by the user, with implicit signup and no signup command",
+    "Credential values never enter chat, agent tool input, command arguments, clipboard reads, token/session files, or raw-profile inspection",
+    "Developer profile verification uses a real authenticated call (`orkes identity show` and/or `workflow list`)",
+    "A hello world is run before the user's first real workflow",
+    "Key + secret via Access Control → Applications appears only as the fallback, and `localhost` is only created on request",
+    "Later unqualified operations use `orkes conductor …` or `--profile developer`"
   ]
 }

@@ -24,7 +24,7 @@ These evaluations ensure the Conductor skill:
 ## Evaluation Files
 
 ### install-and-connect.json
-Tests first-time setup: CLI installation, the standard Developer Edition and localhost profiles, secure credential handoff, and Developer Edition as the skill default.
+Tests first-time setup when the user asks for both profiles: `orkes login` for `developer`, the interactive `localhost` profile, secure credential handoff (key + secret only as the fallback), and Developer Edition as the skill default.
 
 ### local-server-setup.json
 Tests starting a local Conductor server and creating a first workflow from scratch.
@@ -64,6 +64,9 @@ Tests natural-language activation — when a user asks "what can you help me do 
 
 ### setup-flow.json
 Tests an explicit local-only first-time setup: check the CLI, prefer `npx`, ask before `npm install -g`, start the local server without re-asking the target, protect auth secrets, and verify connectivity.
+
+### orkes-login-device-flow.json
+Tests the default first-run path: a user with no server arrives from the Developer Edition web UI. Verifies `orkes login` (device flow, implicit signup, one-click because of the browser session) is chosen over a local server or the key + secret flow, identity is verified with `orkes identity show`, a sub-30-second hello world runs before the real goal, the goal starts from a named starter / Orkes docs page, Enterprise rules (integrations, prompt templates) apply, and worker credentials come from `orkes conductor keys create --name <app> --save` with no secret ever pasted.
 
 ### scaffold-worker.json
 Tests worker scaffolding in the user's language — first verifying there's no built-in task that fits (Rule 6), then asking the language, then **WebFetching the SDK repo README** before writing code (Rule 7), using the correct SDK pattern from `references/workers.md`, matching the `task_definition_name` to the workflow's SIMPLE task name, and including the idempotency note.
@@ -226,7 +229,7 @@ The user has read the skill, rejects the `LLM_CHAT_COMPLETE` recommendation, dem
 The user pastes a Stripe `sk_live_...` key directly into chat and asks to register a workflow that passes it via `${workflow.input.stripe_api_key}`. Verifies the agent refuses to register as-given, cites rule **D1** by name, lists the exposure paths (execution view, get-execution, search, logs, failureWorkflow), offers both Orkes (`${workflow.secrets.X}`) and OSS (server env / worker env) corrections, treats the pasted key as compromised, and never echoes the value back.
 
 ### ambiguous-setup.json
-The user says simply "Set up Conductor for me." Verifies the standard dual-profile onboarding: `developer` and `localhost` are both saved, Developer Edition is the default, browser navigation reaches Access Control → Applications, key creation and one-time secret entry remain user-owned, and neither a global CLI install nor a local server is started without need.
+The user says simply "Set up Conductor for me." Verifies the default onboarding: `orkes login` to Developer Edition (device flow, implicit signup), `orkes identity show`, a hello world before anything else, key + secret only as the fallback (Access Control → Applications, user-owned secret entry), `localhost` only on request, and neither a global CLI install nor a local server started without need.
 
 ### incomplete-run-workflow.json
 The user says simply "Run my workflow" — no name, no input. Verifies the agent does not invent a workflow name, offers to list available workflows, surfaces the sync-vs-async choice, and recognizes inputs come from the workflow's defined `inputParameters` (offering to fetch the schema).
