@@ -21,6 +21,19 @@
 | `409 Conflict` on workflow create | Definition with that name+version already exists | Bump version, or use update instead of create. |
 | 5xx errors | Server-side issue | The fallback script auto-retries 3× with backoff. CLI may need a manual retry. Surface server error to the user. |
 
+## `orkes login` / device-flow errors
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `orkes: command not found` | The `orkes` CLI is not installed | Install from `https://orkes.io/cli` <!-- TODO: confirm install URL -->; meanwhile use the key + secret fallback with `conductor` ([setup.md](setup.md)). |
+| `expired_token` / "code expired" after the URL + code were shown | The user did not confirm in the browser before the user code expired | Re-run `orkes login`; a fresh code is issued. Keep the terminal and browser side by side. |
+| `access_denied` | The user cancelled on the confirmation page, or the identity provider's risk check denied this login | Re-run `orkes login`. If it repeats with no cancel, the login was risk-denied: have the user sign in at `https://developer.orkescloud.com/` in the browser first, then retry; if still denied, contact Orkes support — do not work around it with pasted keys. |
+| Login refused until the email is verified | Signed up with a password or social login whose email is not verified | Check the inbox (and spam) for the verification mail, verify, re-run `orkes login`. Email-code signup verifies automatically. |
+| `401` on `conductor --profile developer …` after hours of inactivity | The shim token (~10 h) expired and no `orkes` command has refreshed it | Run any `orkes` command (`orkes identity show`) to refresh, or use `orkes conductor …`. |
+| `orkes login` used key login, no browser | `ORKES_KEY_ID` + `ORKES_KEY_SECRET` are set in the environment | Intended for CI; unset them for the device flow. |
+| No profile / wrong server after login | `--server` was omitted or points elsewhere; another profile is active | `orkes profile list`, `orkes profile use developer`; `orkes login --server <url>` for another cluster (profile named after its hostname). |
+| `403` on `orkes conductor keys create` | The identity cannot manage applications on that cluster | On Developer Edition every user owns their context; on other clusters ask an admin for application-management rights. |
+
 ## JavaScript / GraalJS errors
 
 These show up in INLINE, DO_WHILE `loopCondition`, or SWITCH with a JS evaluator.

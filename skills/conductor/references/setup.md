@@ -4,28 +4,68 @@ Connect the agent to a Conductor server. Run through this once per environment.
 
 ## Server resolution order
 
-An explicit `--profile` selects `~/.conductor-cli/config-<profile>.yaml`.
-Standard onboarding creates `developer` and `localhost`; the skill uses
-`--profile developer` unless the user selects localhost. Do not duplicate its
-credentials or edit shell startup files to make it the default.
+With `orkes` on PATH, run Conductor verbs as `orkes conductor …`: the active
+profile (`orkes profile list` / `orkes profile use NAME`, or `ORKES_PROFILE`) is
+injected as `CONDUCTOR_SERVER_URL`, `CONDUCTOR_AUTH_TOKEN` and
+`CONDUCTOR_SERVER_TYPE=Enterprise`; explicit `--server` / `--auth-*` flags still
+override. Precedence: `ORKES_TOKEN` > `ORKES_KEY_ID` + `ORKES_KEY_SECRET` >
+`--profile` / `ORKES_PROFILE` > active profile.
+
+Without `orkes`, an explicit `conductor --profile NAME` selects
+`~/.conductor-cli/config-NAME.yaml`. `orkes login` writes `developer` there as a
+compatibility shim (token ~10 h, refreshed by any `orkes` command), so the skill
+uses `conductor --profile developer …` unless the user selects another profile.
+Do not duplicate its credentials or edit shell startup files to make it the
+default. Discover saved environments with `orkes profile list` or
+`conductor config list`; **never read profile YAML, `~/.config/orkes/` or
+`~/.local/state/orkes/`**, which may contain credentials.
 
 Without a profile, the CLI uses `CONDUCTOR_SERVER_URL`, `--server`, or local
-server auto-detection. Discover saved environments with `conductor config list`;
-**never read profile YAML**, which may contain credentials. Beyond the standard
-pair, create profiles only for additional reusable connections.
+server auto-detection. The Python fallback script (`scripts/conductor_api.py`)
+does **not** auto-detect or support `orkes` profiles — it requires
+`CONDUCTOR_SERVER_URL` to be set explicitly (or `--profile` for a
+`conductor config save` profile).
 
-The Python fallback script (`scripts/conductor_api.py`) does **not** auto-detect or
-support profiles — it requires `CONDUCTOR_SERVER_URL` to be set explicitly.
+## Default first run — `orkes login` (Developer Edition)
 
-## Default first run — create both profiles
+For an unqualified setup, or when the user wants to do something and has no
+server, target Developer Edition — not a local server — unless they ask for
+local. Honor an explicit target instead.
 
-For setup, create both profiles. Honor an explicit target instead.
+1. `orkes --version`. If missing, install it from `https://orkes.io/cli`
+   <!-- TODO: confirm install URL --> (ask before any system-wide install). If
+   it cannot be installed, use the key + secret fallback below.
+2. In **their own terminal** the user runs:
 
-### 1. Developer Edition profile (default)
+   ```bash
+   orkes login            # add --no-browser on a headless host
+   ```
 
-1. Open `https://developer.orkescloud.com/` visibly and let the user sign in.
-   Use the visible menu: **Access Control → Applications**; never guess an
-   internal route. Without browser automation, give the root link and labels.
+   It prints a verification URL + user code, opens the browser, the user signs
+   in or signs up on that page (signup is implicit — there is no signup
+   command; one click if the browser already has a Developer Edition session),
+   then the CLI stores the session, writes and activates profile `developer`,
+   and writes `~/.conductor-cli/config-developer.yaml`. Never read token or
+   session files, the clipboard, or the page after sign-in.
+3. Verify, then run the Hello World and continue in
+   [orkes-dev-edition.md](orkes-dev-edition.md):
+
+   ```bash
+   orkes identity show
+   orkes conductor workflow list --json       # or: conductor --profile developer workflow list --json
+   ```
+
+4. Workers, SDKs, CI: `orkes conductor keys create --name <app> --save` mints an
+   application + access key, prints the pair once as shell exports and (with
+   `--save`) writes profile `<app>` for `conductor --profile <app>`. Never paste
+   or relay the values.
+
+### Fallback — key + secret (no `orkes`, a cluster without device login, CI)
+
+1. Open `https://developer.orkescloud.com/` (or the cluster UI) visibly and let
+   the user sign in. Use the visible menu: **Access Control → Applications**;
+   never guess an internal route. Without browser automation, give the root
+   link and labels.
 2. The user creates `conductor-skills-cli`, grants **Metadata API**, and adds
    **Worker** only if workers will run. Use least privilege.
 3. Hand control to the user before **Access Keys → Create access key**. The
@@ -39,9 +79,11 @@ For setup, create both profiles. Honor an explicit target instead.
 
    Enter `https://developer.orkescloud.com/api`, `Enterprise`, and API Key +
    Secret directly in the prompt. Never pass credentials through agent tools or
-   command arguments.
+   command arguments. In CI, export `ORKES_KEY_ID` + `ORKES_KEY_SECRET` (then
+   `orkes login` does key login, no browser) or `CONDUCTOR_AUTH_KEY` +
+   `CONDUCTOR_AUTH_SECRET` for the plain `conductor` CLI.
 
-### 2. Localhost profile
+### Localhost profile (only when the user wants local)
 
 In the user's terminal, run:
 
@@ -50,36 +92,23 @@ conductor config save --profile localhost
 ```
 
 Use `http://localhost:8080/api`, server type `OSS`, and no authentication. This
-profile can exist even when the local server is not currently running.
-
-### 3. Verify and select
-
-Discover names without reading credential files:
-
-```bash
-conductor config list
-conductor --profile developer whoami
-conductor --profile developer workflow list --json
-```
-
-If a local server is running, also verify:
-
-```bash
-conductor --profile localhost workflow list --json
-```
-
-Later skill operations default to `conductor --profile developer ...`; use
-`--profile localhost` when requested. A user may set
-`CONDUCTOR_PROFILE=developer` in their current shell, but the agent must not edit
-shell startup files.
+profile can exist even when the local server is not currently running; verify
+with `conductor --profile localhost workflow list --json` when it is. Later
+operations default to `orkes conductor …` / `conductor --profile developer …`;
+use `--profile localhost` when requested. A user may set `ORKES_PROFILE` or
+`CONDUCTOR_PROFILE` in their shell, but the agent must not edit startup files.
 
 ## Step 1 — Install the CLI
 
-Check whether `conductor` is already installed:
+Check which CLIs are already installed:
 
 ```bash
+orkes --version        # umbrella CLI: `orkes login`, `orkes conductor …`
 conductor --version
 ```
+
+`orkes` is closed-source; install it from `https://orkes.io/cli`
+<!-- TODO: confirm install URL -->. For `conductor`:
 
 If not installed, check for npm/Node.js:
 
@@ -112,13 +141,11 @@ The fallback supports a subset of CLI commands — see [fallback-cli.md](fallbac
 ## Step 2 — Choose and normalize a server
 
 If the user already supplied a server URL or selected a profile, use it
-immediately. If this is a generic first-time setup, use the dual-profile flow
-above. Otherwise ask the user:
+immediately. If this is a generic first-time setup, or the user has no server,
+use the `orkes login` flow above (Developer Edition). Otherwise:
 
-- **Option A** — Start a local server (good for development/testing).
+- **Option A** — Start a local server (only when the user asks for local).
 - **Option B** — Connect to an existing remote server.
-
-Don't assume — present both.
 
 **Option A — local server:**
 

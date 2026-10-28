@@ -6,7 +6,7 @@ Webhooks and the managed secret store (with the `conductor secret` CLI) require 
 
 > Schedules used to live here — they're now part of OSS. See [schedules.md](schedules.md).
 
-Auth is the same as the rest of the CLI — see [setup.md](setup.md) (key/secret recommended).
+Auth is the same as the rest of the CLI: `orkes login` (device flow, Developer Edition by default — [orkes-dev-edition.md](orkes-dev-edition.md)); key/secret for CI and clusters without device login — [setup.md](setup.md).
 
 ## Secrets
 
@@ -56,4 +56,8 @@ After creation the CLI returns a webhook URL — give that to the user (don't fa
 ## Notes
 
 - Enterprise commands fail on OSS Conductor with a `404` or `Not Found`. Check the flavor with `python3 "$CONDUCTOR_API" server-info` (auth required = Enterprise, none = OSS) before using them. (`conductor secret` may also answer on an OSS server with the agent runtime, but `put` returns 501 when the backend is env-backed and read-only.)
-- For dev against Orkes, [developer.orkescloud.com](https://developer.orkescloud.com) is the public developer sandbox.
+- For dev against Orkes, [developer.orkescloud.com](https://developer.orkescloud.com) is the public developer sandbox — `orkes login` signs in; see [orkes-dev-edition.md](orkes-dev-edition.md).
+
+## Docs
+
+Orkes features are documented at `https://orkes.io/content/` — secrets (`developer-guides/secrets-in-conductor`), webhooks (`developer-guides/webhook-integration`), RBAC / applications / access keys (`category/access-control-and-security`), integrations (`devguide/integrations`), agents (`devguide/ai`), human tasks (`developer-guides/orchestrating-human-tasks`), schedules (`developer-guides/scheduling-workflows`), SDKs (`sdks/sdk-index`). Send Orkes / Developer Edition users there, not to OSS docs; use-case pages and the full index are in [orkes-use-cases.md](orkes-use-cases.md).

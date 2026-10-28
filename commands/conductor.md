@@ -7,7 +7,7 @@ The user invoked `/conductor` without a sub-action. Show the four structured sub
 
 **Structured commands** (each is a guided procedure):
 
-- `/conductor-setup` — first-time setup: install the CLI, point at a server, configure auth.
+- `/conductor-setup` — first-time setup: `orkes login` to Developer Edition and a hello world (or key + secret / a local server on request).
 - `/conductor-optimize` — review an existing workflow **or a deployed agent** against the optimization checklist and report findings (CRITICAL / WARN / INFO).
 - `/conductor-scaffold-worker` — generate a worker stub for a SIMPLE task.
 - `/conductor-scaffold-agent` — scaffold a Conductor Agent (native SDK, or bring LangChain / OpenAI Agents / Google ADK / LangGraph / Vercel AI / Claude Agent SDK / LangChain4j / Semantic Kernel), with tests, deploy/serve entry points, and a parent workflow that invokes it.
