@@ -43,12 +43,15 @@ local. Honor an explicit target instead.
    browser, no human:
 
    ```bash
-   orkes login --anonymous          # exit 0; prints Profile/Identity (level 0) + Claim it <url> + Code
+   orkes login --anonymous          # exit 0; prints Profile developer (active), Identity (level 0), Claim it <url> + Code
    orkes conductor workflow list --json
    ```
 
    (`ORKES_ANONYMOUS=1` in the environment makes `orkes conductor …` start the
-   session itself.) Relay the claim link to the person **once**, verbatim, in
+   session itself.) It activates profile `developer` (else the server
+   hostname; `--profile NAME` overrides) and writes the
+   `~/.conductor-cli/config-<profile>.yaml` shim with the guest token, so
+   `conductor --profile developer …` works as the guest too. Relay the claim link to the person **once**, verbatim, in
    one sentence, then keep working — never block on it. Exit 9 on an action
    (`keys create` today) = it needs a claimed account: stop, name the action,
    give the link again, `orkes claim --timeout 60s` a few times (exit 7 =
@@ -80,8 +83,10 @@ local. Honor an explicit target instead.
 4. Workers, SDKs, CI: `orkes conductor keys create --name <app> --save` mints an
    application + access key and prints the pair once as shell exports. It
    needs a claimed account (exit 9 on an unclaimed anonymous session → claim
-   first; meanwhile a local worker can poll with the guest token inline,
-   `CONDUCTOR_AUTH_TOKEN="$(orkes token)" …`). With
+   first; meanwhile a local worker can poll as the guest, inline only:
+   `CONDUCTOR_SERVER_URL="$(orkes profile show --format '{{.conductorUrl}}')"
+   CONDUCTOR_AUTH_TOKEN="$(orkes token)" …` — that token lasts ~10 h, so for
+   anything longer claim, then `keys create --save`). With
    `--save` it writes the key into the active Orkes profile's
    `~/.conductor-cli/config-<profile>.yaml` (e.g. `config-developer.yaml`),
    replacing the sign-in token there: standalone `conductor --profile developer …`

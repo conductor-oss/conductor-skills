@@ -34,7 +34,8 @@ what that means across the three distribution channels).
 - **Anonymous sessions for unattended runs.** `orkes login --anonymous` (or
   `ORKES_ANONYMOUS=1`, which makes `orkes conductor …` start one itself) mints
   a guest session bound to a key on the machine — no browser, no human — and
-  prints a `Claim it <url>` + code. The skill relays that link to the person
+  prints a `Claim it <url>` + code; it activates profile `developer` and
+  writes the `conductor --profile developer` shim with the guest token. The skill relays that link to the person
   exactly once, verbatim, and never blocks on it; treats exit 9 (`this action
   needs a claimed account … Run orkes claim`; today `keys create`) as a
   step-up — stop, name the action, give the link again, `orkes claim
