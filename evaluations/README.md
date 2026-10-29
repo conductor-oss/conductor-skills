@@ -68,6 +68,9 @@ Tests an explicit local-only first-time setup: check the CLI, prefer `npx`, ask 
 ### orkes-login-device-flow.json
 Tests the default first-run path: a user with no server arrives from the Developer Edition web UI. Verifies `orkes login` (device flow, implicit signup, one-click because of the browser session) is chosen over a local server or the key + secret flow, identity is verified with `orkes identity show`, a sub-30-second hello world runs before the real goal, the goal starts from a named starter / Orkes docs page, Enterprise rules (integrations, prompt templates) apply, and worker credentials come from `orkes conductor keys create --name <app> --save` with no secret ever pasted.
 
+### orkes-anonymous-claim.json
+Tests the unattended first-run path: the user steps away and asks the agent not to wait. Verifies an anonymous session is started (`orkes login --anonymous` / `ORKES_ANONYMOUS=1`) instead of the device flow, a local server or key + secret; the `Claim it <url>` line is relayed exactly once, verbatim, without blocking; `orkes identity show` reads `level 0` / `guest` as unclaimed rather than an error; hello world runs before the goal; exit 9 from `orkes conductor keys create` is treated as a step-up (stop, name the action, give the link again, `orkes claim --timeout 60s` or carry on) rather than a retry or a request for keys; and `orkes logout` is never run on the unclaimed session.
+
 ### scaffold-worker.json
 Tests worker scaffolding in the user's language — first verifying there's no built-in task that fits (Rule 6), then asking the language, then **WebFetching the SDK repo README** before writing code (Rule 7), using the correct SDK pattern from `references/workers.md`, matching the `task_definition_name` to the workflow's SIMPLE task name, and including the idempotency note.
 

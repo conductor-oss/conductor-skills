@@ -31,9 +31,29 @@ what that means across the three distribution channels).
 - Device-login failure modes in `references/troubleshooting.md`, including
   the exit-7 row.
 - `evaluations/orkes-login-device-flow.json`.
+- **Anonymous sessions for unattended runs.** `orkes login --anonymous` (or
+  `ORKES_ANONYMOUS=1`, which makes `orkes conductor …` start one itself) mints
+  a guest session bound to a key on the machine — no browser, no human — and
+  prints a `Claim it <url>` + code. The skill relays that link to the person
+  exactly once, verbatim, and never blocks on it; treats exit 9 (`this action
+  needs a claimed account … Run orkes claim`; today `keys create`) as a
+  step-up — stop, name the action, give the link again, `orkes claim
+  --timeout 60s` or carry on — never a retry; never runs `orkes logout` on an
+  unclaimed session; and skips all of it when `orkes identity show` already
+  reports a signed-in account. `orkes claim` keeps the same session and
+  profile (level 1, the person's email); exit 5 means the server's identity
+  provider has no token-exchange grant → device flow. Documented in
+  `references/orkes-dev-edition.md` (journey step 1 / 1b, § Agent login,
+  cheat-sheet rows for `--anonymous`, `ORKES_ANONYMOUS`, `claim`, exit 5 / 7 /
+  9), `setup.md`, `troubleshooting.md` (exit-9 step-up, "not enabled", lost
+  key / new machine) and Rule 15.
+- `evaluations/orkes-anonymous-claim.json`.
 
 ### Changed
 
+- Rule 15 / `setup.md`: anonymous session is the default for unattended agent
+  runs; the device flow stays the path when a person is present and prefers
+  to sign in first.
 - Default setup no longer creates `localhost` unless the user wants a local
   server; key + secret (`conductor config save --profile developer`) is the
   fallback for CI and clusters without device login. `/conductor-setup`, the

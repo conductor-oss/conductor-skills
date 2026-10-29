@@ -36,8 +36,26 @@ local. Honor an explicit target instead.
 1. `orkes --version`. If missing, install it from `https://orkes.io/cli`
    <!-- TODO: confirm install URL --> (ask before any system-wide install). If
    it cannot be installed, use the key + secret fallback below.
-2. Run the two-step agent login (exact procedure and output shape in
+2. Pick the session mode (procedure and output shapes in
    [orkes-dev-edition.md](orkes-dev-edition.md) § Agent login):
+
+   **Unattended — the default for a coding agent.** Anonymous session, no
+   browser, no human:
+
+   ```bash
+   orkes login --anonymous          # exit 0; prints Profile/Identity (level 0) + Claim it <url> + Code
+   orkes conductor workflow list --json
+   ```
+
+   (`ORKES_ANONYMOUS=1` in the environment makes `orkes conductor …` start the
+   session itself.) Relay the claim link to the person **once**, verbatim, in
+   one sentence, then keep working — never block on it. Exit 9 on an action
+   (`keys create` today) = it needs a claimed account: stop, name the action,
+   give the link again, `orkes claim --timeout 60s` a few times (exit 7 =
+   pending) or move on. Never `orkes logout` an unclaimed session. Exit 5
+   ("anonymous sessions are not enabled …") → device flow below.
+
+   **Person present who prefers to sign in first** — two-step device login:
 
    ```bash
    orkes login --no-wait            # prints Open <url> + Code XXXX-XXXX; exit 7 = pending, not an error
@@ -60,7 +78,10 @@ local. Honor an explicit target instead.
    ```
 
 4. Workers, SDKs, CI: `orkes conductor keys create --name <app> --save` mints an
-   application + access key and prints the pair once as shell exports. With
+   application + access key and prints the pair once as shell exports. It
+   needs a claimed account (exit 9 on an unclaimed anonymous session → claim
+   first; meanwhile a local worker can poll with the guest token inline,
+   `CONDUCTOR_AUTH_TOKEN="$(orkes token)" …`). With
    `--save` it writes the key into the active Orkes profile's
    `~/.conductor-cli/config-<profile>.yaml` (e.g. `config-developer.yaml`),
    replacing the sign-in token there: standalone `conductor --profile developer …`
