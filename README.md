@@ -94,6 +94,26 @@ conductor-skills --agent cline --uninstall
 
 The npm package bundles all skill content, so it works offline once installed. For Claude Code, just restart your session after install to pick up the plugin.
 
+### Amp
+
+Install the Conductor skill for [Amp](https://ampcode.com/) with npm. From the
+project where you want Amp to use the skill, run:
+
+```bash
+npx @conductor-oss/conductor-skills --agent amp
+```
+
+This creates `.agents/skills/conductor/` in that project. To install it for
+all of your projects instead, run:
+
+```bash
+npx @conductor-oss/conductor-skills --agent amp --global
+```
+
+The global install is located at `~/.agents/skills/conductor/`. Verify either
+install with `amp skills list`. If Amp is already running in a thread, ask it
+to `Reload my skills` before using the newly installed skill.
+
 ### Install for all detected agents
 
 One command to auto-detect every supported agent on your system and install globally where possible. Re-run anytime — it only installs for newly detected agents.

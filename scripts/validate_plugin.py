@@ -18,6 +18,8 @@ Checks:
   8. Eval schema for evaluations/*.json (warns when a cited optimization rule
      id has no heading in references/optimization.md).
   9. Eval context-size budget — the bytes run_evals.py puts in the system prompt.
+  10. Amp's public installer contract: help, detection, shared paths, and
+      shared install/uninstall handling on Unix and PowerShell.
 
 Exits non-zero on any failure. No third-party dependencies.
 """
@@ -347,6 +349,80 @@ def check_remote_setup_contract() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Amp installer contract
+# ---------------------------------------------------------------------------
+
+def check_amp_installer_contract() -> None:
+    """Keep Amp on the shared Agent Skills installation path.
+
+    Amp deliberately shares .agents/skills/conductor with the other native
+    Agent Skills consumers. These focused checks cover every public installer
+    surface so a future refactor cannot leave a partially supported `amp`
+    identifier behind (for example, install works but uninstall leaks files).
+    """
+    files = {
+        "install.sh": INSTALL_SH,
+        "install.ps1": INSTALL_PS1,
+        "bin/conductor-skills.js": ROOT / "bin" / "conductor-skills.js",
+    }
+    contents: dict[str, str] = {}
+    for name, path in files.items():
+        if not path.exists():
+            fail(f"missing: {name}")
+            continue
+        contents[name] = path.read_text()
+
+    def require_text(script: str, expected: str, contract: str) -> None:
+        if expected not in contents.get(script, ""):
+            fail(f"{script}: Amp {contract} is missing {expected!r}")
+
+    # Public identifier and each installer's user-facing help.
+    require_text("install.sh", "  amp         Amp", "Unix help entry")
+    require_text(
+        "install.sh",
+        "claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp",
+        "Unix public agent identifier",
+    )
+    require_text("install.ps1", "roo, amp", "PowerShell help entry")
+    require_text("install.ps1", '"roo","amp")', "PowerShell public agent identifier")
+    require_text("bin/conductor-skills.js", "copilot, amazonq, opencode, roo, amp", "npm help entry")
+
+    # Detection must work whether Amp is installed as a command or represented
+    # by its user-profile configuration directory.
+    require_text("install.sh", "command -v amp", "Unix executable detection")
+    require_text("install.sh", '$HOME/.config/amp', "Unix config-directory detection")
+    require_text("install.ps1", "Get-Command amp", "PowerShell executable detection")
+    require_text("install.ps1", '.config\\amp', "PowerShell config-directory detection")
+
+    # Amp uses the shared Agent Skills location in both scopes; it must not
+    # gain a divergent, Amp-only copy of the conductor skill.
+    sh_shared_paths = (
+        'codex|gemini|cursor|opencode|copilot|amp) echo "$HOME/.agents/skills/conductor"',
+        'codex|gemini|cursor|opencode|copilot|amp) echo "$project_dir/.agents/skills/conductor"',
+    )
+    for expected in sh_shared_paths:
+        require_text("install.sh", expected, "shared-directory mapping")
+    ps_shared_paths = (
+        '{$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $installDir ".agents\\skills\\conductor" }',
+        '{$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $ProjDir ".agents\\skills\\conductor" }',
+    )
+    for expected in ps_shared_paths:
+        require_text("install.ps1", expected, "shared-directory mapping")
+
+    # The shared install-once/refcount behavior needs Amp in both the install
+    # and uninstall groups. The same groups include Cline because it uses a
+    # skill directory too, while its target path remains agent-specific.
+    sh_refcount_group = "codex|gemini|cursor|opencode|cline|copilot|amp)"
+    if contents.get("install.sh", "").count(sh_refcount_group) < 2:
+        fail("install.sh: Amp must be in both shared install and uninstall groups")
+    # The literal starts with '$AgentName -in @', rather than '$(', so retain
+    # an explicit count of the agent list to keep this check formatting-agnostic.
+    ps_agent_list = '@("codex","gemini","cursor","opencode","cline","copilot","amp")'
+    if contents.get("install.ps1", "").count(ps_agent_list) < 2:
+        fail("install.ps1: Amp must be in both shared install and uninstall groups")
+
+
+# ---------------------------------------------------------------------------
 # Eval schema
 # ---------------------------------------------------------------------------
 
@@ -613,6 +689,9 @@ def main() -> int:
 
     # Remote setup docs must match the current CLI and fallback auth contract.
     check_remote_setup_contract()
+
+    # Amp must remain a complete native Agent Skills installer target.
+    check_amp_installer_contract()
 
     # Eval schema — every evaluations/*.json has the keys run_evals.py relies on.
     check_eval_schema()
