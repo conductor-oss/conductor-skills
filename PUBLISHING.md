@@ -7,7 +7,7 @@ Maintainer-facing notes for releasing a new version of the Conductor Skills mark
 The plugin ships through three channels:
 
 1. **Claude Code marketplace** — `/plugin install conductor@conductor-skills` (this repo's `.claude-plugin/marketplace.json`).
-2. **install.sh / install.ps1** — `curl ... | bash` for any of the 12 supported AI agents (downloads from GitHub raw).
+2. **install.sh / install.ps1** — `curl ... | bash` for any of the 13 supported AI agents (downloads from GitHub raw).
 3. **npm** — `npm install -g @conductor-oss/conductor-skills` then `conductor-skills --agent <name>`. The npm package bundles all the same files and invokes the bundled `install.sh` / `install.ps1` with `CONDUCTOR_SKILLS_LOCAL_DIR=<package-root>` so the install scripts copy from the bundle instead of downloading.
 
 All three channels share the same `VERSION` — bump it in one place; CI fails if any of the ten files listed in the release checklist below drift.

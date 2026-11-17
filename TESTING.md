@@ -4,7 +4,7 @@ Comprehensive validation plan for the `conductor-skills` plugin. Hand this to QA
 
 - **Repo:** [github.com/conductor-oss/conductor-skills](https://github.com/conductor-oss/conductor-skills)
 - **Current version:** see `VERSION`
-- **Target agents:** primarily Claude Code (slash commands + skill); secondarily Codex, Gemini, Cursor, Windsurf, Cline, GitHub Copilot, Aider, Amazon Q, Roo Code, Amp, OpenCode (skill content only — slash commands are Claude-specific)
+- **Target agents:** primarily Claude Code (slash commands + skill); secondarily Codex, Gemini, Cursor, Windsurf, Cline, GitHub Copilot, Aider, Amazon Q, Roo Code, Amp, OpenCode, IBM Bob (skill content only — slash commands are Claude-specific)
 
 Test cases below are numbered `TC-<area>-<n>` for traceability. Mark each Pass / Fail / Blocked / Skipped in the matrix at the bottom.
 
@@ -641,6 +641,7 @@ The slash commands are Claude Code-specific. Confirm the **skill content** still
 | TC-AGT-09 | Roo Code | Same |
 | TC-AGT-10 | Amp | Same |
 | TC-AGT-11 | OpenCode | Same |
+| TC-AGT-12 | IBM Bob | Install via `bash install.sh --agent bob`. Ask: "create a Conductor workflow that ..." Expect: skill content activates |
 
 ---
 

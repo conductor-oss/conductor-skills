@@ -164,6 +164,7 @@ Supported agents:
   opencode    OpenCode
   roo         Roo Code
   amp         Amp
+  bob         IBM Bob
 
 Examples:
   # Auto-detect and install for all agents
@@ -204,6 +205,7 @@ detect_agents() {
   command -v opencode &>/dev/null && detected+=(opencode)
   [ -d "$HOME/.roo" ] && detected+=(roo)
   { command -v amp &>/dev/null || [ -d "$HOME/.config/amp" ]; } && detected+=(amp)
+  { command -v bob &>/dev/null || [ -d "$HOME/.bob" ]; } && detected+=(bob)
 
   echo "${detected[@]:-}"
 }
@@ -475,7 +477,7 @@ safe_write() {
 supports_global() {
   local agent="$1"
   case "$agent" in
-    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode|copilot) return 0 ;;
+    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode|copilot|bob) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -486,6 +488,7 @@ get_global_path() {
     claude)   echo "$HOME/.claude/settings.json" ;;
     codex|gemini|cursor|opencode|copilot|amp) echo "$HOME/.agents/skills/conductor" ;;
     cline)    echo "$HOME/.cline/skills/conductor" ;;
+    bob)      echo "$HOME/.bob/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
     aider)    echo "$HOME/.aider.conf.yml" ;;
@@ -501,6 +504,7 @@ get_target_path() {
     codex|gemini|cursor|opencode|copilot|amp) echo "$project_dir/.agents/skills/conductor" ;;
     windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
     cline)    echo "$project_dir/.cline/skills/conductor" ;;
+    bob)      echo "$project_dir/.bob/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
     roo)      echo "$project_dir/.roo/rules/conductor.md" ;;
@@ -737,7 +741,7 @@ install_for_agent() {
   fi
 
   case "$agent" in
-    codex|gemini|cursor|opencode|cline|copilot|amp)
+    codex|gemini|cursor|opencode|cline|copilot|amp|bob)
       local dest
       if [ "$is_global" = "true" ]; then
         dest=$(get_global_path "$agent")
@@ -792,7 +796,7 @@ uninstall_agent() {
 
   local skill_dir=""
   case "$agent" in
-    codex|gemini|cursor|opencode|cline|copilot|amp)
+    codex|gemini|cursor|opencode|cline|copilot|amp|bob)
       if [ "$is_global" = "true" ]; then
         skill_dir=$(get_global_path "$agent")
       else
@@ -1089,7 +1093,7 @@ main() {
       warn "No AI coding agents detected on this system."
       echo ""
       info "Supported agents: claude, codex, gemini, cursor, windsurf, cline,"
-      info "  aider, copilot, amazonq, opencode, roo, amp"
+      info "  aider, copilot, amazonq, opencode, roo, amp, bob"
       echo ""
       info "Install one of the above, then re-run this command."
       exit 0
@@ -1099,7 +1103,7 @@ main() {
   else
     agent=$(echo "$agent" | tr '[:upper:]' '[:lower:]')
     case "$agent" in
-      claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp) ;;
+      claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp|bob) ;;
       *) error "Unknown agent: $agent"; echo ""; usage ;;
     esac
     agents=("$agent")
