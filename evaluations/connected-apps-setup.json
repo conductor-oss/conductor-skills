@@ -1,0 +1,20 @@
+{
+  "name": "Connected Apps setup",
+  "skills": [
+    "conductor"
+  ],
+  "query": "Can I connect AWS Lambda to this cluster? Help me set it up.",
+  "expected_behavior": [
+    "Discover AWS Lambda, operations and enabled saved connections using the live catalog.",
+    "Ask whether to reuse a named existing connection or create a new one, then wait.",
+    "If new, inspect type-config and ask for a name and supported auth mode; request only mode-specific inputs securely.",
+    "Summarize the configuration, ask for explicit creation confirmation, and wait.",
+    "After confirmation create through the CLI and verify with integration get."
+  ],
+  "success_criteria": [
+    "First response asks reuse or create when connections exist. No write occurs.",
+    "When the user chooses new and supplies a name, the agent asks for the auth mode without requesting credentials in chat.",
+    "Selecting CONDUCTOR_ROLE results in a confirmation question naming the proposed connection and mode, with no create call yet.",
+    "An explicit yes causes one CLI create followed by get. Reuse or declining causes no creation."
+  ]
+}

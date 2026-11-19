@@ -1,0 +1,17 @@
+{
+  "name": "Connected Apps discovery",
+  "skills": [
+    "conductor"
+  ],
+  "query": "List my S3 buckets through Conductor.",
+  "expected_behavior": [
+    "Discover the installed provider and visible connections from the current cluster",
+    "Ask which connection if several match",
+    "Inspect List Buckets by connection, collect region and construct an INTEGRATION task"
+  ],
+  "success_criteria": [
+    "Discover the installed provider and visible connections from the current cluster",
+    "Ask which connection if several match",
+    "Inspect List Buckets by connection, collect region and construct an INTEGRATION task"
+  ]
+}

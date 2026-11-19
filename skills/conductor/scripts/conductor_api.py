@@ -571,7 +571,6 @@ def handle_server_info(args):
 
 
 def handle_integration_defs(args):
-    require_enterprise()
     base, token = get_config()
     result = request_json(build_url(base, "/integrations/def"), token)
     if args.category and isinstance(result, list):
@@ -579,26 +578,45 @@ def handle_integration_defs(args):
     output(result)
 
 
-def handle_integration_list(args):
-    require_enterprise()
+def integration_summary(row):
+    return {key: row[key] for key in ("name", "type", "category", "description", "enabled") if key in row}
+
+
+def handle_integration_operations(args):
     base, token = get_config()
-    params = {"activeOnly": "true"} if args.active_only else None
+    if args.type:
+        path = "/integrations/def/" + urllib.parse.quote(args.type, safe="")
+        operations = request_json(build_url(base, path), token).get("apis", [])
+    else:
+        path = "/integrations/" + urllib.parse.quote(args.connection, safe="") + "/def/apis"
+        operations = request_json(build_url(base, path), token)
+    if args.name:
+        for op in operations:
+            if op["api"] == args.name:
+                output(op)
+                return
+        sys.exit("Unknown operation: " + args.name)
+    output([{k: op.get(k) for k in ("api", "description")} for op in operations])
+
+
+def handle_integration_list(args):
+    base, token = get_config()
+    params = {"activeOnly": "true" if args.active_only else "false"}
     result = request_json(build_url(base, "/integrations/provider", params), token) or []
     if isinstance(result, dict):
         result = [result]
     if args.category:
         result = [r for r in result if r.get("category") == args.category]
-    output(redact(result))
+    output([integration_summary(r) for r in result if not args.type or r.get("type") == args.type])
 
 
 def handle_integration_get(args):
-    require_enterprise()
     base, token = get_config()
-    output(redact(request_json(build_url(base, integration_path(args.name)), token)))
+    row = request_json(build_url(base, integration_path(args.name)), token)
+    output({**integration_summary(row), "configuredFields": sorted(k for k, v in (row.get("configuration") or {}).items() if v is not None and v != "")})
 
 
 def handle_integration_save(args):
-    require_enterprise()
     base, token = get_config()
     configuration = {}
     if args.config_file:
@@ -636,7 +654,6 @@ def handle_integration_save(args):
 
 
 def handle_integration_delete(args):
-    require_enterprise()
     base, token = get_config()
     request_json(build_url(base, integration_path(args.name)), token, method="DELETE", expect_json=False)
     print(f"Integration {args.name} deleted.")
@@ -1011,6 +1028,14 @@ def main():
     p.add_argument("--category", default=None, help="AI_MODEL, VECTOR_DB, ...")
     p.add_argument("--active-only", action="store_true")
 
+    p.add_argument("--type", help="Filter by provider type")
+
+    p = sub.add_parser("integration-operations", help="Discover operations on an installed type or saved connection")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--type")
+    source.add_argument("--connection")
+    p.add_argument("--name", help="Exact operation to inspect")
+
     p = sub.add_parser("integration-get", help="Orkes: get one integration provider (secret config masked)")
     p.add_argument("--name", required=True)
 
@@ -1142,6 +1167,7 @@ def main():
         "agent-stop": handle_agent_stop,
         "server-info": handle_server_info,
         "integration-defs": handle_integration_defs,
+        "integration-operations": handle_integration_operations,
         "integration-list": handle_integration_list,
         "integration-get": handle_integration_get,
         "integration-save": handle_integration_save,
