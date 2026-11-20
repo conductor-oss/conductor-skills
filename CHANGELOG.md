@@ -4,6 +4,15 @@ All notable changes to the Conductor Skills plugin are documented here. Versions
 correspond to the shared `VERSION` file (see [PUBLISHING.md](PUBLISHING.md) for
 what that means across the three distribution channels).
 
+## Unreleased
+
+### Added
+
+- Pi support in `install.sh` (`--agent pi`). The skill goes to the shared
+  `.agents/skills/conductor/` directory; the slash commands are installed as Pi
+  prompt templates in `.pi/prompts/` or `~/.pi/agent/prompts/`.
+  `install.ps1` does not support Pi yet.
+
 ## 1.8.0
 
 ### Added

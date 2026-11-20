@@ -114,6 +114,30 @@ The global install is located at `~/.agents/skills/conductor/`. Verify either
 install with `amp skills list`. If Amp is already running in a thread, ask it
 to `Reload my skills` before using the newly installed skill.
 
+### Pi
+
+Install the Conductor skill and slash commands for [Pi](https://pi.dev/). From
+the project where you want Pi to use them, run:
+
+```bash
+npx @conductor-oss/conductor-skills --agent pi
+```
+
+This creates `.agents/skills/conductor/` (the skill) and `.pi/prompts/` (the
+`/conductor`, `/conductor-setup`, `/conductor-optimize`,
+`/conductor-scaffold-worker`, and `/conductor-scaffold-agent` prompt
+templates) in that project. Pi loads project files only after you trust the
+project. To install for all of your projects instead, run:
+
+```bash
+npx @conductor-oss/conductor-skills --agent pi --global
+```
+
+The global install writes the skill to `~/.agents/skills/conductor/` and the
+prompt templates to `~/.pi/agent/prompts/` (or `$PI_CODING_AGENT_DIR/prompts/`).
+Run `/reload` in an open Pi session, then use `/conductor` or
+`/skill:conductor`.
+
 ### Install for all detected agents
 
 One command to auto-detect every supported agent on your system and install globally where possible. Re-run anytime — it only installs for newly detected agents.
@@ -156,7 +180,7 @@ These agents don't support global install — run the command from your project 
 | [Amazon Q](https://aws.amazon.com/q/developer/) | `powershell -c "irm https://conductor-oss.github.io/conductor-skills/install.ps1 -OutFile install.ps1; .\install.ps1 -Agent amazonq"` |
 
 > All other agents are installed globally via the [install all](#install-for-all-detected-agents) command above. You can also use `--agent <name>` for any agent to do a project-level install.
-> GitHub Copilot and Amp share the same `.agents/skills/` directory as Codex/Gemini/Cursor/OpenCode — installing any one of them writes it.
+> GitHub Copilot, Amp, and Pi share the same `.agents/skills/` directory as Codex/Gemini/Cursor/OpenCode — installing any one of them writes it.
 
 That's it — ask your agent to connect to your server (see [Try It](#try-it) below).
 

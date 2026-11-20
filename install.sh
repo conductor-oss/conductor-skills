@@ -109,6 +109,16 @@ SKILL_FILES=(
   "skills/conductor/scripts/test_conductor_api.py"
 )
 
+# Slash commands, installed for pi as prompt templates (<name>.md -> /<name>).
+# Claude gets the same commands through its plugin, so only pi reads this list.
+PI_PROMPT_FILES=(
+  "commands/conductor.md"
+  "commands/conductor-optimize.md"
+  "commands/conductor-scaffold-agent.md"
+  "commands/conductor-scaffold-worker.md"
+  "commands/conductor-setup.md"
+)
+
 # Colors (if terminal supports them)
 if [ -t 1 ]; then
   RED=$'\033[0;31m'
@@ -164,6 +174,7 @@ Supported agents:
   opencode    OpenCode
   roo         Roo Code
   amp         Amp
+  pi          Pi
 
 Examples:
   # Auto-detect and install for all agents
@@ -189,6 +200,11 @@ EOF
 # Agent detection
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Pi's user-level config dir; PI_CODING_AGENT_DIR moves it.
+pi_agent_dir() {
+  echo "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+}
+
 detect_agents() {
   local detected=()
 
@@ -204,6 +220,7 @@ detect_agents() {
   command -v opencode &>/dev/null && detected+=(opencode)
   [ -d "$HOME/.roo" ] && detected+=(roo)
   { command -v amp &>/dev/null || [ -d "$HOME/.config/amp" ]; } && detected+=(amp)
+  { command -v pi &>/dev/null || [ -d "$(pi_agent_dir)" ]; } && detected+=(pi)
 
   echo "${detected[@]:-}"
 }
@@ -475,7 +492,7 @@ safe_write() {
 supports_global() {
   local agent="$1"
   case "$agent" in
-    claude|codex|gemini|cursor|windsurf|cline|roo|amp|aider|opencode|copilot) return 0 ;;
+    claude|codex|gemini|cursor|windsurf|cline|roo|amp|pi|aider|opencode|copilot) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -485,6 +502,7 @@ get_global_path() {
   case "$agent" in
     claude)   echo "$HOME/.claude/settings.json" ;;
     codex|gemini|cursor|opencode|copilot|amp) echo "$HOME/.agents/skills/conductor" ;;
+    pi)       echo "$HOME/.agents/skills/conductor" ;;
     cline)    echo "$HOME/.cline/skills/conductor" ;;
     windsurf) echo "$HOME/.codeium/windsurf/memories/global_rules.md" ;;
     roo)      echo "$HOME/.roo/rules/conductor.md" ;;
@@ -499,12 +517,24 @@ get_target_path() {
   case "$agent" in
     claude)   echo "$project_dir/.claude/settings.json" ;;
     codex|gemini|cursor|opencode|copilot|amp) echo "$project_dir/.agents/skills/conductor" ;;
+    pi)       echo "$project_dir/.agents/skills/conductor" ;;
     windsurf) echo "$project_dir/.windsurf/skills/conductor" ;;
     cline)    echo "$project_dir/.cline/skills/conductor" ;;
     aider)    echo "$project_dir/.conductor-skills" ;;
     amazonq)  echo "$project_dir/.amazonq/rules/conductor.md" ;;
     roo)      echo "$project_dir/.roo/rules/conductor.md" ;;
   esac
+}
+
+# Pi has no shared prompt-template dir, so its slash commands go to its own.
+get_pi_prompts_dir() {
+  local is_global="$1"
+  local project_dir="$2"
+  if [ "$is_global" = "true" ]; then
+    echo "$(pi_agent_dir)/prompts"
+  else
+    echo "$project_dir/.pi/prompts"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -721,6 +751,74 @@ install_skill_dir_once() {
   MIRRORED_DIRS="$MIRRORED_DIRS $dest_dir"
 }
 
+# Install the slash commands as pi prompt templates. The command files link to
+# the skill as ../skills/conductor/...; that only resolves inside the plugin
+# layout, so point the links at the installed skill dir instead.
+install_pi_prompts() {
+  local prompts_dir="$1"
+  local skill_ref="$2"
+  local tmp_dir="$3"
+  local force="$4"
+
+  local file src
+  for file in "${PI_PROMPT_FILES[@]}"; do
+    src="$tmp_dir/$file"
+    if [ -n "$LOCAL_DIR" ]; then
+      if [ ! -f "$LOCAL_DIR/$file" ]; then
+        error "Missing file in local source: $file"
+        return 1
+      fi
+      mkdir -p "$(dirname "$src")"
+      cp "$LOCAL_DIR/$file" "$src"
+    elif [ ! -f "$src" ]; then
+      mkdir -p "$(dirname "$src")"
+      if ! curl -sSfL "$REPO_BASE/$file" -o "$src" 2>/dev/null; then
+        error "Failed to download $file from $REPO_BASE"
+        return 1
+      fi
+    fi
+  done
+
+  mkdir -p "$prompts_dir"
+  local name rendered
+  for file in "${PI_PROMPT_FILES[@]}"; do
+    name=$(basename "$file")
+    rendered="$tmp_dir/_pi_prompt_$name"
+    sed "s#\\.\\./skills/conductor/#${skill_ref}/#g" "$tmp_dir/$file" > "$rendered"
+    safe_write "$prompts_dir/$name" "$rendered" "$force" || true
+  done
+}
+
+install_pi() {
+  local project_dir="$1"
+  local is_global="$2"
+  local force="$3"
+  local tmp_dir="$4"
+
+  local dest skill_ref
+  if [ "$is_global" = "true" ]; then
+    dest=$(get_global_path pi)
+    skill_ref="$dest"
+  else
+    dest=$(get_target_path pi "$project_dir")
+    # Project files may be committed; keep the links relative to the project root.
+    skill_ref=".agents/skills/conductor"
+  fi
+  install_skill_dir_once "$dest" "$tmp_dir" || return 1
+
+  local prompts_dir
+  prompts_dir=$(get_pi_prompts_dir "$is_global" "$project_dir")
+  install_pi_prompts "$prompts_dir" "$skill_ref" "$tmp_dir" "$force" || return 1
+  ok "Installed prompt templates: $prompts_dir"
+
+  echo "  Pi: run /reload in an open session (or start a new one)."
+  echo "  Skill: /skill:conductor   Commands: /conductor, /conductor-setup, /conductor-optimize,"
+  echo "         /conductor-scaffold-worker, /conductor-scaffold-agent"
+  if [ "$is_global" != "true" ]; then
+    echo "  Project skills and prompts load only after you trust the project in pi."
+  fi
+}
+
 # Install a single agent. Returns 0 on success, 1 on skip/failure.
 install_for_agent() {
   local agent="$1"
@@ -733,6 +831,11 @@ install_for_agent() {
   # Claude has its own install path (writes to settings.json + skill dir)
   if [ "$agent" = "claude" ]; then
     install_claude "$is_global" "$project_dir" "$tmp_dir"
+    return $?
+  fi
+
+  if [ "$agent" = "pi" ]; then
+    install_pi "$project_dir" "$is_global" "$force" "$tmp_dir"
     return $?
   fi
 
@@ -790,9 +893,22 @@ uninstall_agent() {
   local is_global="$3"
   local manifest="$4"
 
+  if [ "$agent" = "pi" ]; then
+    local prompts_dir name file
+    prompts_dir=$(get_pi_prompts_dir "$is_global" "$project_dir")
+    for file in "${PI_PROMPT_FILES[@]}"; do
+      name=$(basename "$file")
+      if [ -f "$prompts_dir/$name" ]; then
+        rm -f "$prompts_dir/$name"
+        ok "Removed: $prompts_dir/$name"
+      fi
+    done
+    rmdir "$prompts_dir" 2>/dev/null || true
+  fi
+
   local skill_dir=""
   case "$agent" in
-    codex|gemini|cursor|opencode|cline|copilot|amp)
+    pi|codex|gemini|cursor|opencode|cline|copilot|amp)
       if [ "$is_global" = "true" ]; then
         skill_dir=$(get_global_path "$agent")
       else
@@ -1089,7 +1205,7 @@ main() {
       warn "No AI coding agents detected on this system."
       echo ""
       info "Supported agents: claude, codex, gemini, cursor, windsurf, cline,"
-      info "  aider, copilot, amazonq, opencode, roo, amp"
+      info "  aider, copilot, amazonq, opencode, roo, amp, pi"
       echo ""
       info "Install one of the above, then re-run this command."
       exit 0
@@ -1099,7 +1215,7 @@ main() {
   else
     agent=$(echo "$agent" | tr '[:upper:]' '[:lower:]')
     case "$agent" in
-      claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp) ;;
+      claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp|pi) ;;
       *) error "Unknown agent: $agent"; echo ""; usage ;;
     esac
     agents=("$agent")

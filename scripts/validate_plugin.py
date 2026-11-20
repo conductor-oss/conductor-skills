@@ -20,6 +20,8 @@ Checks:
   9. Eval context-size budget — the bytes run_evals.py puts in the system prompt.
   10. Amp's public installer contract: help, detection, shared paths, and
       shared install/uninstall handling on Unix and PowerShell.
+  11. Pi's installer contract (Unix only for now): help, detection, shared
+      skill paths, and PI_PROMPT_FILES matching commands/*.md.
 
 Exits non-zero on any failure. No third-party dependencies.
 """
@@ -423,6 +425,61 @@ def check_amp_installer_contract() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Pi installer contract
+# ---------------------------------------------------------------------------
+
+def check_pi_installer_contract() -> None:
+    """Keep Pi on the shared skill dir and its prompt templates in sync.
+
+    Pi reads ~/.agents/skills and .agents/skills, so it shares the conductor
+    skill copy with Codex/Amp/etc. Pi has no shared prompt dir, so install.sh
+    also copies commands/*.md into Pi's prompts dir. PI_PROMPT_FILES must list
+    every command, or a new command silently never reaches Pi users.
+    install.ps1 does not support Pi yet; add its checks here when it does.
+    """
+    paths = {
+        "install.sh": INSTALL_SH,
+        "bin/conductor-skills.js": ROOT / "bin" / "conductor-skills.js",
+    }
+    contents: dict[str, str] = {}
+    for name, path in paths.items():
+        if not path.exists():
+            fail(f"missing: {name}")
+            continue
+        contents[name] = path.read_text()
+
+    def require_text(script: str, expected: str, contract: str) -> None:
+        if expected not in contents.get(script, ""):
+            fail(f"{script}: Pi {contract} is missing {expected!r}")
+
+    require_text("install.sh", "  pi          Pi", "Unix help entry")
+    require_text(
+        "install.sh",
+        "claude|codex|gemini|cursor|windsurf|cline|aider|copilot|amazonq|opencode|roo|amp|pi",
+        "Unix public agent identifier",
+    )
+    require_text("bin/conductor-skills.js", "opencode, roo, amp, pi", "npm help entry")
+    require_text("install.sh", "command -v pi", "Unix executable detection")
+    require_text("install.sh", "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}", "agent-dir resolution")
+    require_text("install.sh", 'pi)       echo "$HOME/.agents/skills/conductor"', "shared global path")
+    require_text("install.sh", 'pi)       echo "$project_dir/.agents/skills/conductor"', "shared project path")
+    require_text(
+        "install.sh",
+        "pi|codex|gemini|cursor|opencode|cline|copilot|amp)",
+        "shared-dir uninstall refcount group",
+    )
+
+    listed = parse_installer_list(INSTALL_SH, "PI_PROMPT_FILES=(")
+    if listed is None:
+        return
+    shipped = {str(p.relative_to(ROOT)) for p in (ROOT / "commands").glob("*.md")}
+    for missing in sorted(shipped - set(listed)):
+        fail(f"install.sh: PI_PROMPT_FILES does not list {missing}")
+    for phantom in sorted(set(listed) - shipped):
+        fail(f"install.sh: PI_PROMPT_FILES lists non-existent file {phantom}")
+
+
+# ---------------------------------------------------------------------------
 # Eval schema
 # ---------------------------------------------------------------------------
 
@@ -692,6 +749,9 @@ def main() -> int:
 
     # Amp must remain a complete native Agent Skills installer target.
     check_amp_installer_contract()
+
+    # Pi installer contract — shared skill dir, prompt templates match commands/.
+    check_pi_installer_contract()
 
     # Eval schema — every evaluations/*.json has the keys run_evals.py relies on.
     check_eval_schema()
