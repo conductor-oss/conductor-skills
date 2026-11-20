@@ -8,10 +8,10 @@ what that means across the three distribution channels).
 
 ### Added
 
-- Pi support in `install.sh` (`--agent pi`). The skill goes to the shared
-  `.agents/skills/conductor/` directory; the slash commands are installed as Pi
-  prompt templates in `.pi/prompts/` or `~/.pi/agent/prompts/`.
-  `install.ps1` does not support Pi yet.
+- Pi support in `install.sh` (`--agent pi`) and `install.ps1` (`-Agent pi`).
+  The skill goes to the shared `.agents/skills/conductor/` directory; the slash
+  commands are installed as Pi prompt templates in `.pi/prompts/` or
+  `~/.pi/agent/prompts/` (`PI_CODING_AGENT_DIR` moves the global location).
 
 ## 1.8.0
 

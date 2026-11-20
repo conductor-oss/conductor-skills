@@ -20,7 +20,7 @@ Checks:
   9. Eval context-size budget — the bytes run_evals.py puts in the system prompt.
   10. Amp's public installer contract: help, detection, shared paths, and
       shared install/uninstall handling on Unix and PowerShell.
-  11. Pi's installer contract (Unix only for now): help, detection, shared
+  11. Pi's installer contract on Unix and PowerShell: help, detection, shared
       skill paths, and PI_PROMPT_FILES matching commands/*.md.
 
 Exits non-zero on any failure. No third-party dependencies.
@@ -386,7 +386,7 @@ def check_amp_installer_contract() -> None:
         "Unix public agent identifier",
     )
     require_text("install.ps1", "roo, amp", "PowerShell help entry")
-    require_text("install.ps1", '"roo","amp")', "PowerShell public agent identifier")
+    require_text("install.ps1", '"roo","amp"', "PowerShell public agent identifier")
     require_text("bin/conductor-skills.js", "copilot, amazonq, opencode, roo, amp", "npm help entry")
 
     # Detection must work whether Amp is installed as a command or represented
@@ -435,10 +435,10 @@ def check_pi_installer_contract() -> None:
     skill copy with Codex/Amp/etc. Pi has no shared prompt dir, so install.sh
     also copies commands/*.md into Pi's prompts dir. PI_PROMPT_FILES must list
     every command, or a new command silently never reaches Pi users.
-    install.ps1 does not support Pi yet; add its checks here when it does.
     """
     paths = {
         "install.sh": INSTALL_SH,
+        "install.ps1": INSTALL_PS1,
         "bin/conductor-skills.js": ROOT / "bin" / "conductor-skills.js",
     }
     contents: dict[str, str] = {}
@@ -469,14 +469,34 @@ def check_pi_installer_contract() -> None:
         "shared-dir uninstall refcount group",
     )
 
-    listed = parse_installer_list(INSTALL_SH, "PI_PROMPT_FILES=(")
-    if listed is None:
-        return
+    require_text("install.ps1", '"roo","amp","pi")', "PowerShell public agent identifier")
+    require_text("install.ps1", "Get-Command pi", "PowerShell executable detection")
+    require_text("install.ps1", "$env:PI_CODING_AGENT_DIR", "PowerShell agent-dir resolution")
+    require_text(
+        "install.ps1",
+        '"pi"       { return Join-Path $installDir ".agents\\skills\\conductor" }',
+        "PowerShell shared global path",
+    )
+    require_text(
+        "install.ps1",
+        '"pi"       { return Join-Path $ProjDir ".agents\\skills\\conductor" }',
+        "PowerShell shared project path",
+    )
+    require_text(
+        "install.ps1",
+        '$AgentName -eq "pi" -or $AgentName -in @("codex"',
+        "PowerShell shared-dir uninstall refcount group",
+    )
+
     shipped = {str(p.relative_to(ROOT)) for p in (ROOT / "commands").glob("*.md")}
-    for missing in sorted(shipped - set(listed)):
-        fail(f"install.sh: PI_PROMPT_FILES does not list {missing}")
-    for phantom in sorted(set(listed) - shipped):
-        fail(f"install.sh: PI_PROMPT_FILES lists non-existent file {phantom}")
+    for script, opener in (("install.sh", "PI_PROMPT_FILES=("), ("install.ps1", "$PI_PROMPT_FILES = @(")):
+        listed = parse_installer_list(ROOT / script, opener)
+        if listed is None:
+            continue
+        for missing in sorted(shipped - set(listed)):
+            fail(f"{script}: PI_PROMPT_FILES does not list {missing}")
+        for phantom in sorted(set(listed) - shipped):
+            fail(f"{script}: PI_PROMPT_FILES lists non-existent file {phantom}")
 
 
 # ---------------------------------------------------------------------------

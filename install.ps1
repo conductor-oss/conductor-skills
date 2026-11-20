@@ -118,8 +118,18 @@ $SKILL_FILES = @(
     "skills/conductor/scripts/test_conductor_api.py"
 )
 
-$VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp")
-$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","aider","opencode","copilot")
+# Slash commands, installed for pi as prompt templates (<name>.md -> /<name>).
+# Claude gets the same commands through its plugin, so only pi reads this list.
+$PI_PROMPT_FILES = @(
+    "commands/conductor.md",
+    "commands/conductor-optimize.md",
+    "commands/conductor-scaffold-agent.md",
+    "commands/conductor-scaffold-worker.md",
+    "commands/conductor-setup.md"
+)
+
+$VALID_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","aider","copilot","amazonq","opencode","roo","amp","pi")
+$GLOBAL_AGENTS = @("claude","codex","gemini","cursor","windsurf","cline","roo","amp","pi","aider","opencode","copilot")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -133,6 +143,12 @@ function Write-Err   { param([string]$Msg) Write-Host "[error] $Msg" -Foreground
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent detection
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Pi's user-level config dir; PI_CODING_AGENT_DIR moves it.
+function Get-PiAgentDir {
+    if ($env:PI_CODING_AGENT_DIR) { return $env:PI_CODING_AGENT_DIR }
+    return Join-Path $env:USERPROFILE ".pi\agent"
+}
 
 function Detect-Agents {
     $detected = @()
@@ -150,6 +166,7 @@ function Detect-Agents {
     if (Get-Command opencode -ErrorAction SilentlyContinue) { $detected += "opencode" }
     if (Test-Path (Join-Path $installDir ".roo")) { $detected += "roo" }
     if ((Get-Command amp -ErrorAction SilentlyContinue) -or (Test-Path (Join-Path $installDir ".config\amp"))) { $detected += "amp" }
+    if ((Get-Command pi -ErrorAction SilentlyContinue) -or (Test-Path (Get-PiAgentDir))) { $detected += "pi" }
 
     return $detected
 }
@@ -376,6 +393,7 @@ function Get-GlobalPath {
     switch ($AgentName) {
         "claude"   { return Join-Path $installDir ".claude\settings.json" }
         {$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $installDir ".agents\skills\conductor" }
+        "pi"       { return Join-Path $installDir ".agents\skills\conductor" }
         "cline"    { return Join-Path $installDir ".cline\skills\conductor" }
         "windsurf" { return Join-Path $installDir ".codeium\windsurf\memories\global_rules.md" }
         "roo"      { return Join-Path $installDir ".roo\rules\conductor.md" }
@@ -388,12 +406,20 @@ function Get-TargetPath {
     switch ($AgentName) {
         "claude"   { return Join-Path $ProjDir ".claude\settings.json" }
         {$_ -in @("codex","gemini","cursor","opencode","copilot","amp")} { return Join-Path $ProjDir ".agents\skills\conductor" }
+        "pi"       { return Join-Path $ProjDir ".agents\skills\conductor" }
         "windsurf" { return Join-Path $ProjDir ".windsurf\skills\conductor" }
         "cline"    { return Join-Path $ProjDir ".cline\skills\conductor" }
         "aider"    { return Join-Path $ProjDir ".conductor-skills" }
         "amazonq"  { return Join-Path $ProjDir ".amazonq\rules\conductor.md" }
         "roo"      { return Join-Path $ProjDir ".roo\rules\conductor.md" }
     }
+}
+
+# Pi has no shared prompt-template dir, so its slash commands go to its own.
+function Get-PiPromptsDir {
+    param([bool]$IsGlobal, [string]$ProjDir)
+    if ($IsGlobal) { return Join-Path (Get-PiAgentDir) "prompts" }
+    return Join-Path $ProjDir ".pi\prompts"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -602,11 +628,85 @@ function Install-AiderToDir {
     }
 }
 
+# Install the slash commands as pi prompt templates. The command files link to
+# the skill as ../skills/conductor/...; that only resolves inside the plugin
+# layout, so point the links at the installed skill dir instead.
+function Install-PiPrompts {
+    param([string]$PromptsDir, [string]$SkillRef, [string]$TmpDir, [bool]$ForceWrite)
+
+    foreach ($file in $PI_PROMPT_FILES) {
+        $src = Join-Path $TmpDir $file
+        $dir = Split-Path -Parent $src
+        if ($dir -and !(Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        if ($LOCAL_DIR) {
+            $localSrc = Join-Path $LOCAL_DIR $file
+            if (-not (Test-Path $localSrc)) {
+                Write-Err "Missing file in local source: $file"
+                return $false
+            }
+            Copy-Item $localSrc $src -Force
+        } elseif (-not (Test-Path $src)) {
+            try {
+                Invoke-WebRequest -Uri "$REPO_BASE/$file" -OutFile $src -UseBasicParsing -ErrorAction Stop | Out-Null
+            } catch {
+                Write-Err "Failed to download $file from $REPO_BASE"
+                return $false
+            }
+        }
+    }
+
+    if (!(Test-Path $PromptsDir)) {
+        New-Item -ItemType Directory -Path $PromptsDir -Force | Out-Null
+    }
+    foreach ($file in $PI_PROMPT_FILES) {
+        $name = Split-Path -Leaf $file
+        $rendered = Join-Path $TmpDir "_pi_prompt_$name"
+        $text = [System.IO.File]::ReadAllText((Join-Path $TmpDir $file))
+        $text = $text.Replace("../skills/conductor/", "$SkillRef/")
+        [System.IO.File]::WriteAllText($rendered, $text, (New-Object System.Text.UTF8Encoding $false))
+        $null = Safe-Write -Target (Join-Path $PromptsDir $name) -Source $rendered -ForceWrite $ForceWrite
+    }
+    return $true
+}
+
+function Install-Pi {
+    param([string]$ProjDir, [bool]$IsGlobal, [bool]$ForceWrite, [string]$TmpDir)
+
+    if ($IsGlobal) {
+        $dest = Get-GlobalPath -AgentName "pi"
+        # Markdown links read better with forward slashes on Windows too.
+        $skillRef = $dest.Replace('\', '/')
+    } else {
+        $dest = Get-TargetPath -AgentName "pi" -ProjDir $ProjDir
+        # Project files may be committed; keep the links relative to the project root.
+        $skillRef = ".agents/skills/conductor"
+    }
+    if (-not (Install-SkillDirOnce -DestDir $dest -TmpDir $TmpDir)) { return $false }
+
+    $promptsDir = Get-PiPromptsDir -IsGlobal $IsGlobal -ProjDir $ProjDir
+    if (-not (Install-PiPrompts -PromptsDir $promptsDir -SkillRef $skillRef -TmpDir $TmpDir -ForceWrite $ForceWrite)) { return $false }
+    Write-Ok "Installed prompt templates: $promptsDir"
+
+    Write-Host "  Pi: run /reload in an open session (or start a new one)."
+    Write-Host "  Skill: /skill:conductor   Commands: /conductor, /conductor-setup, /conductor-optimize,"
+    Write-Host "         /conductor-scaffold-worker, /conductor-scaffold-agent"
+    if (-not $IsGlobal) {
+        Write-Host "  Project skills and prompts load only after you trust the project in pi."
+    }
+    return $true
+}
+
 function Install-ForAgent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [bool]$ForceWrite, [string]$TmpDir, [string]$Assembled)
 
     if ($AgentName -eq "claude") {
         return Install-Claude -IsGlobal $IsGlobal -ProjDir $ProjDir -TmpDir $TmpDir
+    }
+
+    if ($AgentName -eq "pi") {
+        return Install-Pi -ProjDir $ProjDir -IsGlobal $IsGlobal -ForceWrite $ForceWrite -TmpDir $TmpDir
     }
 
     if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
@@ -647,8 +747,22 @@ function Install-ForAgent {
 function Uninstall-Agent {
     param([string]$AgentName, [string]$ProjDir, [bool]$IsGlobal, [string]$ManifestPath)
 
+    if ($AgentName -eq "pi") {
+        $promptsDir = Get-PiPromptsDir -IsGlobal $IsGlobal -ProjDir $ProjDir
+        foreach ($file in $PI_PROMPT_FILES) {
+            $promptPath = Join-Path $promptsDir (Split-Path -Leaf $file)
+            if (Test-Path $promptPath) {
+                Remove-Item -Force $promptPath
+                Write-Ok "Removed: $promptPath"
+            }
+        }
+        if ((Test-Path $promptsDir) -and -not (Get-ChildItem -Force $promptsDir)) {
+            Remove-Item -Force $promptsDir
+        }
+    }
+
     $skillDir = ""
-    if ($AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
+    if ($AgentName -eq "pi" -or $AgentName -in @("codex","gemini","cursor","opencode","cline","copilot","amp")) {
         $skillDir = if ($IsGlobal) { Get-GlobalPath -AgentName $AgentName } else { Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir }
     } elseif ($AgentName -eq "windsurf" -and -not $IsGlobal) {
         $skillDir = Get-TargetPath -AgentName $AgentName -ProjDir $ProjDir
@@ -874,7 +988,7 @@ if ($All) {
         Write-Warn "No AI coding agents detected on this system."
         Write-Host ""
         Write-Info "Supported agents: claude, codex, gemini, cursor, windsurf, cline,"
-        Write-Info "  aider, copilot, amazonq, opencode, roo, amp"
+        Write-Info "  aider, copilot, amazonq, opencode, roo, amp, pi"
         Write-Host ""
         Write-Info "Install one of the above, then re-run this command."
         exit 0
